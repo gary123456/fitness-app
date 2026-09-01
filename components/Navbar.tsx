@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity } from "lucide-react";
+import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/lib/useLanguage";
+import { useTheme } from "next-themes";
 
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const { lang, setLang } = useLanguage();
+  const { theme, setTheme } = useTheme();
 
   if (pathname === "/login" || pathname === "/onboarding" || pathname === "/") return null;
 
@@ -19,7 +21,6 @@ export function Navbar() {
     router.push("/login");
   };
 
-  // Dictionnaire avec l'onglet Analytics ajouté
   const t = {
     FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", logout: "Sortir" },
     EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", logout: "Logout" }
@@ -36,7 +37,6 @@ export function Navbar() {
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center space-x-2 rounded-md p-2 text-sm font-bold text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900 focus:outline-none">
         <Globe className="h-5 w-5" />
-        {/* CORRECTION : Suppression de "hidden md:inline" pour forcer l'affichage sur mobile et PC */}
         <span>{lang === "FR" ? "🇫🇷 FR" : "🇬🇧 EN"}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[120px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
@@ -46,9 +46,19 @@ export function Navbar() {
     </DropdownMenu>
   );
 
+  const ThemeToggle = () => (
+    <button
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      className="relative flex items-center justify-center p-2 rounded-md text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900 transition-colors focus:outline-none"
+    >
+      <Sun className="h-5 w-5 transition-all scale-100 rotate-0 dark:scale-0 dark:-rotate-90" />
+      <Moon className="absolute h-5 w-5 transition-all scale-0 rotate-90 dark:scale-100 dark:rotate-0" />
+      <span className="sr-only">Toggle theme</span>
+    </button>
+  );
+
   return (
     <>
-      {/* NAVIGATION DESKTOP */}
       <nav className="sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 hidden md:block">
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-8">
           <div className="flex items-center space-x-8">
@@ -72,8 +82,10 @@ export function Navbar() {
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
+            <ThemeToggle />
             <LanguageSelector />
+            <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 mx-2"></div>
             <button onClick={handleLogout} className="flex items-center space-x-2 rounded-md p-2 text-sm font-bold text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-950/30 dark:hover:text-red-500">
               <LogOut className="h-5 w-5" />
               <span>{txt.logout}</span>
@@ -82,15 +94,17 @@ export function Navbar() {
         </div>
       </nav>
 
-      {/* TOP BAR MOBILE (Logo Agrandi et Drapeau visible) */}
+      {/* TOP BAR MOBILE (Logo Agrandi, Theme Toggle et Drapeau visible) */}
       <div className="md:hidden sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 h-20 flex items-center justify-between px-4">
         <Link href="/dashboard">
           <img src="/logo.png" alt="Vivex Logo" className="h-14 w-auto object-contain drop-shadow-sm" />
         </Link>
-        <LanguageSelector />
+        <div className="flex items-center space-x-1">
+          <ThemeToggle />
+          <LanguageSelector />
+        </div>
       </div>
 
-      {/* BOTTOM BAR MOBILE */}
       <nav className="md:hidden fixed bottom-0 left-0 z-50 w-full border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
         <div className="flex justify-around items-center p-2">
           {navItems.map((item) => {

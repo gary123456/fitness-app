@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Dumbbell, Brain, Activity, ArrowRight, Globe, Lock } from "lucide-react";
+import { Dumbbell, Brain, Activity, ArrowRight, Globe, Lock, Sun, Moon } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
+import { useTheme } from "next-themes";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export default function LandingPage() {
   const { lang, setLang } = useLanguage();
+  const { theme, setTheme } = useTheme();
 
   const t = {
     FR: { 
@@ -47,7 +49,18 @@ export default function LandingPage() {
           <img src="/Logo_GSC_NoBG.png" alt="Vivex Logo" className="h-12 w-auto object-contain drop-shadow-sm" />
         </div>
         
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 md:space-x-4">
+          
+          {/* BOUTON THEME */}
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="relative flex items-center justify-center p-2 rounded-full bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors hover:bg-white dark:hover:bg-zinc-900 focus:outline-none"
+          >
+            <Sun className="h-4 w-4 transition-all scale-100 rotate-0 dark:scale-0 dark:-rotate-90" />
+            <Moon className="absolute h-4 w-4 transition-all scale-0 rotate-90 dark:scale-100 dark:rotate-0" />
+            <span className="sr-only">Toggle theme</span>
+          </button>
+
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center space-x-2 rounded-full px-3 py-1.5 text-sm font-bold bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 transition-colors hover:bg-white dark:hover:bg-zinc-900">
               <Globe className="h-4 w-4" /><span>{lang === "FR" ? "FR" : "EN"}</span>
