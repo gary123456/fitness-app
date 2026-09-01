@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# Fichiers d'environnement (Sécurité Supabase/Stripe)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dépendances et Build
+node_modules/
+.next/
