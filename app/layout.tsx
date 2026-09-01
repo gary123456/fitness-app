@@ -1,10 +1,26 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar"; // <-- Import de la nouvelle Navbar
 
+// NOUVEAU : Configuration du viewport pour un comportement d'App Mobile (PWA)
+export const viewport: Viewport = {
+  themeColor: "#14b8a6", // Votre couleur Teal
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // Empêche l'écran de zoomer quand on tape dans un input sur iOS
+};
+
+// NOUVEAU : Déclaration de la PWA et des icônes Apple
 export const metadata: Metadata = {
   title: "Vivex | Masterclass Fitness",
   description: "Écosystème de recomposition corporelle sur-mesure.",
+  manifest: "/manifest.json", // Lien vers le fichier de l'app que vous avez créé
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Vivex",
+  },
 };
 
 export default function RootLayout({

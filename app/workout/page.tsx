@@ -157,7 +157,14 @@ export default function WorkoutPage() {
                       return (
                         <div key={we.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
                           <div className="flex items-center space-x-4 mb-2 sm:mb-0">
-                            <div className="h-10 w-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center"><Dumbbell className="h-5 w-5 text-zinc-500" /></div>
+                            {/* INTEGRATION GIF ICI */}
+                            <div className="h-12 w-12 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-zinc-200 dark:border-zinc-700">
+                              {ex.gif_url ? (
+                                <img src={ex.gif_url} alt={ex.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <Dumbbell className="h-6 w-6 text-zinc-400" />
+                              )}
+                            </div>
                             <div>
                               <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{ex.name}</h4>
                               <p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p>
@@ -203,9 +210,19 @@ export default function WorkoutPage() {
             ) : (
               swapModal.alternatives.map((alt) => (
                 <div key={alt.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-teal-500 dark:hover:border-teal-500 transition-colors bg-zinc-50 dark:bg-zinc-900">
-                  <div>
-                    <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{alt.name}</h4>
-                    <p className="text-xs text-zinc-500">{alt.equipment_required.replace('_', ' ')} • Impact SNC: {alt.cns_impact}/5</p>
+                  <div className="flex items-center space-x-3">
+                    {/* INTEGRATION GIF DANS LA MODALE SWAP ICI */}
+                    <div className="h-10 w-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center overflow-hidden shrink-0">
+                      {alt.gif_url ? (
+                        <img src={alt.gif_url} alt={alt.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <Dumbbell className="h-5 w-5 text-zinc-400" />
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{alt.name}</h4>
+                      <p className="text-xs text-zinc-500">{alt.equipment_required.replace('_', ' ')} • Impact SNC: {alt.cns_impact}/5</p>
+                    </div>
                   </div>
                   <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-teal-500 hover:bg-teal-600 text-white">{txt.select}</Button>
                 </div>

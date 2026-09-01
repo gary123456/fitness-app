@@ -209,9 +209,15 @@ export default function ActiveWorkoutSession() {
             <div key={we.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-md">
               <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900">
                 <div className="flex items-center space-x-3">
-                  <div className="bg-teal-100 dark:bg-teal-900/30 p-2 rounded-lg text-teal-600 dark:text-teal-400">
-                    <Dumbbell className="w-5 h-5" />
+                  {/* --- MODIFICATION ICI : GIF ou Icône --- */}
+                  <div className="h-12 w-12 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-zinc-200 dark:border-zinc-700">
+                    {ex.gif_url ? (
+                      <img src={ex.gif_url} alt={ex.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <Dumbbell className="h-6 w-6 text-zinc-400" />
+                    )}
                   </div>
+                  {/* --------------------------------------- */}
                   <div>
                     <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
                     <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
