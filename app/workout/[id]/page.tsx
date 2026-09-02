@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, AlertCircle, CheckCircle2, Repeat, Info } from "lucide-react";
@@ -34,106 +35,74 @@ const HelpModal = ({ txt }: { txt: any }) => {
   );
 };
 
-// DICTIONNAIRE D'INSTRUCTIONS
 const getInstructions = (name: string, lang: string) => {
   const lowerName = name.toLowerCase();
+  if (lowerName.includes('squat') || lowerName.includes('presse') || lowerName.includes('leg press')) return lang === 'FR' ? "Gardez le buste droit et le regard fixe.\nVerrouillez le gainage.\nDescendez en contrôlant la charge.\nPoussez fort sur vos talons pour remonter." : "Keep your chest up and eyes forward.\nBrace your core.\nDescend under control.\nDrive explosively through your heels to ascend.";
+  if (lowerName.includes('fente') || lowerName.includes('lunge') || lowerName.includes('bulgare')) return lang === 'FR' ? "Gardez le torse droit.\nLe genou avant doit rester dans l'axe de l'orteil.\nDescendez jusqu'à frôler le sol avec le genou arrière." : "Keep your torso upright.\nYour front knee should track over your toes.\nLower yourself until your back knee gently taps the floor.";
+  if (lowerName.includes('soulevé de terre') || lowerName.includes('deadlift') || lowerName.includes('rdl')) return lang === 'FR' ? "Maintenez le dos droit.\nGardez la charge collée à vos tibias.\nPoussez le sol avec vos jambes et contractez les fessiers en haut." : "Maintain a straight back.\nKeep the weight close to your shins.\nPush the floor away with your legs and squeeze your glutes at the top.";
+  if (lowerName.includes('couché') || lowerName.includes('bench') || lowerName.includes('floor press')) return lang === 'FR' ? "Rétractez vos omoplates contre le banc.\nContrôlez la descente de la charge.\nPoussez de manière explosive." : "Retract your scapula against the bench.\nControl the descent of the weight.\nPush explosively.";
+  if (lowerName.includes('pompe') || lowerName.includes('push-up') || lowerName.includes('dips')) return lang === 'FR' ? "Maintenez un gainage actif.\nDescendez en contrôlant le mouvement.\nPoussez fort pour revenir en position initiale." : "Maintain an active core.\nLower yourself under control.\nPush strongly to the starting position.";
+  if (lowerName.includes('militaire') || lowerName.includes('ohp') || lowerName.includes('shoulder press')) return lang === 'FR' ? "Contractez les fessiers et les abdos.\nPoussez la charge au-dessus de la tête.\nRedescendez en contrôlant." : "Squeeze your glutes and abs.\nPress the weight overhead.\nLower the weight under control.";
+  if (lowerName.includes('traction') || lowerName.includes('pull-up') || lowerName.includes('pulldown')) return lang === 'FR' ? "Démarrez avec un étirement complet.\nTirez en cherchant à amener la poitrine vers la barre.\nContrôlez la descente." : "Start with a full stretch.\nPull by trying to bring your chest to the bar.\nControl the eccentric descent.";
+  if (lowerName.includes('rowing') || lowerName.includes('tirage horizontal') || lowerName.includes('t-bar')) return lang === 'FR' ? "Gardez le dos droit.\nTirez la charge vers votre nombril en resserrant les omoplates." : "Keep your back straight.\nPull the weight towards your belly button while squeezing your shoulder blades.";
+  if (lowerName.includes('curl')) return lang === 'FR' ? "Gardez les coudes fixés près du corps.\nContractez fort le biceps en haut du mouvement." : "Keep your elbows pinned to your sides.\nSqueeze the bicep hard at the top.";
+  if (lowerName.includes('triceps') || lowerName.includes('skullcrusher') || lowerName.includes('kickback')) return lang === 'FR' ? "Gardez les coudes serrés et immobiles.\nEffectuez une extension complète." : "Keep your elbows tucked and stationary.\nPerform a full extension.";
+  return lang === 'FR' ? "Maintenez une posture stable et un bon gainage.\nContrôlez la phase excentrique.\nSoyez explosif sur la phase concentrique." : "Maintain a stable posture and brace your core.\nControl the eccentric phase.\nBe explosive on the concentric phase.";
+};
 
-  if (lowerName.includes('squat') || lowerName.includes('presse') || lowerName.includes('leg press')) {
-    return lang === 'FR' 
-      ? "Gardez le buste droit et le regard fixe.\nVerrouillez le gainage et placez le bassin en légère antéversion.\nDescendez en contrôlant la charge (poussez les hanches vers l'arrière).\nPoussez fort sur vos talons pour remonter." 
-      : "Keep your chest up and eyes forward.\nBrace your core and maintain a slight anterior pelvic tilt.\nDescend under control by pushing your hips back.\nDrive explosively through your heels to ascend.";
-  }
-  if (lowerName.includes('fente') || lowerName.includes('lunge') || lowerName.includes('bulgare') || lowerName.includes('step-up')) {
-    return lang === 'FR'
-      ? "Gardez le torse droit et le regard droit devant.\nLe genou avant doit rester dans l'axe de l'orteil sans trop le dépasser.\nDescendez jusqu'à frôler le sol avec le genou arrière.\nPoussez sur le talon avant pour remonter."
-      : "Keep your torso upright and look straight ahead.\nYour front knee should track over your toes.\nLower yourself until your back knee gently taps the floor.\nPush through your front heel to return to the start.";
-  }
-  if (lowerName.includes('soulevé de terre') || lowerName.includes('deadlift') || lowerName.includes('rdl') || lowerName.includes('good morning')) {
-    return lang === 'FR' 
-      ? "Maintenez le dos parfaitement droit et le bassin neutre.\nGardez la charge collée à vos tibias/cuisses.\nPoussez le sol avec vos jambes et contractez les fessiers en haut." 
-      : "Maintain a perfectly straight back and neutral pelvis.\nKeep the weight very close to your shins/thighs.\nPush the floor away with your legs and squeeze your glutes at the top.";
-  }
-  if (lowerName.includes('couché') || lowerName.includes('bench') || lowerName.includes('floor press')) {
-    return lang === 'FR' 
-      ? "Rétractez vos omoplates (serrez le dos) contre le banc/sol.\nContrôlez la descente de la charge jusqu'à la poitrine.\nPoussez de manière explosive en gardant les pieds ancrés au sol." 
-      : "Retract your scapula (squeeze your back) against the bench/floor.\nControl the descent of the weight to your chest.\nPush explosively while keeping your feet firmly planted.";
-  }
-  if (lowerName.includes('pompe') || lowerName.includes('push-up') || lowerName.includes('dips')) {
-    return lang === 'FR'
-      ? "Maintenez un gainage actif (alignement épaules-bassin-chevilles).\nDescendez en contrôlant le mouvement jusqu'à l'étirement maximal.\nPoussez fort pour revenir en position initiale sans verrouiller violemment les coudes."
-      : "Maintain an active core (shoulders-hips-ankles alignment).\nLower yourself under control until a full stretch.\nPush strongly to the starting position without locking elbows violently.";
-  }
-  if (lowerName.includes('militaire') || lowerName.includes('ohp') || lowerName.includes('shoulder press') || lowerName.includes('arnold')) {
-    return lang === 'FR'
-      ? "Contractez les fessiers et les abdos pour ne pas cambrer excessivement le dos.\nPoussez la charge au-dessus de la tête dans un axe vertical.\nRedescendez en contrôlant le poids jusqu'au niveau des clavicules."
-      : "Squeeze your glutes and abs to avoid excessive lower back arching.\nPress the weight overhead in a vertical line.\nLower the weight under control to clavicle level.";
-  }
-  if (lowerName.includes('traction') || lowerName.includes('pull-up') || lowerName.includes('chin-up') || lowerName.includes('pulldown') || lowerName.includes('tirage poitrine')) {
-    return lang === 'FR' 
-      ? "Démarrez le mouvement avec un étirement complet (épaules décrochées).\nTirez en cherchant à amener la poitrine vers la barre (tirez avec les coudes).\nContrôlez la phase de descente." 
-      : "Start the movement with a full stretch.\nPull by trying to bring your chest to the bar (drive with your elbows).\nControl the eccentric descent.";
-  }
-  if (lowerName.includes('rowing') || lowerName.includes('tirage horizontal') || lowerName.includes('t-bar') || lowerName.includes('bûcheron')) {
-    return lang === 'FR'
-      ? "Gardez le dos droit et le buste stable.\nTirez la charge vers votre nombril en resserrant les omoplates.\nÉtirez bien le dos lors de la phase de retour."
-      : "Keep your back straight and torso stable.\nPull the weight towards your belly button while squeezing your shoulder blades.\nFully stretch your back on the return phase.";
-  }
-  if (lowerName.includes('curl')) {
-    return lang === 'FR'
-      ? "Gardez les coudes fixés près du corps (aucun mouvement d'épaule).\nContractez fort le biceps en haut du mouvement.\nRedescendez lentement sans relâcher la tension en bas."
-      : "Keep your elbows pinned to your sides (no shoulder movement).\nSqueeze the bicep hard at the top.\nLower slowly without losing tension at the bottom.";
-  }
-  if (lowerName.includes('triceps') || lowerName.includes('barre au front') || lowerName.includes('skullcrusher') || lowerName.includes('kickback')) {
-    return lang === 'FR'
-      ? "Gardez les coudes serrés et immobiles.\nEffectuez une extension complète pour contracter le triceps.\nContrôlez le retour pour bien étirer le muscle."
-      : "Keep your elbows tucked and stationary.\nPerform a full extension to contract the triceps.\nControl the return to fully stretch the muscle.";
-  }
-  if (lowerName.includes('élévation') || lowerName.includes('oiseau') || lowerName.includes('face pull') || lowerName.includes('lateral raise')) {
-    return lang === 'FR'
-      ? "Utilisez une charge modérée, privilégiez le contrôle.\nInitiez le mouvement avec les coudes plutôt qu'avec les mains.\nMarquez un léger temps d'arrêt lors de la contraction maximale."
-      : "Use a moderate weight and prioritize control.\nInitiate the movement with your elbows rather than your hands.\nPause briefly at peak contraction.";
-  }
-  if (lowerName.includes('mollet') || lowerName.includes('calf')) {
-    return lang === 'FR'
-      ? "Descendez lentement pour obtenir un étirement maximal.\nMarquez une pause de 1 à 2 secondes en bas.\nPoussez de manière explosive et contractez fort en haut."
-      : "Lower slowly to get a maximum stretch.\nPause for 1-2 seconds at the bottom.\nPush explosively and squeeze hard at the top.";
-  }
-  if (lowerName.includes('planche') || lowerName.includes('l-sit') || lowerName.includes('sit-up') || lowerName.includes('crunch') || lowerName.includes('rollout') || lowerName.includes('abdo')) {
-    return lang === 'FR'
-      ? "Aspirez le nombril pour engager le transverse profond.\nMaintenez une respiration fluide et continue.\nEnroulez la colonne (ne tirez pas sur la nuque) lors des contractions."
-      : "Draw your belly button in to engage the deep transverse abdominis.\nMaintain a fluid and continuous breathing pattern.\nCurl your spine (do not pull on your neck) during contractions.";
-  }
+const extractNumber = (str: string) => {
+  const match = str.match(/\d+/);
+  return match ? match[0] : "";
+};
 
-  return lang === 'FR' 
-    ? "Maintenez une posture stable et un bon gainage.\nContrôlez la phase excentrique (la descente de la charge).\nSoyez explosif sur la phase concentrique (la contraction)." 
-    : "Maintain a stable posture and brace your core.\nControl the eccentric phase (lowering the weight).\nBe explosive on the concentric phase (the contraction).";
+const fetchActiveSession = async (id: string) => {
+  const { data: sessionData } = await supabase.from("workout_sessions").select(`*, workout_exercises (*, exercise_library (*))`).eq("id", id).single();
+  if (!sessionData) throw new Error("Not found");
+  if (sessionData.workout_exercises) sessionData.workout_exercises.sort((a: any, b: any) => a.order_index - b.order_index);
+
+  const initialInputs: Record<string, { weight: string, reps: string }> = {};
+  sessionData.workout_exercises.forEach((we: any) => {
+    const identifier = we.id || we.exercise_id;
+    const defaultReps = extractNumber(we.target_reps);
+    const defaultWeight = we.recommended_weight && we.recommended_weight > 0 ? we.recommended_weight.toString() : "";
+    for (let i = 0; i < we.sets; i++) initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
+  });
+
+  const { data: logs } = await supabase.from("workout_logs").select("*").eq("session_id", id);
+  const loadedCompleted: Record<string, boolean> = {};
+  if (logs && logs.length > 0) {
+    logs.forEach((log) => {
+      const we = sessionData.workout_exercises.find((w: any) => w.exercise_id === log.exercise_id);
+      if (we) {
+        const setKey = `${we.id || we.exercise_id}_${log.set_number - 1}`;
+        initialInputs[setKey] = { weight: log.weight.toString(), reps: log.reps.toString() };
+        loadedCompleted[setKey] = true;
+      }
+    });
+  }
+  return { sessionData, initialInputs, loadedCompleted };
 };
 
 export default function ActiveWorkoutSession() {
   const params = useParams();
   const router = useRouter();
-  const [session, setSession] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const { lang } = useLanguage();
+
+  const { data, error, isLoading } = useSWR(`session-${params.id}`, () => fetchActiveSession(params.id as string), { revalidateOnFocus: false });
 
   const [inputs, setInputs] = useState<Record<string, { weight: string, reps: string }>>({});
   const [completedSets, setCompletedSets] = useState<Record<string, boolean>>({});
   const [restTimer, setRestTimer] = useState<number | null>(null);
-  
   const [showEndModal, setShowEndModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ show: false, title: "", message: "" });
-  
-  // MODALE INFO
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
 
-  const { lang } = useLanguage();
-
-  const t = {
-    FR: { activeTracker: "Tracker Actif", rule: "💡 Règle de l'auto-régulation : Choisissez une charge qui vous permet d'atteindre l'objectif en gardant 2 répétitions en réserve.", target: "Objectif", rec: "Conseil", dup: "Dupliquer la 1ère série", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider automatiquement", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "Introuvable.", success: "Séance Validée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", helpBtn: "Comment utiliser le tracker ?", helpTitle: "Instructions", help1: "1. Les cases sont pré-remplies avec les poids recommandés.", help2: "2. Ajustez la charge de votre première série, puis cliquez sur l'icône de duplication pour copier vos chiffres partout.", help3: "3. Validez chaque série pour lancer le chronomètre de récupération.", helpGo: "C'est parti !" },
-    EN: { activeTracker: "Active Tracker", rule: "💡 Auto-regulation rule: Choose a weight that allows you to hit the target reps leaving 2 reps in reserve.", target: "Target", rec: "Rec", dup: "Duplicate 1st set", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete all sets", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Not found.", success: "Workout Completed!", successMsg: "Data secured for progressive overload.", back: "Back to program", helpBtn: "How to use the tracker?", helpTitle: "Instructions", help1: "1. Fields are pre-filled with recommended weights.", help2: "2. Adjust the weight for your first set, then click the duplicate icon to copy your numbers to all sets.", help3: "3. Validate each set to start the rest timer.", helpGo: "Let's go!" }
-  };
-  const txt = t[lang as keyof typeof t] || t.FR;
-
-  useEffect(() => { fetchSession(); }, [params.id]);
+  useEffect(() => {
+    if (data) {
+      setInputs(data.initialInputs);
+      setCompletedSets(data.loadedCompleted);
+    }
+  }, [data]);
 
   useEffect(() => {
     if (restTimer === null || restTimer <= 0) return;
@@ -141,47 +110,11 @@ export default function ActiveWorkoutSession() {
     return () => clearInterval(interval);
   }, [restTimer]);
 
-  const extractNumber = (str: string) => {
-    const match = str.match(/\d+/);
-    return match ? match[0] : "";
+  const t = {
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer la 1ère série", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider automatiquement", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "Introuvable.", success: "Séance Validée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", helpBtn: "Comment utiliser le tracker ?", helpTitle: "Instructions", help1: "1. Les cases sont pré-remplies avec les poids recommandés.", help2: "2. Ajustez la charge de votre première série, puis cliquez sur l'icône de duplication pour copier vos chiffres partout.", help3: "3. Validez chaque série pour lancer le chronomètre de récupération.", helpGo: "C'est parti !" },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate 1st set", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete all sets", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Not found.", success: "Workout Completed!", successMsg: "Data secured for progressive overload.", back: "Back to program", helpBtn: "How to use the tracker?", helpTitle: "Instructions", help1: "1. Fields are pre-filled with recommended weights.", help2: "2. Adjust the weight for your first set, then click the duplicate icon to copy your numbers to all sets.", help3: "3. Validate each set to start the rest timer.", helpGo: "Let's go!" }
   };
-
-  const fetchSession = async () => {
-    const { data: sessionData } = await supabase.from("workout_sessions").select(`*, workout_exercises (*, exercise_library (*))`).eq("id", params.id).single();
-
-    if (sessionData) {
-      if (sessionData.workout_exercises) sessionData.workout_exercises.sort((a: any, b: any) => a.order_index - b.order_index);
-      setSession(sessionData);
-
-      const initialInputs: Record<string, { weight: string, reps: string }> = {};
-      sessionData.workout_exercises.forEach((we: any) => {
-        const identifier = we.id || we.exercise_id;
-        const defaultReps = extractNumber(we.target_reps);
-        const defaultWeight = we.recommended_weight && we.recommended_weight > 0 ? we.recommended_weight.toString() : "";
-        
-        for (let i = 0; i < we.sets; i++) {
-          initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
-        }
-      });
-
-      const { data: logs } = await supabase.from("workout_logs").select("*").eq("session_id", params.id);
-      
-      if (logs && logs.length > 0) {
-        const loadedCompleted: Record<string, boolean> = {};
-        logs.forEach((log) => {
-          const we = sessionData.workout_exercises.find((w: any) => w.exercise_id === log.exercise_id);
-          if (we) {
-            const setKey = `${we.id || we.exercise_id}_${log.set_number - 1}`;
-            initialInputs[setKey] = { weight: log.weight.toString(), reps: log.reps.toString() };
-            loadedCompleted[setKey] = true;
-          }
-        });
-        setCompletedSets(loadedCompleted);
-      }
-      setInputs(initialInputs);
-    }
-    setLoading(false);
-  };
+  const txt = t[lang as keyof typeof t] || t.FR;
 
   const handleInputChange = (setKey: string, field: "weight" | "reps", value: string) => {
     setInputs((prev) => ({ ...prev, [setKey]: { ...prev[setKey], [field]: value } }));
@@ -191,13 +124,10 @@ export default function ActiveWorkoutSession() {
     const firstSetKey = `${identifier}_0`;
     const firstSetData = inputs[firstSetKey];
     if (!firstSetData) return;
-
     setInputs(prev => {
       const next = { ...prev };
       for (let i = 1; i < totalSets; i++) {
-        if (!completedSets[`${identifier}_${i}`]) {
-          next[`${identifier}_${i}`] = { ...firstSetData };
-        }
+        if (!completedSets[`${identifier}_${i}`]) next[`${identifier}_${i}`] = { ...firstSetData };
       }
       return next;
     });
@@ -214,13 +144,11 @@ export default function ActiveWorkoutSession() {
   };
 
   const checkAllSets = () => {
-    if (!session) return;
+    if (!data?.sessionData) return;
     const newCompleted = { ...completedSets };
-    session.workout_exercises.forEach((we: any) => {
+    data.sessionData.workout_exercises.forEach((we: any) => {
       const identifier = we.id || we.exercise_id;
-      for (let i = 0; i < we.sets; i++) {
-        newCompleted[`${identifier}_${i}`] = true;
-      }
+      for (let i = 0; i < we.sets; i++) newCompleted[`${identifier}_${i}`] = true;
     });
     setCompletedSets(newCompleted);
   };
@@ -235,18 +163,18 @@ export default function ActiveWorkoutSession() {
     if (!hasCompletedSets) { setErrorModal({ show: true, title: txt.noSetTitle, message: txt.noSetMsg }); return; }
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user || !data?.sessionData) return;
 
     const logsToInsert = [];
     for (const [setKey, isCompleted] of Object.entries(completedSets)) {
       if (isCompleted) {
         const [workoutExerciseId, setIdx] = setKey.split('_');
         const values = inputs[setKey] || {};
-        const we = session.workout_exercises.find((item: any) => item.id === workoutExerciseId || item.exercise_id === workoutExerciseId);
+        const we = data.sessionData.workout_exercises.find((item: any) => item.id === workoutExerciseId || item.exercise_id === workoutExerciseId);
 
         if (we) {
           logsToInsert.push({
-            user_id: user.id, session_id: session.id, exercise_id: we.exercise_id,
+            user_id: user.id, session_id: data.sessionData.id, exercise_id: we.exercise_id,
             set_number: parseInt(setIdx) + 1,
             weight: parseFloat(values.weight) || 0,
             reps: parseInt(values.reps) || parseInt(extractNumber(we.target_reps))
@@ -262,18 +190,20 @@ export default function ActiveWorkoutSession() {
     setRestTimer(null);
   };
 
-  if (loading) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">{txt.load}</div>;
-  if (!session) return <div className="p-8 text-center text-red-500">{txt.notFound}</div>;
+  if (isLoading && !data) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">{txt.load}</div>;
+  if (error || !data?.sessionData) return <div className="p-8 text-center text-red-500">{txt.notFound}</div>;
+
+  const session = data.sessionData;
 
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
-      {/* HEADER 3D SURBRILLANCE */}
-      <div className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-teal-500/20 dark:border-teal-500/10 px-4 py-4 flex items-center justify-between shadow-[0_10px_30px_-15px_rgba(20,184,166,0.3)]">
-        <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
+      <div className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-teal-500/30 dark:border-teal-500/20 px-4 py-4 flex items-center justify-between shadow-[0_10px_30px_-15px_rgba(20,184,166,0.4)] relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-transparent pointer-events-none"></div>
+        <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors relative z-10">
           <ArrowLeft className="w-6 h-6 dark:text-zinc-100" />
         </button>
-        <h2 className="text-lg font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 drop-shadow-sm">{txt.activeTracker}</h2>
-        <div className="w-10"></div>
+        <h2 className="text-lg font-black uppercase tracking-widest text-teal-700 dark:text-teal-400 drop-shadow-sm relative z-10">{txt.activeTracker}</h2>
+        <div className="w-10 relative z-10"></div>
       </div>
 
       <div className="max-w-2xl mx-auto p-4 flex justify-center mt-2">
@@ -290,56 +220,23 @@ export default function ActiveWorkoutSession() {
           return (
             <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-[0_8px_30px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.5)] transform transition-transform hover:scale-[1.01]">
               <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-800/50">
-                
                 <div className="flex items-center space-x-3">
-                  {/* VIGNETTE FOND BLANC FORCÉ */}
                   <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative p-1">
-                    {thumbnailUrl ? (
-                      <img 
-                        src={thumbnailUrl} 
-                        alt={ex.name} 
-                        className="h-full w-full object-contain absolute inset-0 z-10" 
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }} 
-                      />
-                    ) : null}
-                    <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
+                    {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}<Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
                   </div>
-                  
                   <div className="flex items-start">
                     <div>
                       <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
-                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                        {txt.target} : {we.target_reps} reps {we.recommended_weight ? `| ${txt.rec}: ${we.recommended_weight}kg` : ""}
-                      </p>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps {we.recommended_weight ? `| ${txt.rec}: ${we.recommended_weight}kg` : ""}</p>
                     </div>
-                    
-                    {/* BOUTON INFO QUI OUVRE LA MODALE LOCALE */}
-                    <button 
-                      onClick={() => setInfoModal({ show: true, exercise: ex })}
-                      className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"
-                    >
-                      <Info className="w-4 h-4" />
-                    </button>
+                    <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"><Info className="w-4 h-4" /></button>
                   </div>
                 </div>
-
-                <button 
-                  onClick={() => duplicateFirstSet(identifier, we.sets)}
-                  className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors"
-                  title={txt.dup}
-                >
-                  <Repeat className="w-5 h-5" />
-                </button>
+                <button onClick={() => duplicateFirstSet(identifier, we.sets)} className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors" title={txt.dup}><Repeat className="w-5 h-5" /></button>
               </div>
 
               <div className="p-3 space-y-3 bg-white dark:bg-zinc-950">
-                <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase text-center tracking-wider">
-                  <div className="col-span-2">{txt.set}</div>
-                  <div className="col-span-4">{txt.weight}</div>
-                  <div className="col-span-4">{txt.reps}</div>
-                  <div className="col-span-2">OK</div>
-                </div>
-
+                <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase text-center tracking-wider"><div className="col-span-2">{txt.set}</div><div className="col-span-4">{txt.weight}</div><div className="col-span-4">{txt.reps}</div><div className="col-span-2">OK</div></div>
                 {Array.from({ length: we.sets }).map((_, setIdx) => {
                   const setKey = `${identifier}_${setIdx}`;
                   const isCompleted = completedSets[setKey];
@@ -348,17 +245,9 @@ export default function ActiveWorkoutSession() {
                   return (
                     <div key={setKey} className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-lg transition-colors border ${isCompleted ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 shadow-[inset_0_0_15px_rgba(20,184,166,0.05)]' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm'}`}>
                       <div className="col-span-2 text-center font-bold text-zinc-500 dark:text-zinc-400">{setIdx + 1}</div>
-                      <div className="col-span-4">
-                        <input type="number" placeholder="0" value={currentValues.weight} onChange={(e) => handleInputChange(setKey, "weight", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" />
-                      </div>
-                      <div className="col-span-4">
-                        <input type="number" placeholder="0" value={currentValues.reps} onChange={(e) => handleInputChange(setKey, "reps", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" />
-                      </div>
-                      <div className="col-span-2 flex justify-center">
-                        <button onClick={() => toggleSet(setKey, we.rest_seconds)} className={`h-8 w-8 rounded-md flex items-center justify-center transition-transform active:scale-90 ${isCompleted ? 'bg-teal-500 shadow-lg shadow-teal-500/40 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}>
-                          <Check className="w-4 h-4 stroke-[3px]" />
-                        </button>
-                      </div>
+                      <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.weight} onChange={(e) => handleInputChange(setKey, "weight", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
+                      <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.reps} onChange={(e) => handleInputChange(setKey, "reps", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
+                      <div className="col-span-2 flex justify-center"><button onClick={() => toggleSet(setKey, we.rest_seconds)} className={`h-8 w-8 rounded-md flex items-center justify-center transition-transform active:scale-90 ${isCompleted ? 'bg-teal-500 shadow-lg shadow-teal-500/40 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}><Check className="w-4 h-4 stroke-[3px]" /></button></div>
                     </div>
                   );
                 })}
@@ -366,83 +255,32 @@ export default function ActiveWorkoutSession() {
             </div>
           );
         })}
-
         <div className="pt-4 pb-10 space-y-3">
-          <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm">
-            <CheckCircle2 className="w-5 h-5" />
-            <span>{txt.checkAll}</span>
-          </button>
-
-          <button onClick={finishWorkout} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">
-            {txt.finish}
-          </button>
+          <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm"><CheckCircle2 className="w-5 h-5" /><span>{txt.checkAll}</span></button>
+          <button onClick={finishWorkout} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">{txt.finish}</button>
         </div>
       </div>
 
       {restTimer !== null && (
         <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-6 py-3 rounded-full flex items-center space-x-4 shadow-[0_10px_40px_rgba(0,0,0,0.3)] transition-all ${restTimer > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
-          <Timer className="w-5 h-5 animate-pulse text-teal-400 dark:text-teal-600" />
-          <span className="font-mono text-xl font-black w-16 text-center">{formatTime(restTimer)}</span>
-          <button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-white dark:hover:text-zinc-900"><X className="w-5 h-5" /></button>
+          <Timer className="w-5 h-5 animate-pulse text-teal-400 dark:text-teal-600" /><span className="font-mono text-xl font-black w-16 text-center">{formatTime(restTimer)}</span><button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-white dark:hover:text-zinc-900"><X className="w-5 h-5" /></button>
         </div>
       )}
 
-      {/* MODAL INFO EXERCICE (Intégrée au Tracker Actif) */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[700px] flex flex-col p-0 overflow-hidden bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           {infoModal.exercise && (
             <>
-              <DialogHeader className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900">
-                <DialogTitle className="text-xl font-black dark:text-zinc-50">
-                  {infoModal.exercise.name}
-                </DialogTitle>
-                <DialogDescription className="text-zinc-500 dark:text-zinc-400 font-medium mt-1">
-                  {lang === 'FR' ? 'Cible' : 'Target'} : {infoModal.exercise.target_muscle} • {lang === 'FR' ? 'Matériel' : 'Equipment'} : {infoModal.exercise.equipment_required.replace('_', ' ')}
-                </DialogDescription>
-              </DialogHeader>
-              
+              <DialogHeader className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900"><DialogTitle className="text-xl font-black dark:text-zinc-50">{infoModal.exercise.name}</DialogTitle></DialogHeader>
               <div className="flex-1 p-4 md:p-6 overflow-y-auto max-h-[75vh]">
                 <div className="space-y-6">
                   {infoModal.exercise.gif_url ? (
                     <div className="flex flex-col sm:flex-row items-stretch justify-center gap-4 w-full">
-                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col">
-                        <div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">
-                          {lang === 'FR' ? "Position de départ" : "Starting Position"}
-                        </div>
-                        <div className="p-4 flex justify-center items-center h-48 md:h-64">
-                          <img src={`${infoModal.exercise.gif_url}/0.jpg`} alt="Départ" className="max-w-full max-h-full object-contain" loading="lazy" />
-                        </div>
-                      </div>
-                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col">
-                        <div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">
-                          {lang === 'FR' ? "Contraction" : "Contraction"}
-                        </div>
-                        <div className="p-4 flex justify-center items-center h-48 md:h-64">
-                          <img src={`${infoModal.exercise.gif_url}/1.jpg`} alt="Fin" className="max-w-full max-h-full object-contain" loading="lazy" />
-                        </div>
-                      </div>
+                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col"><div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Position de départ" : "Starting Position"}</div><div className="p-4 flex justify-center items-center h-48 md:h-64"><img src={`${infoModal.exercise.gif_url}/0.jpg`} alt="Départ" className="max-w-full max-h-full object-contain" loading="lazy" /></div></div>
+                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col"><div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Contraction" : "Contraction"}</div><div className="p-4 flex justify-center items-center h-48 md:h-64"><img src={`${infoModal.exercise.gif_url}/1.jpg`} alt="Fin" className="max-w-full max-h-full object-contain" loading="lazy" /></div></div>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center min-h-[200px] text-zinc-400 dark:text-zinc-600 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                      <Dumbbell className="w-12 h-12 mb-3 opacity-50" />
-                      <p className="text-sm font-bold">{lang === 'FR' ? "Aucun visuel disponible." : "No visual available."}</p>
-                    </div>
-                  )}
-
-                  <div className="bg-white dark:bg-zinc-900/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                    <h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100 mb-3 border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                      <Info className="w-4 h-4 mr-2 text-teal-500" />
-                      {lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}
-                    </h4>
-                    <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400 font-medium">
-                      {getInstructions(infoModal.exercise.name, lang).split('\n').map((line: string, i: number) => (
-                        <li key={i} className="flex items-start">
-                          <span className="text-teal-500 mr-2 mt-0.5">•</span>
-                          <span className="leading-relaxed">{line}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  ) : (<div className="flex flex-col items-center justify-center min-h-[200px] text-zinc-400 dark:text-zinc-600 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800"><Dumbbell className="w-12 h-12 mb-3 opacity-50" /><p className="text-sm font-bold">{lang === 'FR' ? "Aucun visuel disponible." : "No visual available."}</p></div>)}
+                  <div className="bg-white dark:bg-zinc-900/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm"><h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100 mb-3 border-b border-zinc-100 dark:border-zinc-800 pb-2"><Info className="w-4 h-4 mr-2 text-teal-500" />{lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}</h4><ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400 font-medium">{getInstructions(infoModal.exercise.name, lang).split('\n').map((line: string, i: number) => (<li key={i} className="flex items-start"><span className="text-teal-500 mr-2 mt-0.5">•</span><span className="leading-relaxed">{line}</span></li>))}</ul></div>
                 </div>
               </div>
             </>
@@ -465,11 +303,8 @@ export default function ActiveWorkoutSession() {
         <Dialog open={showEndModal} onOpenChange={setShowEndModal}>
           <DialogContent className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
             <div className="text-center py-6">
-              <div className="mx-auto w-16 h-16 bg-teal-100 dark:bg-teal-900/50 rounded-full flex items-center justify-center mb-4">
-                <Trophy className="w-8 h-8 text-teal-600 dark:text-teal-400" />
-              </div>
-              <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 mb-2">{txt.success}</h3>
-              <p className="text-zinc-500 dark:text-zinc-400 mb-6">{txt.successMsg}</p>
+              <div className="mx-auto w-16 h-16 bg-teal-100 dark:bg-teal-900/50 rounded-full flex items-center justify-center mb-4"><Trophy className="w-8 h-8 text-teal-600 dark:text-teal-400" /></div>
+              <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 mb-2">{txt.success}</h3><p className="text-zinc-500 dark:text-zinc-400 mb-6">{txt.successMsg}</p>
               <Button onClick={() => router.push("/workout")} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold">{txt.back}</Button>
             </div>
           </DialogContent>

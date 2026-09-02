@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon } from "lucide-react";
+import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon, Camera } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/lib/useLanguage";
@@ -22,14 +22,16 @@ export function Navbar() {
   };
 
   const t = {
-    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", logout: "Sortir" },
-    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", logout: "Logout" }
+    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", track: "Progression", logout: "Sortir" },
+    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", track: "Progress", logout: "Logout" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
+  // AJOUT DE LA PAGE PROGRESSION ICI
   const navItems = [
     { name: txt.dash, href: "/dashboard", icon: LayoutDashboard },
     { name: txt.prog, href: "/workout", icon: Dumbbell },
+    { name: txt.track, href: "/progress", icon: Camera },
     { name: txt.stats, href: "/analytics", icon: Activity },
   ];
 
@@ -94,7 +96,7 @@ export function Navbar() {
         </div>
       </nav>
 
-      {/* TOP BAR MOBILE (Logo Agrandi, Theme Toggle et Drapeau visible) */}
+      {/* TOP BAR MOBILE */}
       <div className="md:hidden sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 h-20 flex items-center justify-between px-4">
         <Link href="/dashboard">
           <img src="/logo.png" alt="Vivex Logo" className="h-14 w-auto object-contain drop-shadow-sm" />
@@ -111,17 +113,17 @@ export function Navbar() {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
-              <Link key={item.href} href={item.href} className={`flex flex-col items-center space-y-1 p-2 w-20 transition-colors ${
+              <Link key={item.href} href={item.href} className={`flex flex-col items-center space-y-1 p-2 w-16 transition-colors ${
                   isActive ? "text-teal-500 dark:text-teal-400" : "text-zinc-400 dark:text-zinc-500"
                 }`}>
                 <Icon className={`h-6 w-6 ${isActive ? "stroke-[2.5px]" : "stroke-[2px]"}`} />
-                <span className="text-[10px] font-extrabold uppercase tracking-wider">{item.name}</span>
+                <span className="text-[9px] font-extrabold uppercase tracking-wider text-center">{item.name}</span>
               </Link>
             );
           })}
-          <button onClick={handleLogout} className="flex flex-col items-center space-y-1 p-2 w-20 text-zinc-400 hover:text-red-500 transition-colors">
+          <button onClick={handleLogout} className="flex flex-col items-center space-y-1 p-2 w-16 text-zinc-400 hover:text-red-500 transition-colors">
             <LogOut className="h-6 w-6 stroke-[2px]" />
-            <span className="text-[10px] font-extrabold uppercase tracking-wider">{txt.logout}</span>
+            <span className="text-[9px] font-extrabold uppercase tracking-wider text-center">{txt.logout}</span>
           </button>
         </div>
       </nav>

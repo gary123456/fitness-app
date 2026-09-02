@@ -18,10 +18,24 @@ export interface UserProfile {
 
 const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
-// NOUVEAU : On ajoute "history" pour que l'algo lise vos anciennes performances
-export function generateSmartWorkoutPlan(profile: UserProfile, library: Exercise[], history: any[] = []) {
+// AJOUT DES PARAMÈTRES : isDeload (Délestage) et excludedExerciseIds (Nouveau Cycle)
+export function generateSmartWorkoutPlan(
+  profile: UserProfile, 
+  library: Exercise[], 
+  history: any[] = [], 
+  isDeload: boolean = false, 
+  excludedExerciseIds: string[] = []
+) {
   const userEquipment = profile.equipment_access.split(",").map(e => e.trim());
-  const availableExercises = library.filter(ex => userEquipment.includes(ex.equipment_required));
+  let availableExercises = library.filter(ex => userEquipment.includes(ex.equipment_required));
+  
+  // LOGIQUE ANTI-LASSITUDE : Exclure les anciens exercices si on a assez d'alternatives
+  if (excludedExerciseIds.length > 0) {
+    const filteredEx = availableExercises.filter(ex => !excludedExerciseIds.includes(ex.id));
+    if (filteredEx.length >= 15) { // Sécurité : On s'assure qu'il reste assez d'exos pour générer un programme
+      availableExercises = filteredEx;
+    }
+  }
   
   const schedule = profile.weekly_schedule || {};
   
@@ -107,28 +121,63 @@ export function generateSmartWorkoutPlan(profile: UserProfile, library: Exercise
       if (candidates.length > 0) {
         const ex = candidates[0];
         const baseSets = ex.cns_impact >= 4 ? 3 : 4;
-        const finalSets = Math.max(2, Math.round(baseSets * volumeReductionFactor));
+        let finalSets = Math.max(2, Math.round(baseSets * volumeReductionFactor));
         
         let defaultReps = externalSportsCount >= 3 ? "6-8" : "8-12";
         let recommendedWeight = null;
 
-        // --- MAGIE DE LA SURCHARGE PROGRESSIVE ---
+        // --- MAGIE DE LA SURCHARGE PROGRESSIVE ET DU PLATEAU SCIENTIFIQUE ---
         const pastLogs = history.filter(h => h.exercise_id === ex.id);
         
         if (pastLogs.length > 0) {
-          pastLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps);
-          const bestSet = pastLogs[0];
-          const maxTargetRep = parseInt(defaultReps.split('-')[1]);
+          // Trier par date la plus récente
+          pastLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
           
-          if (bestSet.reps >= maxTargetRep) {
-            // L'utilisateur a réussi la fourchette haute : on augmente le poids !
-            recommendedWeight = bestSet.weight > 0 ? bestSet.weight + 2.5 : 2.5;
+          const lastSessionId = pastLogs[0].session_id;
+          const lastSessionLogs = pastLogs.filter(l => l.session_id === lastSessionId);
+          lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps); // Prendre la meilleure perf de la dernière séance
+          const bestSet = lastSessionLogs[0];
+          
+          const maxTargetRep = parseInt(defaultReps.split('-')[1] || "12");
+          
+          // DETECTER UN PLATEAU (Comparaison avec l'avant-dernière séance)
+          let isPlateau = false;
+          const previousSessions = pastLogs.filter(l => l.session_id !== lastSessionId);
+          if (previousSessions.length > 0) {
+            const prevSessionId = previousSessions[0].session_id;
+            const prevSessionLogs = previousSessions.filter(l => l.session_id === prevSessionId);
+            prevSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps);
+            const bestPrevSet = prevSessionLogs[0];
+            
+            // Si le poids et les reps sont bloqués en dessous de l'objectif sur 2 séances de suite = Plateau
+            if (bestSet.weight === bestPrevSet.weight && bestSet.reps === bestPrevSet.reps && bestSet.reps < maxTargetRep) {
+              isPlateau = true;
+            }
+          }
+
+          if (isDeload) {
+            // SEMAINE DE DÉLESTAGE (Deload) : Baisse de 20% du poids, -1 série
+            recommendedWeight = bestSet.weight > 0 ? Number((bestSet.weight * 0.8).toFixed(1)) : 0;
+            finalSets = Math.max(2, finalSets - 1);
+            defaultReps = "8-10 (Léger)";
+          } 
+          else if (isPlateau) {
+            // CASSURE DE PLATEAU : Micro-Deload (Baisse de 10% de la charge, on demande + de reps, on n'ajoute PAS de série poubelle)
+            recommendedWeight = bestSet.weight > 0 ? Number((bestSet.weight * 0.9).toFixed(1)) : 0;
+            defaultReps = `Viser > ${bestSet.reps + 2} reps`; 
+          } 
+          else if (bestSet.reps >= maxTargetRep) {
+            // PROGRESSION NORMALE : L'objectif a été atteint, on augmente la charge
+            recommendedWeight = bestSet.weight > 0 ? bestSet.weight + (ex.cns_impact >= 4 ? 2.5 : 1.25) : 2.5;
             defaultReps = `${parseInt(defaultReps.split('-')[0])}-${maxTargetRep}`; 
           } else {
-            // L'utilisateur n'a pas fini ses reps : on garde le poids, on vise plus de reps.
+            // MAINTIEN : Pas encore atteint le max reps, on garde le même poids
             recommendedWeight = bestSet.weight;
             defaultReps = `Viser > ${bestSet.reps} reps`;
           }
+        } else if (isDeload) {
+            // S'il n'a pas d'historique mais qu'on est en deload, on baisse quand même le volume
+            finalSets = Math.max(2, finalSets - 1);
         }
 
         sessionExercises.push({

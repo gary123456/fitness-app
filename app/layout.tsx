@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { ThemeProvider } from "@/components/ThemeProvider"; // <-- IMPORT DU THEME
+import { SWRConfig } from "swr"; // <-- AJOUT
 
 export const viewport: Viewport = {
   themeColor: "#14b8a6",
@@ -33,6 +34,7 @@ export default function RootLayout({
         
         {/* ENVELOPPE DE THÈME POUR LE MODE SOMBRE */}
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <SWRConfig value={{ revalidateOnFocus: false }}> {/* <-- AJOUT */}
           
           <Navbar />
 
@@ -58,6 +60,7 @@ export default function RootLayout({
             </div>
           </footer>
 
+          </SWRConfig> {/* <-- FIN AJOUT */}
         </ThemeProvider>
       </body>
     </html>
