@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -13,7 +12,7 @@ const HelpModal = ({ txt }: { txt: any }) => {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button onClick={() => setOpen(true)} className="flex items-center space-x-2 text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/30 dark:text-teal-400 px-4 py-2 rounded-full font-bold text-sm transition-colors shadow-sm">
+      <button onClick={() => setOpen(true)} className="flex items-center space-x-2 text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/30 dark:text-teal-400 px-4 py-2 rounded-full font-bold text-sm transition-colors shadow-sm border border-teal-200 dark:border-teal-800">
         <Info className="w-5 h-5" /> <span>{txt.helpBtn}</span>
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -268,15 +267,16 @@ export default function ActiveWorkoutSession() {
 
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
-      <div className="sticky top-0 z-40 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 px-4 py-4 flex items-center justify-between">
+      {/* HEADER 3D SURBRILLANCE */}
+      <div className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-teal-500/20 dark:border-teal-500/10 px-4 py-4 flex items-center justify-between shadow-[0_10px_30px_-15px_rgba(20,184,166,0.3)]">
         <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
           <ArrowLeft className="w-6 h-6 dark:text-zinc-100" />
         </button>
-        <h2 className="text-lg font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-50">{txt.activeTracker}</h2>
+        <h2 className="text-lg font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 drop-shadow-sm">{txt.activeTracker}</h2>
         <div className="w-10"></div>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 flex justify-center">
+      <div className="max-w-2xl mx-auto p-4 flex justify-center mt-2">
         <HelpModal txt={txt} />
       </div>
 
@@ -288,8 +288,8 @@ export default function ActiveWorkoutSession() {
           const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
 
           return (
-            <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-md">
-              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900">
+            <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-[0_8px_30px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.5)] transform transition-transform hover:scale-[1.01]">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-800/50">
                 
                 <div className="flex items-center space-x-3">
                   {/* VIGNETTE FOND BLANC FORCÉ */}
@@ -346,7 +346,7 @@ export default function ActiveWorkoutSession() {
                   const currentValues = inputs[setKey] || { weight: "", reps: "" };
 
                   return (
-                    <div key={setKey} className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-lg transition-colors border ${isCompleted ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm'}`}>
+                    <div key={setKey} className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-lg transition-colors border ${isCompleted ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 shadow-[inset_0_0_15px_rgba(20,184,166,0.05)]' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm'}`}>
                       <div className="col-span-2 text-center font-bold text-zinc-500 dark:text-zinc-400">{setIdx + 1}</div>
                       <div className="col-span-4">
                         <input type="number" placeholder="0" value={currentValues.weight} onChange={(e) => handleInputChange(setKey, "weight", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" />
@@ -368,19 +368,19 @@ export default function ActiveWorkoutSession() {
         })}
 
         <div className="pt-4 pb-10 space-y-3">
-          <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors">
+          <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm">
             <CheckCircle2 className="w-5 h-5" />
             <span>{txt.checkAll}</span>
           </button>
 
-          <button onClick={finishWorkout} className="w-full py-4 bg-teal-500 hover:bg-teal-600 text-white font-black uppercase tracking-widest rounded-xl shadow-xl shadow-teal-500/20 transition-transform active:scale-[0.98]">
+          <button onClick={finishWorkout} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">
             {txt.finish}
           </button>
         </div>
       </div>
 
       {restTimer !== null && (
-        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-6 py-3 rounded-full flex items-center space-x-4 shadow-2xl transition-all ${restTimer > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
+        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-6 py-3 rounded-full flex items-center space-x-4 shadow-[0_10px_40px_rgba(0,0,0,0.3)] transition-all ${restTimer > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
           <Timer className="w-5 h-5 animate-pulse text-teal-400 dark:text-teal-600" />
           <span className="font-mono text-xl font-black w-16 text-center">{formatTime(restTimer)}</span>
           <button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-white dark:hover:text-zinc-900"><X className="w-5 h-5" /></button>
