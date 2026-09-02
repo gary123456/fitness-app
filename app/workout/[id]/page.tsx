@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -202,29 +203,48 @@ export default function ActiveWorkoutSession() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 space-y-6">
-        {session.workout_exercises.map((we: any) => {
+        {session.workout_exercises.map((we: any, index: number) => {
           const ex = we.exercise_library;
           const identifier = we.id || we.exercise_id;
+          const uniqueKey = we.id || `we-${session.id}-${index}`;
+          const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
+
           return (
-            <div key={we.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-md">
+            <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-md">
               <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900">
+                
                 <div className="flex items-center space-x-3">
-                  {/* --- MODIFICATION ICI : GIF ou Icône --- */}
-                  <div className="h-12 w-12 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-zinc-200 dark:border-zinc-700">
-                    {ex.gif_url ? (
-                      <img src={ex.gif_url} alt={ex.name} className="h-full w-full object-cover" />
+                  {/* INTEGRATION DE LA VIGNETTE AVEC FALLBACK HALTÈRE */}
+                  <div className="h-12 w-12 bg-white dark:bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-zinc-200 dark:border-zinc-700">
+                    {thumbnailUrl ? (
+                      <img 
+                        src={thumbnailUrl} 
+                        alt={ex.name} 
+                        className="h-full w-full object-contain mix-blend-multiply" 
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+                      />
                     ) : (
                       <Dumbbell className="h-6 w-6 text-zinc-400" />
                     )}
                   </div>
-                  {/* --------------------------------------- */}
-                  <div>
-                    <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
-                    <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                      {txt.target} : {we.target_reps} reps {we.recommended_weight ? `| ${txt.rec}: ${we.recommended_weight}kg` : ""}
-                    </p>
+                  
+                  <div className="flex items-start">
+                    <div>
+                      <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                        {txt.target} : {we.target_reps} reps {we.recommended_weight ? `| ${txt.rec}: ${we.recommended_weight}kg` : ""}
+                      </p>
+                    </div>
+                    
+                    {/* Le bouton d'information pour la modale interceptée */}
+                    <Link href={`/workout/${params.id}/exercise/${ex.id}`} scroll={false}>
+                      <button className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors">
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </Link>
                   </div>
                 </div>
+
                 <button 
                   onClick={() => duplicateFirstSet(identifier, we.sets)}
                   className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors"

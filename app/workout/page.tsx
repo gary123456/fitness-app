@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, AlertTriangle, X, ArrowLeftRight } from "lucide-react";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, AlertTriangle, ArrowLeftRight } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,7 +33,7 @@ export default function WorkoutPage() {
     EN: { title: "My Training Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Generate Next Week", rest: "Total Rest", start: "Start Workout", sets: "sets", target: "Target", bw: "Bodyweight", modalTitle: "Generate next cycle?", modalSub: "This action will erase your current week to generate the next cycle applying progressive overload.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives targeting the same muscle group matching your equipment:", noAlt: "No alternatives available.", select: "Select" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
-  const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
+  const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", Thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
   useEffect(() => { fetchOrGenerateProgram(); }, []);
 
@@ -152,18 +152,28 @@ export default function WorkoutPage() {
               {hasLifting && (
                 <CardContent className="pt-4">
                   <div className="space-y-3">
-                    {session.workout_exercises.map((we: any) => {
+                    {session.workout_exercises.map((we: any, index: number) => {
                       const ex = we.exercise_library;
+                      // Correction de la clé unique
+                      const uniqueKey = we.id || `we-${session.id}-${index}`;
+                      // Formatage de l'URL pour la miniature
+                      const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
+
                       return (
-                        <div key={we.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
+                        <div key={uniqueKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
                           <div className="flex items-center space-x-4 mb-2 sm:mb-0">
-                            {/* INTEGRATION GIF ICI */}
-                            <div className="h-12 w-12 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-zinc-200 dark:border-zinc-700">
-                              {ex.gif_url ? (
-                                <img src={ex.gif_url} alt={ex.name} className="h-full w-full object-cover" />
-                              ) : (
-                                <Dumbbell className="h-6 w-6 text-zinc-400" />
-                              )}
+                            {/* INTEGRATION DE LA VIGNETTE AVEC FALLBACK HALTÈRE */}
+                            <div className="h-12 w-12 bg-white dark:bg-zinc-800 rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-zinc-200 dark:border-zinc-700 relative">
+                              {thumbnailUrl ? (
+                                <img 
+                                  src={thumbnailUrl} 
+                                  alt={ex.name} 
+                                  className="h-full w-full object-contain mix-blend-multiply absolute inset-0 z-10" 
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+                                />
+                              ) : null}
+                              {/* Le Dumbbell s'affiche en dessous, ou quand l'image échoue */}
+                              <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
                             </div>
                             <div>
                               <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{ex.name}</h4>
@@ -208,25 +218,33 @@ export default function WorkoutPage() {
             {swapModal.alternatives.length === 0 ? (
               <div className="text-center p-4 text-zinc-500 bg-zinc-50 dark:bg-zinc-900 rounded-lg">{txt.noAlt}</div>
             ) : (
-              swapModal.alternatives.map((alt) => (
-                <div key={alt.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-teal-500 dark:hover:border-teal-500 transition-colors bg-zinc-50 dark:bg-zinc-900">
-                  <div className="flex items-center space-x-3">
-                    {/* INTEGRATION GIF DANS LA MODALE SWAP ICI */}
-                    <div className="h-10 w-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center overflow-hidden shrink-0">
-                      {alt.gif_url ? (
-                        <img src={alt.gif_url} alt={alt.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <Dumbbell className="h-5 w-5 text-zinc-400" />
-                      )}
+              swapModal.alternatives.map((alt) => {
+                // Application de la même logique pour les vignettes de la modale SWAP
+                const altThumbnailUrl = alt.gif_url ? (alt.gif_url.endsWith('.jpg') ? alt.gif_url : `${alt.gif_url}/0.jpg`) : null;
+
+                return (
+                  <div key={alt.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-teal-500 dark:hover:border-teal-500 transition-colors bg-zinc-50 dark:bg-zinc-900">
+                    <div className="flex items-center space-x-3">
+                      <div className="h-10 w-10 bg-white dark:bg-zinc-800 rounded flex items-center justify-center overflow-hidden shrink-0 shadow-inner border border-zinc-200 dark:border-zinc-700 relative">
+                        {altThumbnailUrl ? (
+                          <img 
+                            src={altThumbnailUrl} 
+                            alt={alt.name} 
+                            className="h-full w-full object-contain mix-blend-multiply absolute inset-0 z-10" 
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+                          />
+                        ) : null}
+                        <Dumbbell className="h-5 w-5 text-zinc-400 absolute z-0" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{alt.name}</h4>
+                        <p className="text-xs text-zinc-500">{alt.equipment_required.replace('_', ' ')} • Impact SNC: {alt.cns_impact}/5</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{alt.name}</h4>
-                      <p className="text-xs text-zinc-500">{alt.equipment_required.replace('_', ' ')} • Impact SNC: {alt.cns_impact}/5</p>
-                    </div>
+                    <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-teal-500 hover:bg-teal-600 text-white">{txt.select}</Button>
                   </div>
-                  <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-teal-500 hover:bg-teal-600 text-white">{txt.select}</Button>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </DialogContent>
@@ -240,7 +258,7 @@ export default function WorkoutPage() {
               <DialogTitle className="text-red-500 flex items-center"><AlertTriangle className="mr-2 h-5 w-5"/> {txt.modalTitle}</DialogTitle>
               <DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.modalSub}</DialogDescription>
             </DialogHeader>
-            <div className="flex space-x-3 mt-4">
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4">
               <Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300" onClick={() => setShowConfirmModal(false)}>{txt.cancel}</Button>
               <Button variant="destructive" className="w-full dark:bg-red-600" onClick={executeRegenerate}>{txt.confirm}</Button>
             </div>

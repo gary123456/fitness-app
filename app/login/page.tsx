@@ -74,13 +74,13 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         
-        <form onSubmit={handleSubmit}>
+<form onSubmit={handleSubmit} suppressHydrationWarning>
           <CardContent className="space-y-5">
             <div className="space-y-2 text-left">
               <Label htmlFor="email" className="font-semibold text-zinc-700 dark:text-zinc-300">{txt.email}</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3.5 h-5 w-5 text-zinc-400" />
-                <Input id="email" type="email" placeholder="athlete@vivex.com" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10 py-6 text-md bg-zinc-50 dark:bg-zinc-950/50" required />
+                <Input id="email" type="email" placeholder="athlete@vivex.com" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-10 py-6 text-md bg-zinc-50 dark:bg-zinc-950/50" required suppressHydrationWarning />
               </div>
             </div>
             
@@ -88,7 +88,7 @@ export default function LoginPage() {
               <Label htmlFor="password" className="font-semibold text-zinc-700 dark:text-zinc-300">{txt.pass}</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3.5 h-5 w-5 text-zinc-400" />
-                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 py-6 text-md bg-zinc-50 dark:bg-zinc-950/50" required />
+                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-10 py-6 text-md bg-zinc-50 dark:bg-zinc-950/50" required suppressHydrationWarning />
               </div>
             </div>
             

@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="fr" translate="no" suppressHydrationWarning>
       <body className="min-h-screen flex flex-col antialiased bg-zinc-50 dark:bg-zinc-950 pb-20 md:pb-0">
         
         {/* ENVELOPPE DE THÈME POUR LE MODE SOMBRE */}
