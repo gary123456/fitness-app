@@ -11,11 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Activity, Flame, Scale, Droplets, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, Info, RefreshCw, Play, ShieldCheck, Clock, Apple } from "lucide-react";
-import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateWaterIntake, calculateEstimatedVO2Max, calculateTargetCalories, calculateMacros, getMicronutrients } from "@/lib/fitness";
+import { Activity, Flame, Scale, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight } from "lucide-react";
+import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { NUTRITION_DATABASE } from "@/lib/nutrition-db";
 import { useLanguage } from "@/lib/useLanguage";
 
 const EXTRA_SPORTS = [ 
@@ -34,37 +33,47 @@ const getMicroDetails = (name: string, lang: string) => {
   return { benefits: "", timing: "", form: "", food: "" };
 };
 
-const InfoModal = ({ title, description, btnText }: { title: string, description: string, btnText: string }) => {
-  const [open, setOpen] = useState(false);
+const MacroRing = ({ pct, color, label, value, onClick }: any) => {
+  const radius = 32;
+  const circum = 2 * Math.PI * radius;
+  const offset = circum - (Math.min(pct, 100) / 100) * circum;
+  
   return (
-    <>
-      <button onClick={(e) => { e.stopPropagation(); setOpen(true); }} className="text-zinc-400 hover:text-teal-500 transition-colors ml-2"><Info className="w-4 h-4" /></button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-teal-600 dark:text-teal-400"><Info className="w-5 h-5 mr-2"/> {title}</DialogTitle>
-            <DialogDescription asChild><div className="text-zinc-600 dark:text-zinc-400 pt-3 leading-relaxed text-sm font-medium whitespace-pre-wrap">{description}</div></DialogDescription>
-          </DialogHeader>
-          <Button className="w-full mt-2 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900" onClick={() => setOpen(false)}>{btnText}</Button>
-        </DialogContent>
-      </Dialog>
-    </>
+    <div onClick={onClick} className="flex flex-col items-center justify-center relative cursor-pointer hover:scale-105 transition-transform group">
+      <svg width="80" height="80" className="transform -rotate-90">
+        <circle cx="40" cy="40" r={radius} fill="transparent" stroke="currentColor" strokeWidth="6" className="text-zinc-100 dark:text-zinc-800 transition-colors group-hover:text-zinc-200 dark:group-hover:text-zinc-700" />
+        <circle cx="40" cy="40" r={radius} fill="transparent" stroke={color} strokeWidth="6" strokeDasharray={circum} strokeDashoffset={offset} className="transition-all duration-1000 ease-out" strokeLinecap="round" />
+      </svg>
+      <div className="absolute flex flex-col items-center justify-center pointer-events-none">
+        <span className="font-black text-[13px] dark:text-zinc-100 leading-none">{value}g</span>
+        <span className="text-[9px] font-bold text-zinc-400 uppercase mt-0.5">{label}</span>
+      </div>
+    </div>
   );
 };
 
 const fetchDashboardData = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No user");
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   
-  let todayWorkoutId = null;
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  const { data: logs } = await supabase.from("workout_logs").select("created_at, weight, reps, session_id").eq("user_id", user.id);
+  
+  let todayWorkoutId: string | null = null;
+  let isTodayWorkoutCompleted = false;
+
   const { data: program } = await supabase.from("user_programs").select("id").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).single();
   if (program) {
     const todayKey = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
     const { data: session } = await supabase.from("workout_sessions").select(`id, workout_exercises(id)`).eq("program_id", program.id).eq("day_name", todayKey).single();
-    if (session && session.workout_exercises && session.workout_exercises.length > 0) todayWorkoutId = session.id;
+    if (session && session.workout_exercises && session.workout_exercises.length > 0) {
+      todayWorkoutId = session.id;
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayLogs = (logs || []).filter(l => l.session_id === todayWorkoutId && l.created_at.startsWith(todayStr));
+      if (todayLogs.length > 0) isTodayWorkoutCompleted = true;
+    }
   }
-  return { profile, todayWorkoutId };
+  return { profile, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [] };
 };
 
 export default function DashboardPage() {
@@ -76,8 +85,14 @@ export default function DashboardPage() {
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isBioModalOpen, setIsBioModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [microModal, setMicroModal] = useState({ show: false, micro: null as any });
   
+  const [isCalModalOpen, setIsCalModalOpen] = useState(false);
+  const [isImgModalOpen, setIsImgModalOpen] = useState(false);
+  const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
+  const [isWaterModalOpen, setIsWaterModalOpen] = useState(false);
+  const [microModal, setMicroModal] = useState({ show: false, micro: null as any });
+  const [mealModal, setMealModal] = useState<{show: boolean, type: 'protein'|'carbs'|'fat', target: number} | null>(null);
+
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   
@@ -93,12 +108,13 @@ export default function DashboardPage() {
     }
   }, [data?.profile]);
 
-  const t = {
-    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Modifier constantes & planning", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal théorique", cals: "Calories Cibles", maint: "Maintien (TDEE)", bio: "Biométrie", bmi: "IMC", weight: "Poids Normal", under: "Insuffisance pondérale", over: "Surpoids", obese: "Obésité", macros: "Matrice des Macronutriments", macrosSub: "Ajustés pour l'objectif de", prot: "Protéines", carb: "Glucides", fat: "Lipides", equiv: "Équivalences alimentaires", water: "Hydratation cible", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", updateBio: "Mettre à jour le poids", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", pendingWorkout: "Séance prévue aujourd'hui", goWorkout: "Démarrer" },
-    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Edit metrics & schedule", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Theoretical ideal", cals: "Target Calories", maint: "Maintenance (TDEE)", bio: "Biometrics", bmi: "BMI", weight: "Normal Weight", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macronutrient Matrix", macrosSub: "Adjusted for", prot: "Proteins", carb: "Carbs", fat: "Fats", equiv: "Food equivalents", water: "Hydration target", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macro distribution.", updateBio: "Update Weight", bioMsg: "A modification will adjust your BMI, Body Fat, and calories.", pendingWorkout: "Scheduled workout today", goWorkout: "Start" }
+  type TranslationDict = Record<string, string>;
+  const t: Record<string, TranslationDict> = {
+    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Modifier constantes & planning", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Le Radar Corporel", imgSub: "L'Indice de Masse Grasse est une estimation de la quantité de gras sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde." },
+    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Edit metrics & schedule", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Radar", imgSub: "The Body Fat Index is an estimation of the amount of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
-  const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", Thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
+  const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
   const handleUpdateProfile = async () => {
     if (!data?.profile) return;
@@ -129,52 +145,99 @@ export default function DashboardPage() {
 
   if (isLoading || !data?.profile) return <div className="flex min-h-[80vh] items-center justify-center"><div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  const { profile, todayWorkoutId } = data;
+  const { profile, todayWorkoutId, isTodayWorkoutCompleted, logs } = data;
   const age = calculateAge(profile.birth_date);
   const bmi = calculateBMI(profile.weight_kg, profile.height_cm);
   const bmr = calculateBMR(profile.weight_kg, profile.height_cm, age, profile.gender);
   const tdee = calculateTDEE(bmr, profile.activity_level);
   const img = calculateEstimatedBodyFat(bmi, age, profile.gender);
   const idealWeight = calculateIdealWeight(profile.height_cm, profile.gender);
-  const water = calculateWaterIntake(profile.weight_kg, profile.activity_level);
-  const vo2max = calculateEstimatedVO2Max(age, bmi, profile.gender, profile.activity_level);
+  const waterTotal = calculateWaterIntake(profile.weight_kg, profile.activity_level);
+  const waterPure = Number((waterTotal * 0.7).toFixed(1)); 
+  
   const displayGoal = editGoal || profile.current_goal;
   const targetCals = calculateTargetCalories(tdee, displayGoal); 
   const macros = calculateMacros(profile.weight_kg, targetCals, displayGoal, profile.training_frequency);
   const micros = getMicronutrients(profile.gender, profile.training_frequency, profile.weight_kg);
-  const metrics = { age, bmi, bmr, tdee, targetCals, macros, micros, img, idealWeight, water, vo2max };
+  
+  const streak = calculateStreak(logs);
+  const currentWeek = getCurrentWeekStreak(logs, lang);
+  const tonnage = calculateWeeklyTonnage(logs, lang);
+  const greeting = getContextualGreeting(lang, profile.first_name);
 
   let bmiColor = "text-teal-500"; let bmiLabel = txt.weight;
-  if (metrics.bmi < 18.5) { bmiColor = "text-blue-500"; bmiLabel = txt.under; }
-  else if (metrics.bmi >= 25 && metrics.bmi < 30) { bmiColor = "text-orange-500"; bmiLabel = txt.over; }
-  else if (metrics.bmi >= 30) { bmiColor = "text-red-600 font-bold"; bmiLabel = txt.obese; }
+  if (bmi < 18.5) { bmiColor = "text-blue-500"; bmiLabel = txt.under; }
+  else if (bmi >= 25 && bmi < 30) { bmiColor = "text-orange-500"; bmiLabel = txt.over; }
+  else if (bmi >= 30) { bmiColor = "text-red-600 font-bold"; bmiLabel = txt.obese; }
 
   const formatGoal = (goal: string, l: string) => {
     if (l === "EN") return { perte_poids: "Fat Loss", recomposition: "Body Recomp", performance: "Performance", prise_masse: "Muscle Building" }[goal] || goal;
     return { perte_poids: "Perte de masse grasse", recomposition: "Recomposition Corporelle", performance: "Performance & Force", prise_masse: "Prise de masse musculaire" }[goal] || goal;
   };
 
-  const protInfo = lang === "FR" ? "Rôle : Reconstruction musculaire et satiété.\n\nTiming idéal : Étaler en 3 à 4 repas réguliers. Une dose après l'entraînement optimise la synthèse protéique.\n\nCompléments utiles : Whey Isolate ou Caséine." : "Role: Muscle repair and satiety.\n\nIdeal Timing: Spread across 3-4 regular meals. A serving post-workout optimizes protein synthesis.\n\nUseful Supplements: Whey Isolate or Casein.";
-  const carbInfo = lang === "FR" ? "Rôle : Carburant principal du système nerveux et musculaire.\n\nTiming idéal : Placer 60% à 70% de vos glucides autour de la séance.\n\nCompléments utiles : Maltodextrine ou Dextrine cyclique." : "Role: Primary fuel for nervous and muscular systems.\n\nIdeal Timing: Place 60-70% of your daily carbs around your workout.\n\nUseful Supplements: Maltodextrin or Cyclic Dextrin.";
-  const fatInfo = lang === "FR" ? "Rôle : Régulation hormonale et santé articulaire.\n\nTiming idéal : Éviter les graisses juste avant ou après l'entraînement.\n\nCompléments utiles : Oméga-3 (EPA/DHA) lors des repas." : "Role: Hormonal regulation and joint health.\n\nIdeal Timing: Avoid fats right before or right after training.\n\nUseful Supplements: Omega-3 (EPA/DHA) capsules with meals.";
-
-  return (
-    <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full">
-      {todayWorkoutId && (
-        <div onClick={() => router.push(`/workout/${todayWorkoutId}`)} className="cursor-pointer bg-gradient-to-r from-teal-500 to-teal-700 dark:from-teal-600 dark:to-teal-900 rounded-xl p-4 shadow-lg shadow-teal-500/20 flex items-center justify-between transition-transform hover:scale-[1.01] active:scale-95">
+  const renderSmartBanner = () => {
+    const todayName = DAYS[["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()] as keyof typeof DAYS];
+    
+    if (isTodayWorkoutCompleted) {
+      return (
+        <div className="bg-gradient-to-r from-yellow-500 to-amber-600 rounded-2xl p-4 shadow-lg shadow-amber-500/20 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm"><Play className="w-6 h-6 text-white fill-white" /></div>
+            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Trophy className="w-6 h-6 text-white" /></div>
+            <div>
+              <p className="text-amber-100 text-xs font-bold uppercase tracking-wider">{txt.completedWorkout}</p>
+              <h3 className="text-white font-black text-lg">{todayName} : {lang === 'FR' ? 'Repos mérité !' : 'Well deserved rest!'}</h3>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    if (todayWorkoutId) {
+      return (
+        <div onClick={() => router.push(`/workout/${todayWorkoutId}`)} className="cursor-pointer bg-gradient-to-r from-teal-500 to-teal-700 rounded-2xl p-4 shadow-lg shadow-teal-500/20 flex items-center justify-between transition-transform hover:scale-[1.01] active:scale-95">
+          <div className="flex items-center space-x-3">
+            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Play className="w-6 h-6 text-white fill-white" /></div>
             <div>
               <p className="text-teal-100 text-xs font-bold uppercase tracking-wider">{txt.pendingWorkout}</p>
-              <h3 className="text-white font-black text-lg">{DAYS[["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()] as keyof typeof DAYS]}</h3>
+              <h3 className="text-white font-black text-lg">{todayName}</h3>
             </div>
           </div>
           <Button variant="secondary" className="bg-white text-teal-700 hover:bg-zinc-50 font-bold rounded-full">{txt.goWorkout}</Button>
         </div>
-      )}
+      );
+    }
 
+    return (
+      <div className="bg-gradient-to-r from-indigo-500 to-indigo-700 rounded-2xl p-4 shadow-lg shadow-indigo-500/20 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Moon className="w-6 h-6 text-white fill-white" /></div>
+          <div>
+            <p className="text-indigo-100 text-xs font-bold uppercase tracking-wider">{txt.restDay}</p>
+            <h3 className="text-white font-black text-lg">{lang === 'FR' ? 'La croissance musculaire est en cours.' : 'Muscle growth in progress.'}</h3>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
+      
+      {/* HEADER GAMIFIÉ : Message + Streak */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
-        <div><h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">{txt.title}, {profile.first_name}</h2><p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p></div>
+        <div>
+          <div className="flex items-center space-x-3 mb-1">
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 leading-tight">
+              {greeting}
+            </h2>
+            {streak > 0 && (
+              <div onClick={() => setIsStreakModalOpen(true)} className="cursor-pointer flex items-center bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-400 px-3 py-1 rounded-full font-black text-sm border border-orange-200 dark:border-orange-800 shadow-sm hover:scale-105 transition-transform">
+                🔥 {streak} {txt.streakUnit}
+              </div>
+            )}
+          </div>
+          <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button variant="outline" className="shadow-sm border-zinc-300 dark:border-zinc-700"><Settings className="w-4 h-4 mr-2" /> {txt.param}</Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
@@ -187,63 +250,89 @@ export default function DashboardPage() {
         </DropdownMenu>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="shadow-md border-zinc-200 dark:border-zinc-800 bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900 cursor-pointer hover:bg-zinc-800 dark:hover:bg-white transition-colors group relative overflow-hidden" onClick={() => setIsGoalModalOpen(true)}>
+      {/* BANNIÈRE DE SÉANCE INTELLIGENTE */}
+      {renderSmartBanner()}
+
+      {/* MINI-CARTE TONNAGE LUDIQUE */}
+      <div onClick={() => router.push("/analytics#tonnage-chart")} className="cursor-pointer bg-gradient-to-r from-zinc-900 to-zinc-800 dark:from-zinc-800 dark:to-zinc-900 rounded-xl p-4 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-zinc-700 hover:ring-2 hover:ring-zinc-600 transition-all group">
+        <div className="flex items-center space-x-4">
+          <div className="bg-white/10 p-2 rounded-lg group-hover:bg-yellow-400/20 transition-colors"><Zap className="w-5 h-5 text-yellow-400" /></div>
+          <div>
+            <h4 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">{txt.tonnageTitle}</h4>
+            <p className="text-lg font-medium">{txt.tonnageDesc} <span className="font-black text-yellow-400">{tonnage.equivalent}</span></p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="text-2xl font-black">{tonnage.total.toLocaleString()} kg</div>
+          <ChevronRight className="w-5 h-5 text-zinc-500 group-hover:text-white transition-colors" />
+        </div>
+      </div>
+
+      {/* 3 CARTES DYNAMIQUES PRINCIPALES */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900 cursor-pointer hover:bg-zinc-800 dark:hover:bg-white transition-colors group relative overflow-hidden" onClick={() => setIsGoalModalOpen(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-bold opacity-80">{txt.goal}</CardTitle><RefreshCw className="h-5 w-5 opacity-40 group-hover:opacity-100 transition-opacity" /></CardHeader>
-          <CardContent><div className="text-xl font-black leading-tight mb-1 uppercase tracking-tight">{formatGoal(profile.current_goal, lang)}</div><p className="text-xs opacity-80 font-medium">{txt.ideal} : {metrics.idealWeight} kg</p></CardContent>
+          <CardContent><div className="text-xl font-black leading-tight mb-1 uppercase tracking-tight">{formatGoal(profile.current_goal, lang)}</div><p className="text-xs opacity-80 font-medium">{txt.ideal} : {idealWeight} kg</p></CardContent>
         </Card>
-        <Card className="shadow-md border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-all">
+        
+        <Card className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all group" onClick={() => setIsCalModalOpen(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">{txt.cals}<InfoModal title={lang==="FR"?"Métabolisme":"Metabolism"} description={lang==="FR"?"Le TDEE est le nombre de calories que vous brûlez. Ajusté de +/- 300 kcal selon l'objectif.":"TDEE is the calories you burn daily. Adjusted by +/- 300 kcal based on goal."} btnText={txt.understood} /></CardTitle>
-            <Flame className="h-5 w-5 text-orange-500" />
+            <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">{txt.cals}</CardTitle>
+            <Flame className="h-5 w-5 text-orange-500 group-hover:scale-110 transition-transform" />
           </CardHeader>
-          <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50 transition-all">{metrics.targetCals} <span className="text-lg font-medium text-zinc-500">kcal</span></div><p className="text-xs text-zinc-500 mt-1 font-medium">{txt.maint} : {metrics.tdee} kcal</p></CardContent>
+          <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50 transition-all">{targetCals} <span className="text-lg font-medium text-zinc-500">kcal</span></div><p className="text-xs text-zinc-500 mt-1 font-medium">{txt.maint} : {tdee} kcal</p></CardContent>
         </Card>
-        <Card className="shadow-md border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors group" onClick={() => setIsBioModalOpen(true)}>
+        
+        <Card className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors group" onClick={() => setIsImgModalOpen(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">{txt.bio}</CardTitle>
-            <div className="flex items-center space-x-2"><RefreshCw className="h-4 w-4 text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" /><Scale className={`h-5 w-5 ${bmiColor}`} /></div>
+            <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">{txt.imgTitle}</CardTitle>
+            <Activity className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
           </CardHeader>
-          <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50">{profile.weight_kg} <span className="text-lg font-medium text-zinc-500">kg</span></div><p className={`text-xs mt-1 font-bold ${bmiColor}`}>{txt.bmi} : {metrics.bmi} ({bmiLabel})</p></CardContent>
-        </Card>
-        <Card className="shadow-md border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">IMG & VO2Max<InfoModal title="IMG & VO2Max" description={lang==="FR"?"IMG : Estimation masse grasse. VO2 : Endurance.":"IMG: Body fat estimation. VO2: Endurance capacity."} btnText={txt.understood} /></CardTitle>
-            <Activity className="h-5 w-5 text-indigo-500" />
-          </CardHeader>
-          <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50">~{metrics.img}<span className="text-lg font-medium text-zinc-500">%</span></div><p className="text-xs text-zinc-500 mt-1 font-medium">VO2: {metrics.vo2max} ml/kg/min</p></CardContent>
+          <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50">~{img}<span className="text-lg font-medium text-zinc-500">%</span></div><p className="text-xs text-zinc-500 mt-1 font-medium">{lang === 'FR' ? "Cliquez pour analyser ➔" : "Click to analyze ➔"}</p></CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-          <CardHeader><CardTitle className="flex items-center text-xl text-zinc-900 dark:text-zinc-100"><Utensils className="h-5 w-5 text-zinc-700 dark:text-zinc-300 mr-2" /><span>{txt.macros}</span></CardTitle><CardDescription>{txt.macrosSub} {formatGoal(profile.current_goal, lang).toLowerCase()}</CardDescription></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center text-xl text-zinc-900 dark:text-zinc-100">
+              <Utensils className="h-5 w-5 text-zinc-700 dark:text-zinc-300 mr-2" />
+              <span>{txt.macros}</span>
+            </CardTitle>
+            <CardDescription>{txt.macrosSub}</CardDescription>
+          </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-sm font-bold"><span className="flex items-center text-blue-600 dark:text-blue-400">{txt.prot} ({metrics.macros.proteinPct}%)<InfoModal title="Protéines" description={protInfo} btnText={txt.understood} /></span><span className="dark:text-zinc-100 transition-all">{metrics.macros.protein}g</span></div>
-              <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-blue-500 transition-all" style={{ width: `${metrics.macros.proteinPct}%` }} /></div>
-              <Accordion type="single" collapsible className="w-full"><AccordionItem value="p" className="border-none"><AccordionTrigger className="text-xs text-zinc-500 dark:text-zinc-400 py-1 hover:no-underline">{txt.equiv}</AccordionTrigger><AccordionContent className="pt-2"><ul className="space-y-2 text-xs max-h-48 overflow-y-auto pr-2">{NUTRITION_DATABASE.proteins.map((f, i) => (<li key={i} className="flex flex-col bg-zinc-50 dark:bg-zinc-950 p-2 rounded border dark:border-zinc-800"><span className="font-bold text-zinc-800 dark:text-zinc-200">{lang==="FR"?f.name:(f.name==="Poulet (Blanc)"?"Chicken Breast":f.name)}</span><span className="text-blue-600 font-medium">{f.density}</span></li>))}</ul></AccordionContent></AccordionItem></Accordion>
+            
+            <div className="flex justify-around items-center pt-2 pb-4">
+              <MacroRing pct={macros.proteinPct} color="#3b82f6" label={txt.prot} value={macros.protein} onClick={() => setMealModal({show: true, type: 'protein', target: macros.protein})} />
+              <MacroRing pct={macros.carbPct} color="#10b981" label={txt.carb} value={macros.carbs} onClick={() => setMealModal({show: true, type: 'carbs', target: macros.carbs})} />
+              <MacroRing pct={macros.fatPct} color="#f59e0b" label={txt.fat} value={macros.fat} onClick={() => setMealModal({show: true, type: 'fat', target: macros.fat})} />
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-sm font-bold"><span className="flex items-center text-green-600 dark:text-green-400">{txt.carb} ({metrics.macros.carbPct}%)<InfoModal title="Glucides" description={carbInfo} btnText={txt.understood} /></span><span className="dark:text-zinc-100 transition-all">{metrics.macros.carbs}g</span></div>
-              <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-green-500 transition-all" style={{ width: `${metrics.macros.carbPct}%` }} /></div>
-              <Accordion type="single" collapsible className="w-full"><AccordionItem value="c" className="border-none"><AccordionTrigger className="text-xs text-zinc-500 dark:text-zinc-400 py-1 hover:no-underline">{txt.equiv}</AccordionTrigger><AccordionContent className="pt-2"><ul className="space-y-2 text-xs max-h-48 overflow-y-auto pr-2">{NUTRITION_DATABASE.carbs.map((f, i) => (<li key={i} className="flex flex-col bg-zinc-50 dark:bg-zinc-950 p-2 rounded border dark:border-zinc-800"><span className="font-bold text-zinc-800 dark:text-zinc-200">{f.name}</span><span className="text-green-600 font-medium">{f.density}</span></li>))}</ul></AccordionContent></AccordionItem></Accordion>
+            
+            <div className="flex items-center justify-center p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg text-sm text-zinc-500 dark:text-zinc-400 font-medium">
+              💡 {lang === 'FR' ? "Cliquez sur un anneau pour voir un exemple de menu." : "Click on a ring to see meal examples."}
             </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-sm font-bold"><span className="flex items-center text-orange-500">{txt.fat} ({metrics.macros.fatPct}%)<InfoModal title="Lipides" description={fatInfo} btnText={txt.understood} /></span><span className="dark:text-zinc-100 transition-all">{metrics.macros.fat}g</span></div>
-              <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-orange-500 transition-all" style={{ width: `${metrics.macros.fatPct}%` }} /></div>
-              <Accordion type="single" collapsible className="w-full"><AccordionItem value="f" className="border-none"><AccordionTrigger className="text-xs text-zinc-500 dark:text-zinc-400 py-1 hover:no-underline">{txt.equiv}</AccordionTrigger><AccordionContent className="pt-2"><ul className="space-y-2 text-xs max-h-48 overflow-y-auto pr-2">{NUTRITION_DATABASE.fats.map((f, i) => (<li key={i} className="flex flex-col bg-zinc-50 dark:bg-zinc-950 p-2 rounded border dark:border-zinc-800"><span className="font-bold text-zinc-800 dark:text-zinc-200">{f.name}</span><span className="text-orange-500 font-medium">{f.density}</span></li>))}</ul></AccordionContent></AccordionItem></Accordion>
+
+            <div onClick={() => setIsWaterModalOpen(true)} className="pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 cursor-pointer group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 p-2 -mx-2 rounded-lg transition-colors">
+              <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 transition-colors">{txt.water}</span>
+              <span className="font-black flex items-center dark:text-zinc-100 text-lg group-hover:text-blue-500 transition-colors"><Droplets className="h-5 w-5 mr-1 text-blue-400"/> {waterTotal} L</span>
             </div>
-            <div className="pt-2 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800"><span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{txt.water}</span><span className="font-bold flex items-center dark:text-zinc-100"><Droplets className="h-4 w-4 mr-1 text-blue-400"/> {metrics.water} L</span></div>
           </CardContent>
         </Card>
 
+        {/* CARTE MICRONUTRIMENTS */}
         <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-          <CardHeader><CardTitle className="flex items-center space-x-2 text-xl text-zinc-900 dark:text-zinc-100"><Pill className="h-5 w-5 text-zinc-700 dark:text-zinc-300" /><span>{txt.micros}</span></CardTitle><CardDescription>{txt.microsSub}</CardDescription></CardHeader>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2 text-xl text-zinc-900 dark:text-zinc-100">
+              <Pill className="h-5 w-5 text-zinc-700 dark:text-zinc-300" />
+              <span>{txt.micros}</span>
+            </CardTitle>
+            <CardDescription>{txt.microsSub}</CardDescription>
+          </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {metrics.micros.map((micro: any, index: number) => (
-                <div key={index} onClick={() => setMicroModal({ show: true, micro: micro })} className="flex flex-col space-y-1 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg border border-zinc-100 dark:border-zinc-800 cursor-pointer hover:border-teal-500 dark:hover:border-teal-600 transition-colors group">
+              {micros.map((micro: any, index: number) => (
+                <div key={index} onClick={() => setMicroModal({ show: true, micro: micro })} className="flex flex-col space-y-1 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-800 cursor-pointer hover:border-teal-500 dark:hover:border-teal-600 transition-colors group shadow-sm">
                   <div className="flex justify-between items-center"><span className="font-bold text-zinc-900 dark:text-zinc-100 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">{micro.name}</span><span className="text-sm font-extrabold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/30 px-2 py-0.5 rounded">{micro.amount}</span></div>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium leading-relaxed">{lang==="EN" ? (micro.name.includes("Zinc") ? "Testosterone & Immunity" : "Sleep & Recovery") : micro.role}</p>
                 </div>
@@ -252,6 +341,160 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* --- MODALES LUDIQUES & DYNAMIQUES --- */}
+
+      {/* Modale STREAK (Flamme & Semaine Actuelle) */}
+      <Dialog open={isStreakModalOpen} onOpenChange={setIsStreakModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-orange-500 flex items-center justify-center">
+              <Flame className="mr-2 w-6 h-6" /> {txt.streakTitle}
+            </DialogTitle>
+            <DialogDescription className="text-center pt-2">
+              {txt.streakSub}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-6">
+            <div className="flex justify-between items-center px-2">
+              {currentWeek.map((day, idx) => (
+                <div key={idx} className="flex flex-col items-center gap-2">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${day.completed ? 'bg-orange-100 border-orange-500 dark:bg-orange-900/40 text-orange-500 shadow-sm' : day.isFuture ? 'border-dashed border-zinc-200 dark:border-zinc-800 bg-transparent' : 'border-solid border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900'}`}>
+                    <Flame className={`w-5 h-5 ${day.completed ? 'fill-orange-500' : 'fill-transparent text-zinc-300 dark:text-zinc-700'}`} />
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase ${day.isToday ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-600'}`}>{day.dayName}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter><Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold" onClick={() => setIsStreakModalOpen(false)}>{txt.understood}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale EAU */}
+      <Dialog open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-blue-500 flex items-center">
+              <Droplets className="mr-2" /> {txt.waterTitle}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
+              <div>
+                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">{txt.waterTotal}</p>
+                <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{waterTotal} L</p>
+              </div>
+              <ArrowLeftRight className="w-5 h-5 text-blue-300" />
+              <div className="text-right">
+                <p className="text-xs font-bold text-teal-500 uppercase tracking-widest">{txt.waterPure}</p>
+                <p className="text-2xl font-black text-teal-600 dark:text-teal-400">{waterPure} L</p>
+              </div>
+            </div>
+            <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400 space-y-3 leading-relaxed">
+              <p>{txt.water1}</p>
+              <p>{txt.water2}</p>
+              <p>{txt.water3}</p>
+            </div>
+          </div>
+          <DialogFooter><Button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold" onClick={() => setIsWaterModalOpen(false)}>{txt.understood}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Modale Repas Dynamique */}
+      <Dialog open={mealModal?.show || false} onOpenChange={(open) => !open && setMealModal(null)}>
+        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-zinc-900 dark:text-zinc-100">
+              {txt.mealTitle} {mealModal?.target}g
+            </DialogTitle>
+            <DialogDescription>
+              {txt.mealSub}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 pt-4">
+            {mealModal && generateMealIdeas(mealModal.type, mealModal.target, lang).map((idea: any, i: number) => (
+              <div key={i} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
+                <h4 className="font-bold text-lg mb-3 flex items-center dark:text-zinc-100"><span className="text-2xl mr-2">{idea.icon}</span> {idea.title}</h4>
+                <div className="space-y-3">
+                  {idea.meals.map((m: any, j: number) => (
+                    <div key={j} className="flex justify-between items-start border-b border-zinc-200 dark:border-zinc-800 pb-2 last:border-0 last:pb-0">
+                      <div>
+                        <span className="block text-xs font-bold text-zinc-400 uppercase tracking-widest">{m.time}</span>
+                        <span className="font-medium text-sm dark:text-zinc-300">{m.amount} {m.food}</span>
+                      </div>
+                      <span className={`font-black text-sm mt-4 ${mealModal.type === 'protein' ? 'text-blue-500' : mealModal.type === 'carbs' ? 'text-green-500' : 'text-orange-500'}`}>
+                        +{m[mealModal.type === 'protein' ? 'prot' : mealModal.type === 'carbs' ? 'carbs' : 'fat']}g
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter><Button className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold" onClick={() => setMealModal(null)}>{txt.understood}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Calories "La Salle des Machines" */}
+      <Dialog open={isCalModalOpen} onOpenChange={setIsCalModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-orange-500 flex items-center"><Flame className="mr-2" /> {txt.calTitle}</DialogTitle>
+            <DialogDescription>{txt.calSub}</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl">
+              <h4 className="font-bold text-orange-700 dark:text-orange-400 flex justify-between"><span>{txt.calBmr}</span> <span>{bmr} kcal</span></h4>
+              <p className="text-xs font-medium text-orange-600/80 dark:text-orange-400/80 mt-1">{txt.calBmrSub}</p>
+            </div>
+            <div className="flex justify-center"><ArrowLeftRight className="w-5 h-5 text-zinc-300 dark:text-zinc-700 rotate-90" /></div>
+            <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+              <h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex justify-between"><span>{txt.calMove}</span> <span>+{tdee - bmr} kcal</span></h4>
+              <p className="text-xs font-medium text-zinc-500 mt-1">{txt.calMoveSub}</p>
+            </div>
+            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
+              <span className="font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-widest text-sm">{txt.calObj}</span>
+              <span className="text-2xl font-black text-orange-500">{targetCals} kcal</span>
+            </div>
+          </div>
+          <DialogFooter><Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold" onClick={() => setIsCalModalOpen(false)}>{txt.understood}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modale Indice Masse Grasse */}
+      <Dialog open={isImgModalOpen} onOpenChange={setIsImgModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-indigo-500 flex items-center"><Activity className="mr-2" /> {txt.imgTitle}</DialogTitle>
+          </DialogHeader>
+          <div className="py-6 text-center space-y-4">
+            <div className="text-6xl font-black text-zinc-900 dark:text-zinc-100">~{img}%</div>
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              {txt.imgSub}
+            </p>
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 mt-4">
+              <h4 className="font-bold text-indigo-700 dark:text-indigo-400 mb-2">{txt.imgWhere}</h4>
+              {profile.gender === 'homme' ? (
+                <ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200">
+                  <li><strong>&lt; 10% :</strong> {lang === 'FR' ? 'Athlète sec (Abdos ultra-visibles)' : 'Shredded Athlete (Visible abs)'}</li>
+                  <li><strong>10 - 15% :</strong> {lang === 'FR' ? 'Fitness (Abdos visibles)' : 'Fitness (Slightly visible abs)'}</li>
+                  <li><strong>15 - 20% :</strong> {lang === 'FR' ? 'Forme normale (Ventre plat)' : 'Normal Shape (Flat belly)'}</li>
+                  <li><strong>&gt; 20% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li>
+                </ul>
+              ) : (
+                <ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200">
+                  <li><strong>&lt; 20% :</strong> {lang === 'FR' ? 'Athlète sèche (Abdos visibles)' : 'Shredded Athlete (Visible abs)'}</li>
+                  <li><strong>20 - 25% :</strong> {lang === 'FR' ? 'Fitness (Silhouette tonique)' : 'Fitness (Toned silhouette)'}</li>
+                  <li><strong>25 - 30% :</strong> {lang === 'FR' ? 'Forme normale' : 'Normal Shape'}</li>
+                  <li><strong>&gt; 30% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li>
+                </ul>
+              )}
+            </div>
+          </div>
+          <DialogFooter><Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold" onClick={() => setIsImgModalOpen(false)}>{txt.understood}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={microModal.show} onOpenChange={(open) => !open && setMicroModal({ show: false, micro: null })}>
         <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
@@ -271,7 +514,7 @@ export default function DashboardPage() {
                   );
                 })()}
               </div>
-              <DialogFooter className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4"><Button className="w-full bg-teal-500 text-white hover:bg-teal-600" onClick={() => setMicroModal({ show: false, micro: null })}>{txt.understood}</Button></DialogFooter>
+              <DialogFooter className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4"><Button className="w-full bg-teal-500 text-white hover:bg-teal-600 font-bold" onClick={() => setMicroModal({ show: false, micro: null })}>{txt.understood}</Button></DialogFooter>
             </>
           )}
         </DialogContent>
@@ -292,8 +535,8 @@ export default function DashboardPage() {
             </Select>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsGoalModalOpen(false); setEditGoal(profile.current_goal); }} className="dark:border-zinc-700 dark:text-zinc-300">{txt.cancel}</Button>
-            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white">{actionLoading ? "..." : txt.save}</Button>
+            <Button variant="outline" onClick={() => { setIsGoalModalOpen(false); setEditGoal(profile.current_goal); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
+            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{actionLoading ? "..." : txt.save}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -306,8 +549,8 @@ export default function DashboardPage() {
             <Input type="number" step="0.1" value={editWeight} onChange={(e) => { setEditWeight(e.target.value); }} className="text-xl font-bold dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 h-14" />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsBioModalOpen(false); setEditWeight(profile.weight_kg.toString()); }} className="dark:border-zinc-700 dark:text-zinc-300">{txt.cancel}</Button>
-            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white">{actionLoading ? "..." : txt.save}</Button>
+            <Button variant="outline" onClick={() => { setIsBioModalOpen(false); setEditWeight(profile.weight_kg.toString()); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
+            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{actionLoading ? "..." : txt.save}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -361,8 +604,8 @@ export default function DashboardPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800">{txt.cancel}</Button>
-            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 text-white hover:bg-teal-600">{actionLoading ? "..." : txt.save}</Button>
+            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 font-bold">{txt.cancel}</Button>
+            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 text-white hover:bg-teal-600 font-bold">{actionLoading ? "..." : txt.save}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -377,8 +620,8 @@ export default function DashboardPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} className="dark:border-zinc-800 dark:text-zinc-300">{txt.cancel}</Button>
-            <Button variant="destructive" onClick={handleDeleteProfile} disabled={(deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE") || actionLoading} className="dark:bg-red-600 dark:hover:bg-red-700">{txt.confirm}</Button>
+            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} className="dark:border-zinc-800 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
+            <Button variant="destructive" onClick={handleDeleteProfile} disabled={(deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE") || actionLoading} className="dark:bg-red-600 dark:hover:bg-red-700 font-bold">{txt.confirm}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
