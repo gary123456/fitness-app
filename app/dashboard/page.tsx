@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import useSWR from "swr";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { NUTRITION_DATABASE } from "@/lib/nutrition-db";
 import { useLanguage } from "@/lib/useLanguage";
 
-interface ExtraSport { id: string; label: string; }
-const EXTRA_SPORTS: ExtraSport[] = [ 
+const EXTRA_SPORTS = [ 
   { id: "jjb", label: "JJB / MMA" }, { id: "football", label: "Football / Rugby" }, 
   { id: "basketball", label: "Basketball / Volley" }, { id: "running", label: "Running / Sprint" }, 
   { id: "natation", label: "Natation" }, { id: "cyclisme", label: "Cyclisme / Vélo" }, 
@@ -42,7 +41,10 @@ const InfoModal = ({ title, description, btnText }: { title: string, description
       <button onClick={(e) => { e.stopPropagation(); setOpen(true); }} className="text-zinc-400 hover:text-teal-500 transition-colors ml-2"><Info className="w-4 h-4" /></button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="flex items-center text-teal-600 dark:text-teal-400"><Info className="w-5 h-5 mr-2"/> {title}</DialogTitle><DialogDescription asChild><div className="text-zinc-600 dark:text-zinc-400 pt-3 leading-relaxed text-sm font-medium whitespace-pre-wrap">{description}</div></DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-teal-600 dark:text-teal-400"><Info className="w-5 h-5 mr-2"/> {title}</DialogTitle>
+            <DialogDescription asChild><div className="text-zinc-600 dark:text-zinc-400 pt-3 leading-relaxed text-sm font-medium whitespace-pre-wrap">{description}</div></DialogDescription>
+          </DialogHeader>
           <Button className="w-full mt-2 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900" onClick={() => setOpen(false)}>{btnText}</Button>
         </DialogContent>
       </Dialog>
@@ -50,13 +52,11 @@ const InfoModal = ({ title, description, btnText }: { title: string, description
   );
 };
 
-// SWR FETCHER
 const fetchDashboardData = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No user");
-  const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  if (!profileData) throw new Error("No profile");
-
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  
   let todayWorkoutId = null;
   const { data: program } = await supabase.from("user_programs").select("id").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).single();
   if (program) {
@@ -64,14 +64,14 @@ const fetchDashboardData = async () => {
     const { data: session } = await supabase.from("workout_sessions").select(`id, workout_exercises(id)`).eq("program_id", program.id).eq("day_name", todayKey).single();
     if (session && session.workout_exercises && session.workout_exercises.length > 0) todayWorkoutId = session.id;
   }
-  return { profile: profileData, todayWorkoutId };
+  return { profile, todayWorkoutId };
 };
 
 export default function DashboardPage() {
   const router = useRouter();
   const { lang } = useLanguage();
-  const { data, error, mutate, isLoading } = useSWR('dashboardData', fetchDashboardData);
-
+  const { data, isLoading, mutate } = useSWR('dashboardData', fetchDashboardData);
+  
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [isBioModalOpen, setIsBioModalOpen] = useState(false);
@@ -80,6 +80,7 @@ export default function DashboardPage() {
   
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  
   const [editWeight, setEditWeight] = useState("");
   const [editGoal, setEditGoal] = useState("");
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
@@ -92,14 +93,12 @@ export default function DashboardPage() {
     }
   }, [data?.profile]);
 
-  if (error) router.push("/login");
-
   const t = {
     FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Modifier constantes & planning", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal théorique", cals: "Calories Cibles", maint: "Maintien (TDEE)", bio: "Biométrie", bmi: "IMC", weight: "Poids Normal", under: "Insuffisance pondérale", over: "Surpoids", obese: "Obésité", macros: "Matrice des Macronutriments", macrosSub: "Ajustés pour l'objectif de", prot: "Protéines", carb: "Glucides", fat: "Lipides", equiv: "Équivalences alimentaires", water: "Hydratation cible", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", updateBio: "Mettre à jour le poids", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", pendingWorkout: "Séance prévue aujourd'hui", goWorkout: "Démarrer" },
     EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Edit metrics & schedule", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Theoretical ideal", cals: "Target Calories", maint: "Maintenance (TDEE)", bio: "Biometrics", bmi: "BMI", weight: "Normal Weight", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macronutrient Matrix", macrosSub: "Adjusted for", prot: "Proteins", carb: "Carbs", fat: "Fats", equiv: "Food equivalents", water: "Hydration target", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macro distribution.", updateBio: "Update Weight", bioMsg: "A modification will adjust your BMI, Body Fat, and calories.", pendingWorkout: "Scheduled workout today", goWorkout: "Start" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
-  const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
+  const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", Thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
   const handleUpdateProfile = async () => {
     if (!data?.profile) return;
@@ -116,11 +115,9 @@ export default function DashboardPage() {
   const handleDeleteProfile = async () => {
     if (!data?.profile || (deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE")) return;
     setActionLoading(true);
-    try {
-      await supabase.from("profiles").delete().eq("id", data.profile.id);
-      await supabase.auth.signOut();
-      router.push("/login");
-    } catch (error) { alert("Erreur."); } finally { setActionLoading(false); }
+    await supabase.from("profiles").delete().eq("id", data.profile.id);
+    await supabase.auth.signOut();
+    router.push("/login");
   };
 
   const handleSportToggle = (day: string, sportId: string, checked: boolean) => {
@@ -132,10 +129,7 @@ export default function DashboardPage() {
 
   if (isLoading || !data?.profile) return <div className="flex min-h-[80vh] items-center justify-center"><div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  const profile = data.profile;
-  const todayWorkoutId = data.todayWorkoutId;
-
-  // Calcul dynamique des métriques basé sur le profil chargé
+  const { profile, todayWorkoutId } = data;
   const age = calculateAge(profile.birth_date);
   const bmi = calculateBMI(profile.weight_kg, profile.height_cm);
   const bmr = calculateBMR(profile.weight_kg, profile.height_cm, age, profile.gender);
@@ -144,7 +138,6 @@ export default function DashboardPage() {
   const idealWeight = calculateIdealWeight(profile.height_cm, profile.gender);
   const water = calculateWaterIntake(profile.weight_kg, profile.activity_level);
   const vo2max = calculateEstimatedVO2Max(age, bmi, profile.gender, profile.activity_level);
-  // Affichage basé sur le `editGoal` si modale ouverte, sinon sur le profil actuel
   const displayGoal = editGoal || profile.current_goal;
   const targetCals = calculateTargetCalories(tdee, displayGoal); 
   const macros = calculateMacros(profile.weight_kg, targetCals, displayGoal, profile.training_frequency);
@@ -161,9 +154,9 @@ export default function DashboardPage() {
     return { perte_poids: "Perte de masse grasse", recomposition: "Recomposition Corporelle", performance: "Performance & Force", prise_masse: "Prise de masse musculaire" }[goal] || goal;
   };
 
-  const protInfo = lang === "FR" ? "Rôle : Reconstruction musculaire et satiété.\n\nTiming idéal : Étaler en 3 à 4 repas réguliers. Une dose après l'entraînement optimise la synthèse protéique.\n\nCompléments utiles : Whey Isolate (absorption ultra-rapide) ou Caséine (lente)." : "Role: Muscle repair and satiety.\n\nIdeal Timing: Spread across 3-4 regular meals. A serving post-workout optimizes protein synthesis.\n\nUseful Supplements: Whey Isolate (fast absorption) or Casein (slow release).";
-  const carbInfo = lang === "FR" ? "Rôle : Carburant principal du système nerveux et musculaire.\n\nTiming idéal : Placer 60% à 70% de vos glucides autour de la séance (Avant et Après).\n\nCompléments utiles : Maltodextrine ou Dextrine cyclique." : "Role: Primary fuel for nervous and muscular systems.\n\nIdeal Timing: Place 60-70% of your daily carbs around your workout.\n\nUseful Supplements: Maltodextrin or Cyclic Dextrin.";
-  const fatInfo = lang === "FR" ? "Rôle : Régulation hormonale (Testostérone) et santé articulaire.\n\nTiming idéal : Éviter les graisses juste avant ou juste après l'entraînement.\n\nCompléments utiles : Oméga-3 (EPA/DHA) lors des repas." : "Role: Hormonal regulation (Testosterone) and joint health.\n\nIdeal Timing: Avoid fats right before or right after training.\n\nUseful Supplements: Omega-3 (EPA/DHA) capsules with meals.";
+  const protInfo = lang === "FR" ? "Rôle : Reconstruction musculaire et satiété.\n\nTiming idéal : Étaler en 3 à 4 repas réguliers. Une dose après l'entraînement optimise la synthèse protéique.\n\nCompléments utiles : Whey Isolate ou Caséine." : "Role: Muscle repair and satiety.\n\nIdeal Timing: Spread across 3-4 regular meals. A serving post-workout optimizes protein synthesis.\n\nUseful Supplements: Whey Isolate or Casein.";
+  const carbInfo = lang === "FR" ? "Rôle : Carburant principal du système nerveux et musculaire.\n\nTiming idéal : Placer 60% à 70% de vos glucides autour de la séance.\n\nCompléments utiles : Maltodextrine ou Dextrine cyclique." : "Role: Primary fuel for nervous and muscular systems.\n\nIdeal Timing: Place 60-70% of your daily carbs around your workout.\n\nUseful Supplements: Maltodextrin or Cyclic Dextrin.";
+  const fatInfo = lang === "FR" ? "Rôle : Régulation hormonale et santé articulaire.\n\nTiming idéal : Éviter les graisses juste avant ou après l'entraînement.\n\nCompléments utiles : Oméga-3 (EPA/DHA) lors des repas." : "Role: Hormonal regulation and joint health.\n\nIdeal Timing: Avoid fats right before or right after training.\n\nUseful Supplements: Omega-3 (EPA/DHA) capsules with meals.";
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full">
@@ -199,7 +192,6 @@ export default function DashboardPage() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-bold opacity-80">{txt.goal}</CardTitle><RefreshCw className="h-5 w-5 opacity-40 group-hover:opacity-100 transition-opacity" /></CardHeader>
           <CardContent><div className="text-xl font-black leading-tight mb-1 uppercase tracking-tight">{formatGoal(profile.current_goal, lang)}</div><p className="text-xs opacity-80 font-medium">{txt.ideal} : {metrics.idealWeight} kg</p></CardContent>
         </Card>
-        
         <Card className="shadow-md border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 transition-all">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">{txt.cals}<InfoModal title={lang==="FR"?"Métabolisme":"Metabolism"} description={lang==="FR"?"Le TDEE est le nombre de calories que vous brûlez. Ajusté de +/- 300 kcal selon l'objectif.":"TDEE is the calories you burn daily. Adjusted by +/- 300 kcal based on goal."} btnText={txt.understood} /></CardTitle>
@@ -207,7 +199,6 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50 transition-all">{metrics.targetCals} <span className="text-lg font-medium text-zinc-500">kcal</span></div><p className="text-xs text-zinc-500 mt-1 font-medium">{txt.maint} : {metrics.tdee} kcal</p></CardContent>
         </Card>
-        
         <Card className="shadow-md border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors group" onClick={() => setIsBioModalOpen(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">{txt.bio}</CardTitle>
@@ -215,7 +206,6 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50">{profile.weight_kg} <span className="text-lg font-medium text-zinc-500">kg</span></div><p className={`text-xs mt-1 font-bold ${bmiColor}`}>{txt.bmi} : {metrics.bmi} ({bmiLabel})</p></CardContent>
         </Card>
-        
         <Card className="shadow-md border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">IMG & VO2Max<InfoModal title="IMG & VO2Max" description={lang==="FR"?"IMG : Estimation masse grasse. VO2 : Endurance.":"IMG: Body fat estimation. VO2: Endurance capacity."} btnText={txt.understood} /></CardTitle>

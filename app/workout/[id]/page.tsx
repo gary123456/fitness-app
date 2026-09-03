@@ -4,10 +4,38 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, AlertCircle, CheckCircle2, Repeat, Info } from "lucide-react";
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, AlertCircle, CheckCircle2, Repeat, Info, Flame, Brain } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
+
+const getSessionInsights = (exercises: any[], lang: string) => {
+  const patterns = exercises.map(we => we.exercise_library?.movement_pattern || "");
+  const isLower = patterns.some(p => p.includes("Squat") || p.includes("Hinge") || p.includes("Lunge"));
+  const isUpper = patterns.some(p => p.includes("Push") || p.includes("Pull"));
+
+  if (isLower && isUpper) {
+    return {
+      warmup: lang === 'FR' ? "1. Cardio léger (3-5 min)\n2. Rotations articulaires complètes (épaules, hanches, poignets)\n3. 15 Jumping Jacks ou 10 Burpees\n4. 2 séries de pompes (ou sur les genoux) et squats à vide." : "1. Light cardio (3-5 min)\n2. Full joint rotations\n3. 15 Jumping Jacks\n4. 2 sets of bodyweight squats and push-ups.",
+      why: lang === 'FR' ? "Le Full-Body (Corps Entier) stimule l'ensemble de votre système nerveux central. Scientifiquement, cette haute fréquence permet de relancer la synthèse protéique musculaire tous les 48h, maximisant l'anabolisme naturel et la dépense énergétique." : "Full-Body stimulates your entire central nervous system. Scientifically, this high frequency restarts muscle protein synthesis every 48h, maximizing natural anabolism and caloric expenditure."
+    };
+  } else if (isLower) {
+    return {
+      warmup: lang === 'FR' ? "1. Étirements dynamiques des hanches (position 90/90)\n2. Mobilisation des chevilles (genou vers le mur)\n3. 15 fentes alternées au poids du corps\n4. 2 séries de squats à vide avec 2s de pause en bas." : "1. Dynamic hip stretches (90/90)\n2. Ankle mobilization\n3. 15 bodyweight lunges\n4. 2 sets of empty squats with 2s pause at bottom.",
+      why: lang === 'FR' ? "Cette séance bas du corps cible les plus grands groupes musculaires (Quadriceps, Fessiers). Cela déclenche une forte libération d'hormones anaboliques (testostérone, hormone de croissance) bénéfique pour l'ensemble du corps." : "This lower body session targets the largest muscle groups. It triggers a strong release of anabolic hormones beneficial for the entire body."
+    };
+  } else if (isUpper) {
+    return {
+      warmup: lang === 'FR' ? "1. Rotations des épaules (bras tendus)\n2. Face pulls légers ou disloquations avec élastique\n3. 2 séries de pompes légères\n4. Étirement dynamique des pectoraux contre un mur." : "1. Shoulder rotations\n2. Light face pulls or band dislocations\n3. 2 sets of light push-ups\n4. Dynamic chest stretches.",
+      why: lang === 'FR' ? "Focus sur la ceinture scapulaire. Équilibrer les mouvements de poussée (Push) et de tirage (Pull) garantit une posture saine, prévient les blessures aux épaules et sculpte le torse et le dos de manière harmonieuse." : "Focus on the shoulder girdle. Balancing push and pull movements ensures healthy posture, prevents shoulder injuries, and sculpts the torso harmoniously."
+    };
+  }
+  
+  return {
+    warmup: lang === 'FR' ? "Échauffement global : 5 min de cardio, rotations articulaires, et 2 séries d'échauffement sur votre premier exercice." : "General warm-up: 5 min cardio, joint rotations, and 2 warm-up sets on your first exercise.",
+    why: lang === 'FR' ? "Séance de renforcement général visant à améliorer la force fonctionnelle." : "General strengthening session aimed at improving functional strength."
+  };
+};
 
 const HelpModal = ({ txt }: { txt: any }) => {
   const [open, setOpen] = useState(false);
@@ -111,8 +139,8 @@ export default function ActiveWorkoutSession() {
   }, [restTimer]);
 
   const t = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer la 1ère série", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider automatiquement", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "Introuvable.", success: "Séance Validée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", helpBtn: "Comment utiliser le tracker ?", helpTitle: "Instructions", help1: "1. Les cases sont pré-remplies avec les poids recommandés.", help2: "2. Ajustez la charge de votre première série, puis cliquez sur l'icône de duplication pour copier vos chiffres partout.", help3: "3. Validez chaque série pour lancer le chronomètre de récupération.", helpGo: "C'est parti !" },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate 1st set", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete all sets", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Not found.", success: "Workout Completed!", successMsg: "Data secured for progressive overload.", back: "Back to program", helpBtn: "How to use the tracker?", helpTitle: "Instructions", help1: "1. Fields are pre-filled with recommended weights.", help2: "2. Adjust the weight for your first set, then click the duplicate icon to copy your numbers to all sets.", help3: "3. Validate each set to start the rest timer.", helpGo: "Let's go!" }
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer la 1ère série", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider automatiquement", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "Introuvable.", success: "Séance Validée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", helpBtn: "Comment utiliser le tracker ?", helpTitle: "Instructions", help1: "1. Les cases sont pré-remplies avec les poids recommandés.", help2: "2. Ajustez la charge de votre première série, puis cliquez sur l'icône de duplication pour copier vos chiffres partout.", help3: "3. Validez chaque série pour lancer le chronomètre de récupération.", helpGo: "C'est parti !", warmupTitle: "Échauffement Recommandé", whyTitle: "Science & Objectif" },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate 1st set", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete all sets", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Not found.", success: "Workout Completed!", successMsg: "Data secured for progressive overload.", back: "Back to program", helpBtn: "How to use the tracker?", helpTitle: "Instructions", help1: "1. Fields are pre-filled with recommended weights.", help2: "2. Adjust the weight for your first set, then click the duplicate icon to copy your numbers to all sets.", help3: "3. Validate each set to start the rest timer.", helpGo: "Let's go!", warmupTitle: "Recommended Warm-up", whyTitle: "Science & Goal" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -194,6 +222,7 @@ export default function ActiveWorkoutSession() {
   if (error || !data?.sessionData) return <div className="p-8 text-center text-red-500">{txt.notFound}</div>;
 
   const session = data.sessionData;
+  const insights = getSessionInsights(session.workout_exercises, lang);
 
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
@@ -211,6 +240,24 @@ export default function ActiveWorkoutSession() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 space-y-6">
+        {/* NOUVEAU MODULE: SCIENCE ET ÉCHAUFFEMENT */}
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
+          <div className="flex items-start space-x-3 mb-4">
+            <Flame className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-zinc-900 dark:text-zinc-100">{txt.warmupTitle}</h3>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium whitespace-pre-wrap">{insights.warmup}</p>
+            </div>
+          </div>
+          <div className="flex items-start space-x-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <Brain className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-bold text-zinc-900 dark:text-zinc-100">{txt.whyTitle}</h3>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed">{insights.why}</p>
+            </div>
+          </div>
+        </div>
+
         {session.workout_exercises.map((we: any, index: number) => {
           const ex = we.exercise_library;
           const identifier = we.id || we.exercise_id;

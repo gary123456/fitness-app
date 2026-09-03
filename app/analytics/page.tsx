@@ -5,19 +5,30 @@ import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, TrendingDown, Dumbbell, Target } from "lucide-react";
+import { Activity, TrendingDown, Dumbbell, Target, Ruler } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
 const fetchAnalyticsData = async (lang: string) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No user");
 
-  const { data: measurements } = await supabase.from("measurements").select("created_at, weight_kg").eq("user_id", user.id).order("created_at", { ascending: true });
+  const { data: measurements } = await supabase.from("measurements").select("*").eq("user_id", user.id).order("created_at", { ascending: true });
   let formattedWeight: any[] = [];
+  let formattedMeasurements: any[] = [];
+
   if (measurements) {
     formattedWeight = measurements.map(m => ({ date: new Date(m.created_at).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }), poids: m.weight_kg }));
+    
+    // MENSURATIONS DATA (Ignorer les entrées vides)
+    formattedMeasurements = measurements.map(m => ({
+      date: new Date(m.created_at).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }),
+      arms: m.arms_cm ? Number(m.arms_cm) : null, 
+      chest: m.chest_cm ? Number(m.chest_cm) : null, 
+      waist: m.waist_cm ? Number(m.waist_cm) : null, 
+      thighs: m.thighs_cm ? Number(m.thighs_cm) : null
+    })).filter(m => m.arms || m.chest || m.waist || m.thighs);
   }
 
   const { data: logs } = await supabase.from("workout_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: true });
@@ -69,7 +80,7 @@ const fetchAnalyticsData = async (lang: string) => {
     availableList.sort((a, b) => a.name.localeCompare(b.name));
   }
   
-  return { formattedWeight, formattedVolume: Object.keys(volByDate).map(date => ({ date, volume: volByDate[date] })), exercisesData: exData, max1RMs: { "Squat": Number(best1RMs["Squat"].toFixed(1)), "Bench": Number(best1RMs["Bench"].toFixed(1)), "Deadlift": Number(best1RMs["Deadlift"].toFixed(1)) }, exerciseList: availableList };
+  return { formattedWeight, formattedMeasurements, formattedVolume: Object.keys(volByDate).map(date => ({ date, volume: volByDate[date] })), exercisesData: exData, max1RMs: { "Squat": Number(best1RMs["Squat"].toFixed(1)), "Bench": Number(best1RMs["Bench"].toFixed(1)), "Deadlift": Number(best1RMs["Deadlift"].toFixed(1)) }, exerciseList: availableList };
 };
 
 export default function AnalyticsPage() {
@@ -79,6 +90,11 @@ export default function AnalyticsPage() {
   
   const [selectedExercise, setSelectedExercise] = useState<string>("");
 
+  // STATE POUR LA LÉGENDE INTERACTIVE DES MENSURATIONS
+  const [hiddenMeas, setHiddenMeas] = useState<Record<string, boolean>>({
+    arms: false, chest: false, waist: false, thighs: false
+  });
+
   useEffect(() => {
     if (data?.exerciseList && data.exerciseList.length > 0 && !selectedExercise) setSelectedExercise(data.exerciseList[0].id);
   }, [data, selectedExercise]);
@@ -86,10 +102,20 @@ export default function AnalyticsPage() {
   if (error) router.push("/login");
 
   const t = {
-    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Poids Corporel", weightSub: "Évolution en kg", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas de données.", loading: "Analyse...", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé" },
-    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Bodyweight", weightSub: "Evolution in kg", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "No data yet.", loading: "Analyzing...", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift" }
+    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Poids Corporel", weightSub: "Évolution en kg", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas de données.", loading: "Analyse...", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm" },
+    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Bodyweight", weightSub: "Evolution in kg", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "No data yet.", loading: "Analyzing...", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
+
+  const handleLegendClick = (e: any) => {
+    const dataKey = e.dataKey as string;
+    setHiddenMeas(prev => ({ ...prev, [dataKey]: !prev[dataKey] }));
+  };
+
+  const renderLegendText = (value: string, entry: any) => {
+    const isHidden = hiddenMeas[entry.dataKey];
+    return <span style={{ color: isHidden ? '#71717a' : entry.color, textDecoration: isHidden ? 'line-through' : 'none', transition: 'all 0.3s' }}>{value}</span>;
+  };
 
   if (isLoading && !data) return <div className="flex min-h-[80vh] items-center justify-center font-bold text-teal-500 animate-pulse">{txt.loading}</div>;
   if (!data) return null;
@@ -125,6 +151,32 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <CardHeader><CardTitle className="flex items-center text-lg text-zinc-900 dark:text-zinc-100"><Ruler className="h-5 w-5 text-purple-500 mr-2" /> {txt.measTitle}</CardTitle><CardDescription>{txt.measSub}</CardDescription></CardHeader>
+          <CardContent>
+            {data.formattedMeasurements.length < 2 ? <div className="h-[250px] flex items-center justify-center text-zinc-400 font-medium">{txt.empty}</div> : (
+              <div className="h-[250px] w-full mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.formattedMeasurements}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.2} vertical={false} />
+                    <XAxis dataKey="date" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                    {/* DOMAIN EN AUTO POUR QUE LES PETITES VARIATIONS SOIENT VISIBLES */}
+                    <YAxis domain={['auto', 'auto']} stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                    <Legend onClick={handleLegendClick} formatter={renderLegendText} wrapperStyle={{ cursor: 'pointer', fontSize: '12px', paddingTop: '10px' }} />
+                    <Line hide={hiddenMeas.waist} type="monotone" dataKey="waist" name={lang==='FR'?"Taille":"Waist"} stroke="#ef4444" strokeWidth={3} dot={{ r: 3 } as any} />
+                    <Line hide={hiddenMeas.arms} type="monotone" dataKey="arms" name={lang==='FR'?"Bras":"Arms"} stroke="#f59e0b" strokeWidth={3} dot={{ r: 3 } as any} />
+                    <Line hide={hiddenMeas.chest} type="monotone" dataKey="chest" name={lang==='FR'?"Poitrine":"Chest"} stroke="#10b981" strokeWidth={3} dot={{ r: 3 } as any} />
+                    <Line hide={hiddenMeas.thighs} type="monotone" dataKey="thighs" name={lang==='FR'?"Cuisses":"Thighs"} stroke="#3b82f6" strokeWidth={3} dot={{ r: 3 } as any} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <CardHeader><CardTitle className="flex items-center text-lg text-zinc-900 dark:text-zinc-100"><Dumbbell className="h-5 w-5 text-teal-500 mr-2" /> {txt.volTitle}</CardTitle><CardDescription>{txt.volSub}</CardDescription></CardHeader>
           <CardContent>
             {data.formattedVolume.length === 0 ? <div className="h-[250px] flex items-center justify-center text-zinc-400 font-medium">{txt.empty}</div> : (
@@ -142,38 +194,38 @@ export default function AnalyticsPage() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
-          <CardTitle className="flex items-center text-lg text-zinc-900 dark:text-zinc-100"><Target className="h-5 w-5 text-indigo-500 mr-2" /> {txt.progEx}</CardTitle>
-          <div className="w-full sm:w-64">
-            <Select value={selectedExercise} onValueChange={setSelectedExercise}>
-              <SelectTrigger className="dark:bg-zinc-950 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder={txt.selectEx} /></SelectTrigger>
-              <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800 max-h-64">
-                {data.exerciseList.map((ex: any) => <SelectItem key={ex.id} value={ex.id}>{ex.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {!selectedExercise || !data.exercisesData[selectedExercise] || data.exercisesData[selectedExercise].length < 1 ? (
-            <div className="h-[300px] flex items-center justify-center text-zinc-400 font-medium">{txt.empty}</div>
-          ) : (
-            <div className="h-[300px] w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data.exercisesData[selectedExercise]}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.2} vertical={false} />
-                  <XAxis dataKey="date" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                  <YAxis domain={['auto', 'auto']} stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }} itemStyle={{ color: '#8b5cf6' }} formatter={(value: any, name: any, props: any) => [`${value} kg (via ${props.payload.weight}kg x ${props.payload.reps})`, '1RM Estimé']} />
-                  <Line type="monotone" dataKey="e1RM" stroke="#8b5cf6" strokeWidth={4} dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2 } as any} activeDot={{ r: 6 } as any} />
-                </LineChart>
-              </ResponsiveContainer>
+        <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
+            <CardTitle className="flex items-center text-lg text-zinc-900 dark:text-zinc-100"><Target className="h-5 w-5 text-indigo-500 mr-2" /> {txt.progEx}</CardTitle>
+            <div className="w-full sm:w-64">
+              <Select value={selectedExercise} onValueChange={setSelectedExercise}>
+                <SelectTrigger className="dark:bg-zinc-950 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder={txt.selectEx} /></SelectTrigger>
+                <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800 max-h-64">
+                  {data.exerciseList.map((ex: any) => <SelectItem key={ex.id} value={ex.id}>{ex.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent>
+            {!selectedExercise || !data.exercisesData[selectedExercise] || data.exercisesData[selectedExercise].length < 1 ? (
+              <div className="h-[300px] flex items-center justify-center text-zinc-400 font-medium">{txt.empty}</div>
+            ) : (
+              <div className="h-[300px] w-full mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.exercisesData[selectedExercise]}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.2} vertical={false} />
+                    <XAxis dataKey="date" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis domain={['auto', 'auto']} stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: '#18181b', border: 'none', borderRadius: '8px', color: '#fff' }} itemStyle={{ color: '#8b5cf6' }} formatter={(value: any, name: any, props: any) => [`${value} kg (via ${props.payload.weight}kg x ${props.payload.reps})`, '1RM Estimé']} />
+                    <Line type="monotone" dataKey="e1RM" stroke="#8b5cf6" strokeWidth={4} dot={{ r: 4, fill: '#8b5cf6', strokeWidth: 2 } as any} activeDot={{ r: 6 } as any} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
