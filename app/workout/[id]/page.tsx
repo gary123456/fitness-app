@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, AlertCircle, CheckCircle2, Repeat, Info, Flame, Brain } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toPng } from "html-to-image";
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, AlertCircle, CheckCircle2, Repeat, Info, Flame, Brain, Share2, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
 
@@ -16,51 +17,44 @@ const getSessionInsights = (exercises: any[], lang: string) => {
 
   if (isLower && isUpper) {
     return {
-      warmup: lang === 'FR' ? "1. Cardio léger (3-5 min)\n2. Rotations articulaires complètes (épaules, hanches, poignets)\n3. 15 Jumping Jacks ou 10 Burpees\n4. 2 séries de pompes (ou sur les genoux) et squats à vide." : "1. Light cardio (3-5 min)\n2. Full joint rotations\n3. 15 Jumping Jacks\n4. 2 sets of bodyweight squats and push-ups.",
+      warmup: [
+        { text: lang === 'FR' ? "Cardio léger (3-5 min)" : "Light cardio (3-5 min)", gif: "/running.gif" },
+        { text: lang === 'FR' ? "Rotations articulaires complètes (épaules, hanches, poignets)" : "Full joint rotations", gif: null },
+        { text: lang === 'FR' ? "15 Jumping Jacks ou 10 Burpees" : "15 Jumping Jacks", gif: "/jumping-jack.gif" },
+        { text: lang === 'FR' ? "2 séries de pompes et squats à vide" : "2 sets of bodyweight squats and push-ups", gif: "/squat.gif" }
+      ],
       why: lang === 'FR' ? "Le Full-Body (Corps Entier) stimule l'ensemble de votre système nerveux central. Scientifiquement, cette haute fréquence permet de relancer la synthèse protéique musculaire tous les 48h, maximisant l'anabolisme naturel et la dépense énergétique." : "Full-Body stimulates your entire central nervous system. Scientifically, this high frequency restarts muscle protein synthesis every 48h, maximizing natural anabolism and caloric expenditure."
     };
   } else if (isLower) {
     return {
-      warmup: lang === 'FR' ? "1. Étirements dynamiques des hanches (position 90/90)\n2. Mobilisation des chevilles (genou vers le mur)\n3. 15 fentes alternées au poids du corps\n4. 2 séries de squats à vide avec 2s de pause en bas." : "1. Dynamic hip stretches (90/90)\n2. Ankle mobilization\n3. 15 bodyweight lunges\n4. 2 sets of empty squats with 2s pause at bottom.",
+      warmup: [
+        { text: lang === 'FR' ? "Cardio léger (3-5 min)" : "Light cardio (3-5 min)", gif: "/running.gif" },
+        { text: lang === 'FR' ? "Étirements dynamiques des hanches (position 90/90)" : "Dynamic hip stretches (90/90)", gif: null },
+        { text: lang === 'FR' ? "15 fentes alternées au poids du corps" : "15 bodyweight lunges", gif: null },
+        { text: lang === 'FR' ? "2 séries de squats à vide avec 2s de pause en bas" : "2 sets of empty squats with 2s pause at bottom", gif: "/squat.gif" }
+      ],
       why: lang === 'FR' ? "Cette séance bas du corps cible les plus grands groupes musculaires (Quadriceps, Fessiers). Cela déclenche une forte libération d'hormones anaboliques (testostérone, hormone de croissance) bénéfique pour l'ensemble du corps." : "This lower body session targets the largest muscle groups. It triggers a strong release of anabolic hormones beneficial for the entire body."
     };
   } else if (isUpper) {
     return {
-      warmup: lang === 'FR' ? "1. Rotations des épaules (bras tendus)\n2. Face pulls légers ou disloquations avec élastique\n3. 2 séries de pompes légères\n4. Étirement dynamique des pectoraux contre un mur." : "1. Shoulder rotations\n2. Light face pulls or band dislocations\n3. 2 sets of light push-ups\n4. Dynamic chest stretches.",
+      warmup: [
+        { text: lang === 'FR' ? "Cardio léger (3-5 min)" : "Light cardio (3-5 min)", gif: "/running.gif" },
+        { text: lang === 'FR' ? "Rotations des épaules (bras tendus)" : "Shoulder rotations", gif: null },
+        { text: lang === 'FR' ? "Face pulls légers ou disloquations avec élastique" : "Light face pulls or band dislocations", gif: null },
+        { text: lang === 'FR' ? "2 séries de pompes légères" : "2 sets of light push-ups", gif: null }
+      ],
       why: lang === 'FR' ? "Focus sur la ceinture scapulaire. Équilibrer les mouvements de poussée (Push) et de tirage (Pull) garantit une posture saine, prévient les blessures aux épaules et sculpte le torse et le dos de manière harmonieuse." : "Focus on the shoulder girdle. Balancing push and pull movements ensures healthy posture, prevents shoulder injuries, and sculpts the torso harmoniously."
     };
   }
   
   return {
-    warmup: lang === 'FR' ? "Échauffement global : 5 min de cardio, rotations articulaires, et 2 séries d'échauffement sur votre premier exercice." : "General warm-up: 5 min cardio, joint rotations, and 2 warm-up sets on your first exercise.",
+    warmup: [
+      { text: lang === 'FR' ? "5 min de cardio" : "5 min cardio", gif: "/running.gif" },
+      { text: lang === 'FR' ? "Rotations articulaires" : "Joint rotations", gif: null },
+      { text: lang === 'FR' ? "2 séries d'échauffement sur votre premier exercice" : "2 warm-up sets on your first exercise", gif: null }
+    ],
     why: lang === 'FR' ? "Séance de renforcement général visant à améliorer la force fonctionnelle." : "General strengthening session aimed at improving functional strength."
   };
-};
-
-const HelpModal = ({ txt }: { txt: any }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button onClick={() => setOpen(true)} className="flex items-center space-x-2 text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/30 dark:text-teal-400 px-4 py-2 rounded-full font-bold text-sm transition-colors shadow-sm border border-teal-200 dark:border-teal-800">
-        <Info className="w-5 h-5" /> <span>{txt.helpBtn}</span>
-      </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-teal-600 dark:text-teal-400"><Info className="w-5 h-5 mr-2"/> {txt.helpTitle}</DialogTitle>
-            <DialogDescription asChild>
-              <div className="text-zinc-600 dark:text-zinc-400 pt-3 space-y-3 leading-relaxed text-sm font-medium">
-                <span className="block">{txt.help1}</span>
-                <span className="block">{txt.help2}</span>
-                <span className="block">{txt.help3}</span>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <Button className="w-full mt-2 bg-teal-500 text-white hover:bg-teal-600" onClick={() => setOpen(false)}>{txt.helpGo}</Button>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
 };
 
 const getInstructions = (name: string, lang: string) => {
@@ -121,16 +115,30 @@ export default function ActiveWorkoutSession() {
   const [inputs, setInputs] = useState<Record<string, { weight: string, reps: string }>>({});
   const [completedSets, setCompletedSets] = useState<Record<string, boolean>>({});
   const [restTimer, setRestTimer] = useState<number | null>(null);
+  
+  // UX GAMIFICATION & CHECKLIST
+  const [isWorkoutUnlocked, setIsWorkoutUnlocked] = useState(false);
+  const [warmupChecks, setWarmupChecks] = useState<boolean[]>([]);
+  const [sessionStartTime] = useState(Date.now());
+  const [sessionStats, setSessionStats] = useState({ duration: 0, tonnage: 0, bestSet: "" });
+  const [isSharing, setIsSharing] = useState(false);
+  
   const [showEndModal, setShowEndModal] = useState(false);
   const [errorModal, setErrorModal] = useState({ show: false, title: "", message: "" });
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
+  
+  const stravaCardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (data) {
+    if (data && warmupChecks.length === 0) {
       setInputs(data.initialInputs);
       setCompletedSets(data.loadedCompleted);
+      const stepsCount = getSessionInsights(data.sessionData.workout_exercises, lang).warmup.length;
+      setWarmupChecks(new Array(stepsCount).fill(false));
+      
+      if (Object.keys(data.loadedCompleted).length > 0) setIsWorkoutUnlocked(true);
     }
-  }, [data]);
+  }, [data, lang, warmupChecks.length]);
 
   useEffect(() => {
     if (restTimer === null || restTimer <= 0) return;
@@ -138,11 +146,19 @@ export default function ActiveWorkoutSession() {
     return () => clearInterval(interval);
   }, [restTimer]);
 
-  const t = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer la 1ère série", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider automatiquement", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "Introuvable.", success: "Séance Validée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", helpBtn: "Comment utiliser le tracker ?", helpTitle: "Instructions", help1: "1. Les cases sont pré-remplies avec les poids recommandés.", help2: "2. Ajustez la charge de votre première série, puis cliquez sur l'icône de duplication pour copier vos chiffres partout.", help3: "3. Validez chaque série pour lancer le chronomètre de récupération.", helpGo: "C'est parti !", warmupTitle: "Échauffement Recommandé", whyTitle: "Science & Objectif" },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate 1st set", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete all sets", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Not found.", success: "Workout Completed!", successMsg: "Data secured for progressive overload.", back: "Back to program", helpBtn: "How to use the tracker?", helpTitle: "Instructions", help1: "1. Fields are pre-filled with recommended weights.", help2: "2. Adjust the weight for your first set, then click the duplicate icon to copy your numbers to all sets.", help3: "3. Validate each set to start the rest timer.", helpGo: "Let's go!", warmupTitle: "Recommended Warm-up", whyTitle: "Science & Goal" }
+  type TranslationDict = Record<string, string>;
+  const t: Record<string, TranslationDict> = {
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer la 1ère série", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider automatiquement", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "Introuvable.", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", helpBtn: "Comment utiliser ?", helpTitle: "Instructions", help1: "1. Pré-remplissage des poids recommandés.", help2: "2. Ajustez le premier set et dupliquez.", help3: "3. Validez pour lancer le timer.", helpGo: "C'est parti !" },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate 1st set", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete all sets", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Not found.", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", helpBtn: "How to use?", helpTitle: "Instructions", help1: "1. Pre-filled recommended weights.", help2: "2. Adjust first set and duplicate.", help3: "3. Validate to start timer.", helpGo: "Let's go!" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
+
+  const handleWarmupToggle = (index: number) => {
+    const newChecks = [...warmupChecks];
+    newChecks[index] = !newChecks[index];
+    setWarmupChecks(newChecks);
+  };
+  const isWarmupDone = warmupChecks.length > 0 && warmupChecks.every(Boolean);
 
   const handleInputChange = (setKey: string, field: "weight" | "reps", value: string) => {
     setInputs((prev) => ({ ...prev, [setKey]: { ...prev[setKey], [field]: value } }));
@@ -194,18 +210,32 @@ export default function ActiveWorkoutSession() {
     if (!user || !data?.sessionData) return;
 
     const logsToInsert = [];
+    let calcTonnage = 0;
+    let maxWeight = 0;
+    let maxRepsForWeight = 0;
+    let bestExName = "";
+
     for (const [setKey, isCompleted] of Object.entries(completedSets)) {
       if (isCompleted) {
         const [workoutExerciseId, setIdx] = setKey.split('_');
         const values = inputs[setKey] || {};
         const we = data.sessionData.workout_exercises.find((item: any) => item.id === workoutExerciseId || item.exercise_id === workoutExerciseId);
 
+        const weight = parseFloat(values.weight) || 0;
+        const reps = parseInt(values.reps) || parseInt(extractNumber(we?.target_reps || "0"));
+
+        calcTonnage += (weight * reps);
+
+        if (weight > maxWeight || (weight === maxWeight && reps > maxRepsForWeight)) {
+          maxWeight = weight;
+          maxRepsForWeight = reps;
+          bestExName = we?.exercise_library?.name || "";
+        }
+
         if (we) {
           logsToInsert.push({
             user_id: user.id, session_id: data.sessionData.id, exercise_id: we.exercise_id,
-            set_number: parseInt(setIdx) + 1,
-            weight: parseFloat(values.weight) || 0,
-            reps: parseInt(values.reps) || parseInt(extractNumber(we.target_reps))
+            set_number: parseInt(setIdx) + 1, weight, reps
           });
         }
       }
@@ -214,8 +244,37 @@ export default function ActiveWorkoutSession() {
     const { error } = await supabase.from('workout_logs').insert(logsToInsert);
     if (error) { setErrorModal({ show: true, title: txt.sqlErr, message: error.message }); return; }
 
+    const durMins = Math.max(1, Math.floor((Date.now() - sessionStartTime) / 60000));
+    
+    let bestSetStr = maxWeight > 0 ? `${maxWeight}kg × ${maxRepsForWeight}` : (lang === 'FR' ? "Poids du corps" : "Bodyweight");
+    if (bestExName) bestSetStr += ` (${bestExName})`;
+
+    setSessionStats({ duration: durMins, tonnage: calcTonnage, bestSet: bestSetStr });
+    
     setShowEndModal(true);
     setRestTimer(null);
+  };
+
+  const shareToSocials = async () => {
+    if (!stravaCardRef.current) return;
+    setIsSharing(true);
+    try {
+      const dataUrl = await toPng(stravaCardRef.current, { cacheBust: true, quality: 1, pixelRatio: 3 });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], 'vivex-workout.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: 'Séance Vivex', files: [file] });
+      } else {
+        const link = document.createElement('a');
+        link.download = 'vivex-workout.png';
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (err) {
+      console.error('Erreur de partage', err);
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   if (isLoading && !data) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">{txt.load}</div>;
@@ -235,81 +294,112 @@ export default function ActiveWorkoutSession() {
         <div className="w-10 relative z-10"></div>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 flex justify-center mt-2">
-        <HelpModal txt={txt} />
-      </div>
-
-      <div className="max-w-2xl mx-auto px-4 space-y-6">
-        {/* NOUVEAU MODULE: SCIENCE ET ÉCHAUFFEMENT */}
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
-          <div className="flex items-start space-x-3 mb-4">
-            <Flame className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-bold text-zinc-900 dark:text-zinc-100">{txt.warmupTitle}</h3>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium whitespace-pre-wrap">{insights.warmup}</p>
-            </div>
-          </div>
-          <div className="flex items-start space-x-3 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-            <Brain className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-bold text-zinc-900 dark:text-zinc-100">{txt.whyTitle}</h3>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed">{insights.why}</p>
-            </div>
-          </div>
-        </div>
-
-        {session.workout_exercises.map((we: any, index: number) => {
-          const ex = we.exercise_library;
-          const identifier = we.id || we.exercise_id;
-          const uniqueKey = we.id || `we-${session.id}-${index}`;
-          const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
-
-          return (
-            <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-[0_8px_30px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.5)] transform transition-transform hover:scale-[1.01]">
-              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-gradient-to-r from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-800/50">
-                <div className="flex items-center space-x-3">
-                  <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative p-1">
-                    {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}<Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
-                  </div>
-                  <div className="flex items-start">
-                    <div>
-                      <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
-                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps {we.recommended_weight ? `| ${txt.rec}: ${we.recommended_weight}kg` : ""}</p>
+      <div className="max-w-2xl mx-auto px-4 space-y-6 mt-6">
+        
+        {/* CHECKLIST ÉCHAUFFEMENT OBLIGATOIRE (AVEC GIFS) */}
+        {!isWorkoutUnlocked ? (
+          <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+              <div className="absolute -right-10 -top-10 opacity-5 pointer-events-none"><Flame className="w-48 h-48" /></div>
+              <div className="flex items-center space-x-3 mb-6 relative z-10">
+                <div className="bg-orange-100 dark:bg-orange-900/40 p-3 rounded-full"><Flame className="w-6 h-6 text-orange-500" /></div>
+                <div>
+                  <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100">{txt.warmupTitle}</h3>
+                  <p className="text-sm font-medium text-zinc-500">{lang === 'FR' ? "Protégez vos articulations avant de charger." : "Protect joints before loading."}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4 relative z-10">
+                {insights.warmup.map((step, idx) => (
+                  <div key={idx} onClick={() => handleWarmupToggle(idx)} className={`flex items-center p-3 rounded-xl border-2 cursor-pointer transition-all ${warmupChecks[idx] ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'border-zinc-200 dark:border-zinc-800 hover:border-orange-300 dark:hover:border-orange-900/50'}`}>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 shrink-0 transition-colors ${warmupChecks[idx] ? 'bg-orange-500 border-orange-500' : 'border-zinc-300 dark:border-zinc-700'}`}>
+                      {warmupChecks[idx] && <Check className="w-4 h-4 text-white stroke-[3px]" />}
                     </div>
-                    <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"><Info className="w-4 h-4" /></button>
+                    {step.gif && (
+                      <div className="h-10 w-10 bg-white rounded flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 mr-3 p-0.5">
+                        <img src={step.gif} alt="Échauffement" className="w-full h-full object-contain" />
+                      </div>
+                    )}
+                    <span className={`font-bold text-sm ${warmupChecks[idx] ? 'text-orange-700 dark:text-orange-400' : 'text-zinc-700 dark:text-zinc-300'}`}>{step.text}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 relative z-10">
+                <Button onClick={() => setIsWorkoutUnlocked(true)} disabled={!isWarmupDone} className="w-full h-14 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-black text-lg uppercase tracking-widest rounded-xl shadow-lg shadow-orange-500/30 transition-transform active:scale-95 disabled:opacity-50 disabled:grayscale">
+                  {isWarmupDone ? txt.unlockBtn : (lang === 'FR' ? "Terminez la checklist" : "Complete checklist")}
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm opacity-50 grayscale pointer-events-none">
+              <div className="flex items-start space-x-3">
+                <Brain className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+                <div><h3 className="font-bold text-zinc-900 dark:text-zinc-100">{txt.whyTitle}</h3><p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed">{insights.why}</p></div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-5 shadow-sm flex items-start space-x-3">
+              <Brain className="w-6 h-6 text-indigo-500 shrink-0 mt-0.5" />
+              <div><h3 className="font-bold text-indigo-700 dark:text-indigo-400 mb-1">{txt.whyTitle}</h3><p className="text-sm text-indigo-600 dark:text-indigo-300 font-medium leading-relaxed">{insights.why}</p></div>
+            </div>
+
+            {session.workout_exercises.map((we: any, index: number) => {
+              const ex = we.exercise_library;
+              const identifier = we.id || we.exercise_id;
+              const uniqueKey = we.id || `we-${session.id}-${index}`;
+              const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
+
+              return (
+                <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
+                  <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
+                    <div className="flex items-center space-x-3">
+                      <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-700 relative p-1">
+                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}<Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
+                      </div>
+                      <div className="flex items-start">
+                        <div>
+                          <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
+                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps {we.recommended_weight ? `| ${txt.rec}: ${we.recommended_weight}kg` : ""}</p>
+                        </div>
+                        <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"><Info className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                    <button onClick={() => duplicateFirstSet(identifier, we.sets)} className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors" title={txt.dup}><Repeat className="w-5 h-5" /></button>
+                  </div>
+
+                  <div className="p-3 space-y-3 bg-white dark:bg-zinc-950">
+                    <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase text-center tracking-wider"><div className="col-span-2">{txt.set}</div><div className="col-span-4">{txt.weight}</div><div className="col-span-4">{txt.reps}</div><div className="col-span-2">OK</div></div>
+                    {Array.from({ length: we.sets }).map((_, setIdx) => {
+                      const setKey = `${identifier}_${setIdx}`;
+                      const isCompleted = completedSets[setKey];
+                      const currentValues = inputs[setKey] || { weight: "", reps: "" };
+
+                      return (
+                        <div key={setKey} className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-lg transition-colors border ${isCompleted ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 shadow-[inset_0_0_15px_rgba(20,184,166,0.05)]' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm'}`}>
+                          <div className="col-span-2 text-center font-bold text-zinc-500 dark:text-zinc-400">{setIdx + 1}</div>
+                          <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.weight} onChange={(e) => handleInputChange(setKey, "weight", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
+                          <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.reps} onChange={(e) => handleInputChange(setKey, "reps", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
+                          <div className="col-span-2 flex justify-center"><button onClick={() => toggleSet(setKey, we.rest_seconds)} className={`h-8 w-8 rounded-md flex items-center justify-center transition-transform active:scale-90 ${isCompleted ? 'bg-teal-500 shadow-lg shadow-teal-500/40 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}><Check className="w-4 h-4 stroke-[3px]" /></button></div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                <button onClick={() => duplicateFirstSet(identifier, we.sets)} className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors" title={txt.dup}><Repeat className="w-5 h-5" /></button>
-              </div>
-
-              <div className="p-3 space-y-3 bg-white dark:bg-zinc-950">
-                <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase text-center tracking-wider"><div className="col-span-2">{txt.set}</div><div className="col-span-4">{txt.weight}</div><div className="col-span-4">{txt.reps}</div><div className="col-span-2">OK</div></div>
-                {Array.from({ length: we.sets }).map((_, setIdx) => {
-                  const setKey = `${identifier}_${setIdx}`;
-                  const isCompleted = completedSets[setKey];
-                  const currentValues = inputs[setKey] || { weight: "", reps: "" };
-
-                  return (
-                    <div key={setKey} className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-lg transition-colors border ${isCompleted ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 shadow-[inset_0_0_15px_rgba(20,184,166,0.05)]' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm'}`}>
-                      <div className="col-span-2 text-center font-bold text-zinc-500 dark:text-zinc-400">{setIdx + 1}</div>
-                      <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.weight} onChange={(e) => handleInputChange(setKey, "weight", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
-                      <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.reps} onChange={(e) => handleInputChange(setKey, "reps", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
-                      <div className="col-span-2 flex justify-center"><button onClick={() => toggleSet(setKey, we.rest_seconds)} className={`h-8 w-8 rounded-md flex items-center justify-center transition-transform active:scale-90 ${isCompleted ? 'bg-teal-500 shadow-lg shadow-teal-500/40 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}><Check className="w-4 h-4 stroke-[3px]" /></button></div>
-                    </div>
-                  );
-                })}
-              </div>
+              );
+            })}
+            <div className="pt-4 pb-10 space-y-3">
+              <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm"><CheckCircle2 className="w-5 h-5" /><span>{txt.checkAll}</span></button>
+              <button onClick={finishWorkout} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">{txt.finish}</button>
             </div>
-          );
-        })}
-        <div className="pt-4 pb-10 space-y-3">
-          <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm"><CheckCircle2 className="w-5 h-5" /><span>{txt.checkAll}</span></button>
-          <button onClick={finishWorkout} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">{txt.finish}</button>
-        </div>
+          </div>
+        )}
       </div>
 
       {restTimer !== null && (
-        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-6 py-3 rounded-full flex items-center space-x-4 shadow-[0_10px_40px_rgba(0,0,0,0.3)] transition-all ${restTimer > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
+        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-6 py-3 rounded-full flex items-center space-x-4 shadow-[0_10px_40px_rgba(0,0,0,0.3)] transition-all ${restTimer > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'} z-50`}>
           <Timer className="w-5 h-5 animate-pulse text-teal-400 dark:text-teal-600" /><span className="font-mono text-xl font-black w-16 text-center">{formatTime(restTimer)}</span><button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-white dark:hover:text-zinc-900"><X className="w-5 h-5" /></button>
         </div>
       )}
@@ -335,28 +425,87 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
 
-      {errorModal.show && (
-        <Dialog open={errorModal.show} onOpenChange={(open) => !open && setErrorModal({show: false, title:"", message:""})}>
-          <DialogContent className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-            <DialogHeader>
-              <DialogTitle className="text-red-500 flex items-center"><AlertCircle className="w-5 h-5 mr-2"/> {errorModal.title}</DialogTitle>
-              <DialogDescription asChild><div className="text-zinc-600 dark:text-zinc-400">{errorModal.message}</div></DialogDescription>
-            </DialogHeader>
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* POPUP DE FIN DE SÉANCE : VIRALITÉ STRAVA */}
+      <Dialog open={showEndModal} onOpenChange={setShowEndModal}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
+          <div className="bg-zinc-900 p-6 flex flex-col items-center justify-center text-center relative overflow-hidden">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-500/20 via-zinc-900 to-zinc-950 pointer-events-none"></div>
+            
+            <div className="relative z-10 w-full mb-6 flex flex-col items-center">
+              
+              {/* LA CARTE INVISIBLE (Générée en HD pour Insta/WhatsApp) */}
+              <div className="absolute -left-[9999px]">
+                <div ref={stravaCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-between py-24 px-16 text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-500/30 via-zinc-900 to-zinc-950"></div>
+                  
+                  <div className="relative z-10 text-center space-y-6">
+                    <h2 className="text-[120px] font-black uppercase tracking-tighter leading-none text-transparent bg-clip-text bg-gradient-to-br from-teal-400 to-teal-600">{txt.success}</h2>
+                    <p className="text-5xl font-bold text-zinc-400 tracking-widest">{new Date().toLocaleDateString()}</p>
+                  </div>
+                  
+                  <div className="relative z-10 w-full grid grid-cols-2 gap-12">
+                    <div className="bg-zinc-900/80 backdrop-blur-xl border-4 border-zinc-800 rounded-[3rem] p-12 flex flex-col items-center justify-center space-y-4">
+                      <span className="text-4xl font-bold text-zinc-500 uppercase tracking-widest">{txt.time}</span>
+                      <span className="text-[80px] font-black text-white">{sessionStats.duration} <span className="text-5xl text-zinc-400">min</span></span>
+                    </div>
+                    <div className="bg-zinc-900/80 backdrop-blur-xl border-4 border-zinc-800 rounded-[3rem] p-12 flex flex-col items-center justify-center space-y-4">
+                      <span className="text-4xl font-bold text-zinc-500 uppercase tracking-widest">{txt.tonnage}</span>
+                      <span className="text-[80px] font-black text-teal-400">{sessionStats.tonnage.toLocaleString()} <span className="text-5xl text-zinc-400">kg</span></span>
+                    </div>
+                  </div>
 
-      {showEndModal && (
-        <Dialog open={showEndModal} onOpenChange={setShowEndModal}>
-          <DialogContent className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-            <div className="text-center py-6">
-              <div className="mx-auto w-16 h-16 bg-teal-100 dark:bg-teal-900/50 rounded-full flex items-center justify-center mb-4"><Trophy className="w-8 h-8 text-teal-600 dark:text-teal-400" /></div>
-              <h3 className="text-2xl font-black text-zinc-900 dark:text-zinc-100 mb-2">{txt.success}</h3><p className="text-zinc-500 dark:text-zinc-400 mb-6">{txt.successMsg}</p>
-              <Button onClick={() => router.push("/workout")} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold">{txt.back}</Button>
+                  <div className="relative z-10 w-full bg-zinc-900/80 backdrop-blur-xl border-4 border-zinc-800 rounded-[3rem] p-12 flex flex-col items-center justify-center space-y-4">
+                    <span className="text-4xl font-bold text-zinc-500 uppercase tracking-widest">{txt.bestSet}</span>
+                    <span className="text-[65px] font-black text-white text-center leading-tight">{sessionStats.bestSet}</span>
+                  </div>
+
+                  <div className="relative z-10 flex items-center space-x-6 bg-white/10 px-16 py-8 rounded-full backdrop-blur-md">
+                    <Trophy className="w-20 h-20 text-teal-500" />
+                    <span className="text-6xl font-black tracking-widest">VIVEX FITNESS</span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* APERÇU MINIATURE DANS LA MODALE POUR L'UTILISATEUR */}
+              <div className="w-full max-w-[250px] aspect-[9/16] bg-zinc-950 rounded-2xl border-4 border-zinc-800 relative flex flex-col items-center justify-between p-4 shadow-2xl">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-500/20 via-transparent to-transparent"></div>
+                <h3 className="text-2xl font-black text-teal-500 uppercase tracking-tighter leading-none mt-4 text-center">{txt.success}</h3>
+                
+                <div className="w-full space-y-2 mt-auto mb-6 relative z-10">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-zinc-900/80 rounded-xl p-2 text-center border border-zinc-800 flex flex-col">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase">{txt.time}</span>
+                      <span className="text-lg font-black text-white">{sessionStats.duration}m</span>
+                    </div>
+                    <div className="bg-zinc-900/80 rounded-xl p-2 text-center border border-zinc-800 flex flex-col">
+                      <span className="text-[10px] font-bold text-zinc-500 uppercase">{txt.tonnage}</span>
+                      <span className="text-lg font-black text-teal-400">{sessionStats.tonnage.toLocaleString()}kg</span>
+                    </div>
+                  </div>
+                  <div className="bg-zinc-900/80 rounded-xl p-2 text-center border border-zinc-800 flex flex-col">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase">{txt.bestSet}</span>
+                    <span className="text-xs font-black text-white truncate px-1">{sessionStats.bestSet}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 opacity-80 relative z-10 mb-2">
+                  <Trophy className="w-4 h-4 text-teal-500" />
+                  <span className="text-xs font-black tracking-widest text-white">VIVEX</span>
+                </div>
+              </div>
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+
+            <div className="w-full space-y-3 relative z-10">
+              <Button onClick={shareToSocials} disabled={isSharing} className="w-full bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-black text-lg h-14 shadow-lg shadow-purple-500/30 transition-transform active:scale-95">
+                {isSharing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Share2 className="w-5 h-5 mr-2" /> {txt.shareInsta}</>}
+              </Button>
+              <Button onClick={() => router.push("/dashboard")} variant="outline" className="w-full h-12 font-bold bg-transparent border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+                {txt.back}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, AlertTriangle, ArrowLeftRight, Info, CalendarCheck, RefreshCw, BatteryCharging } from "lucide-react";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, RefreshCw } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -64,13 +64,21 @@ export default function WorkoutPage() {
   const [swapLoading, setSwapLoading] = useState(false);
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
 
-  const todayIndex = new Date().getDay(); 
-  const daysMap = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const todayKey = daysMap[todayIndex];
+  // LOGIQUE DE DÉCALAGE DYNAMIQUE DE LA SEMAINE (Aujourd'hui = Premier)
+  const currentJsDay = new Date().getDay();
+  const jsToOrdered = [6, 0, 1, 2, 3, 4, 5]; // Dimanche=6, Lundi=0...
+  const todayOrderedIndex = jsToOrdered[currentJsDay];
+  
+  const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  const todayKey = DAYS_ORDER[todayOrderedIndex];
 
-  const t = {
-    FR: { title: "Mon Programme d'Entraînement", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Semaine Suivante", newCycle: "Nouveau Cycle (Changer d'exos)", rest: "Repos Total", start: "Démarrer la séance", sets: "séries", target: "Objectif", bw: "Poids du corps", modalTitle: "Générer la suite ?", modalSub: "Cette action mettra à jour vos charges selon vos dernières performances.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va bannir temporairement vos exercices actuels pour vous en proposer de nouveaux et éviter la stagnation nerveuse.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives compatibles avec votre matériel :", noAlt: "Aucune alternative disponible.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "L'algorithme a réduit le volume et l'intensité de 20% pour dissiper votre fatigue articulaire.", noProg: "Aucun programme en cours. Cliquez pour générer votre première semaine d'entraînement." },
-    EN: { title: "My Training Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Next Week", newCycle: "New Cycle (Swap Exos)", rest: "Total Rest", start: "Start Workout", sets: "sets", target: "Target", bw: "Bodyweight", modalTitle: "Generate next week?", modalSub: "This action will update your weights based on recent performance.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will temporarily ban your current exercises to propose new ones and prevent CNS stagnation.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives matching your equipment:", noAlt: "No alternatives available.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "The algorithm reduced volume and intensity by 20% to dissipate joint fatigue.", noProg: "No active program found. Click to generate your first training week." }
+  // Crée un tableau trié dynamiquement commençant par aujourd'hui
+  const dynamicDaysOrder = [...DAYS_ORDER.slice(todayOrderedIndex), ...DAYS_ORDER.slice(0, todayOrderedIndex)];
+
+  type TranslationDict = Record<string, string>;
+  const t: Record<string, TranslationDict> = {
+    FR: { title: "Mon Programme d'Entraînement", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Semaine Suivante", newCycle: "Nouveau Cycle (Changer d'exos)", rest: "Repos Total", start: "Démarrer la séance", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", modalTitle: "Générer la suite ?", modalSub: "Cette action mettra à jour vos charges selon vos dernières performances.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va bannir temporairement vos exercices actuels pour vous en proposer de nouveaux et éviter la stagnation nerveuse.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives compatibles avec votre matériel :", noAlt: "Aucune alternative disponible.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "L'algorithme a réduit le volume et l'intensité de 20% pour dissiper votre fatigue articulaire.", noProg: "Aucun programme en cours. Cliquez pour générer votre première semaine d'entraînement." },
+    EN: { title: "My Training Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Next Week", newCycle: "New Cycle (Swap Exos)", rest: "Total Rest", start: "Start Workout", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", modalTitle: "Generate next week?", modalSub: "This action will update your weights based on recent performance.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will temporarily ban your current exercises to propose new ones and prevent CNS stagnation.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives matching your equipment:", noAlt: "No alternatives available.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "The algorithm reduced volume and intensity by 20% to dissipate joint fatigue.", noProg: "No active program found. Click to generate your first training week." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -152,13 +160,18 @@ export default function WorkoutPage() {
 
   const weeklySchedule = data.profile.weekly_schedule || {};
 
+  // TRI DYNAMIQUE DE LA SEMAINE
+  const sortedPlan = [...data.weeklyPlan].sort((a: any, b: any) => {
+    return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
+  });
+
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
         <div><h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">{txt.title}</h2><p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p></div>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <Button onClick={() => setShowNewCycleModal(true)} variant="outline" className="w-full sm:w-auto border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950"><RefreshCw className="w-4 h-4 mr-2" /> {txt.newCycle}</Button>
-          <Button onClick={() => setShowConfirmModal(true)} className="w-full sm:w-auto bg-teal-500 text-white hover:bg-teal-600"><Repeat className="w-4 h-4 mr-2" /> {txt.genNext}</Button>
+          <Button onClick={() => setShowNewCycleModal(true)} variant="outline" className="w-full sm:w-auto border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-bold"><RefreshCw className="w-4 h-4 mr-2" /> {txt.newCycle}</Button>
+          <Button onClick={() => setShowConfirmModal(true)} className="w-full sm:w-auto bg-teal-500 text-white hover:bg-teal-600 font-bold"><Repeat className="w-4 h-4 mr-2" /> {txt.genNext}</Button>
         </div>
       </div>
 
@@ -170,8 +183,13 @@ export default function WorkoutPage() {
       )}
 
       <div className="space-y-6">
-        {data.weeklyPlan.map((session: any) => {
+        {sortedPlan.map((session: any) => {
           const dayKey = session.day_name;
+          const sessionDayIndex = DAYS_ORDER.indexOf(dayKey);
+          
+          // VERROUILLAGE (Vérifie la chronologie par rapport à aujourd'hui)
+          const isFuture = dynamicDaysOrder.indexOf(dayKey) > dynamicDaysOrder.indexOf(todayKey);
+
           const externalSports = weeklySchedule[dayKey] || [];
           const hasLifting = session.workout_exercises && session.workout_exercises.length > 0;
           const isRestDay = !hasLifting && externalSports.length === 0;
@@ -188,12 +206,24 @@ export default function WorkoutPage() {
                     {isRestDay && <span className="px-2.5 py-1 text-xs font-bold rounded-md bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{txt.rest}</span>}
                   </div>
                 </div>
-                {hasLifting && <Link href={`/workout/${session.id}`}><Button size="sm" className={`font-bold shadow-sm ${isToday ? 'bg-teal-500 hover:bg-teal-600 text-white shadow-teal-500/30' : 'bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900'}`}><Play className="w-4 h-4 mr-2" /> {txt.start}</Button></Link>}
+                {hasLifting && (
+                  isFuture ? (
+                    <Button size="sm" disabled className="font-bold bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600 border-none">
+                      <Lock className="w-4 h-4 mr-2" /> {txt.locked}
+                    </Button>
+                  ) : (
+                    <Link href={`/workout/${session.id}`}>
+                      <Button size="sm" className={`font-bold shadow-sm ${isToday ? 'bg-teal-500 hover:bg-teal-600 text-white shadow-teal-500/30' : 'bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900'}`}>
+                        <Play className="w-4 h-4 mr-2" /> {txt.start}
+                      </Button>
+                    </Link>
+                  )
+                )}
               </CardHeader>
               
               {hasLifting && (
                 <CardContent className="pt-4">
-                  <div className="space-y-3">
+                  <div className={`space-y-3 ${isFuture ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
                     {session.workout_exercises.map((we: any, index: number) => {
                       const ex = we.exercise_library;
                       const uniqueKey = we.id || `we-${session.id}-${index}`;
@@ -266,7 +296,7 @@ export default function WorkoutPage() {
                       </div>
                       <div><h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{alt.name}</h4><p className="text-xs text-zinc-500">{alt.equipment_required.replace('_', ' ')} • Impact SNC: {alt.cns_impact}/5</p></div>
                     </div>
-                    <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-teal-500 hover:bg-teal-600 text-white">{txt.select}</Button>
+                    <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{txt.select}</Button>
                   </div>
                 );
               })
@@ -278,14 +308,14 @@ export default function WorkoutPage() {
       <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader><DialogTitle className="text-teal-600 flex items-center"><Repeat className="mr-2 h-5 w-5"/> {txt.modalTitle}</DialogTitle><DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.modalSub}</DialogDescription></DialogHeader>
-          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300" onClick={() => setShowConfirmModal(false)}>{txt.cancel}</Button><Button className="w-full bg-teal-500 hover:bg-teal-600 text-white" onClick={() => generateProgram(false)} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
+          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300 font-bold" onClick={() => setShowConfirmModal(false)}>{txt.cancel}</Button><Button className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold" onClick={() => generateProgram(false)} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={showNewCycleModal} onOpenChange={setShowNewCycleModal}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader><DialogTitle className="text-indigo-600 dark:text-indigo-400 flex items-center"><RefreshCw className="mr-2 h-5 w-5"/> {txt.cycleTitle}</DialogTitle><DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.cycleSub}</DialogDescription></DialogHeader>
-          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300" onClick={() => setShowNewCycleModal(false)}>{txt.cancel}</Button><Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white" onClick={() => generateProgram(true)} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
+          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300 font-bold" onClick={() => setShowNewCycleModal(false)}>{txt.cancel}</Button><Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold" onClick={() => generateProgram(true)} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
         </DialogContent>
       </Dialog>
     </div>
