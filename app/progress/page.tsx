@@ -3,7 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
-import imageCompression from "browser-image-compression";
+import { compressImageFile } from "@/lib/image-optimizer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,14 +148,13 @@ export default function ProgressPage() {
     if (!data?.user) return;
     setUploading(true);
     try {
-      const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
       const today = new Date().toISOString().split('T')[0];
-      
       const payload: any = {};
       
       for (const type of ["front", "side", "back"] as const) {
         if (wizardFiles[type]) {
-          const compressedFile = await imageCompression(wizardFiles[type]!, options);
+          // Utilisation du compresseur généré par Cline
+          const compressedFile = await compressImageFile(wizardFiles[type]!);
           const fileExt = compressedFile.name.split('.').pop() || 'jpg';
           const fileName = `${data.user.id}/${Date.now()}_${type}.${fileExt}`;
           

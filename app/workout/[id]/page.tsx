@@ -72,32 +72,6 @@ const getInstructions = (name: string, lang: string) => {
   return lang === 'FR' ? "Maintenez une posture stable et un bon gainage.\nContrôlez la phase excentrique.\nSoyez explosif sur la phase concentrique." : "Maintain a stable posture and brace your core.\nControl the eccentric phase.\nBe explosive on the concentric phase.";
 };
 
-const HelpModal = ({ txt }: { txt: any }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button onClick={() => setOpen(true)} className="flex items-center space-x-2 text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 dark:bg-teal-900/30 dark:text-teal-400 px-4 py-2 rounded-full font-bold text-sm transition-colors shadow-sm border border-teal-200 dark:border-teal-800">
-        <Info className="w-5 h-5" /> <span>{txt.helpBtn}</span>
-      </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-teal-600 dark:text-teal-400"><Info className="w-5 h-5 mr-2"/> {txt.helpTitle}</DialogTitle>
-            <DialogDescription asChild>
-              <div className="text-zinc-600 dark:text-zinc-400 pt-3 space-y-3 leading-relaxed text-sm font-medium">
-                <span className="block">{txt.help1}</span>
-                <span className="block">{txt.help2}</span>
-                <span className="block">{txt.help3}</span>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          <Button className="w-full mt-2 bg-teal-500 text-white hover:bg-teal-600 font-bold" onClick={() => setOpen(false)}>{txt.helpGo}</Button>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-};
-
 const extractNumber = (str: string) => {
   const match = str.match(/\d+/);
   return match ? match[0] : "";
@@ -139,20 +113,23 @@ export default function ActiveWorkoutSession() {
   const router = useRouter();
   const { lang } = useLanguage();
 
-  const { data, error, isLoading } = useSWR(`session-${params.id}`, () => fetchActiveSession(params.id as string), { revalidateOnFocus: false });
+  // OPTIMISATION ANTI-VEILLE : On empêche SWR de revalider au focus et de supprimer les données en cas de fail silencieux.
+  const { data, error, isLoading } = useSWR(`session-${params.id}`, () => fetchActiveSession(params.id as string), { 
+    revalidateOnFocus: false,
+    revalidateIfStale: false,
+    keepPreviousData: true 
+  });
 
   const [inputs, setInputs] = useState<Record<string, { weight: string, reps: string }>>({});
   const [completedSets, setCompletedSets] = useState<Record<string, boolean>>({});
   const [restTimer, setRestTimer] = useState<number | null>(null);
   
-  // UX GAMIFICATION & CHECKLIST
   const [isWorkoutUnlocked, setIsWorkoutUnlocked] = useState(false);
   const [warmupChecks, setWarmupChecks] = useState<boolean[]>([]);
   const [sessionStartTime] = useState(Date.now());
   const [sessionStats, setSessionStats] = useState({ duration: 0, tonnage: 0, bestSet: "" });
   const [isSharing, setIsSharing] = useState(false);
   
-  // SAS DE DÉCOMPRESSION
   const [showBreathingModal, setShowBreathingModal] = useState(false);
   const [breatheTime, setBreatheTime] = useState(30);
 
@@ -191,8 +168,8 @@ export default function ActiveWorkoutSession() {
 
   type TranslationDict = Record<string, string>;
   const t: Record<string, TranslationDict> = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "Introuvable.", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", helpBtn: "Comment utiliser ?", helpTitle: "Instructions", help1: "1. Pré-remplissage des poids recommandés.", help2: "2. Ajustez le premier set et dupliquez.", help3: "3. Validez pour lancer le timer.", helpGo: "C'est parti !" },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Not found.", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", helpBtn: "How to use?", helpTitle: "Instructions", help1: "1. Pre-filled recommended weights.", help2: "2. Adjust first set and duplicate.", help3: "3. Validate to start timer.", helpGo: "Let's go!" }
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", helpBtn: "Comment utiliser ?", helpTitle: "Instructions", help1: "1. Pré-remplissage des poids recommandés.", help2: "2. Ajustez le premier set et dupliquez.", help3: "3. Validez pour lancer le timer.", helpGo: "C'est parti !" },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", helpBtn: "How to use?", helpTitle: "Instructions", help1: "1. Pre-filled recommended weights.", help2: "2. Adjust first set and duplicate.", help3: "3. Validate to start timer.", helpGo: "Let's go!" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -346,11 +323,7 @@ export default function ActiveWorkoutSession() {
         <div className="w-10 relative z-10"></div>
       </div>
 
-      <div className="max-w-2xl mx-auto p-4 flex justify-center mt-2">
-        <HelpModal txt={txt} />
-      </div>
-
-      <div className="max-w-2xl mx-auto px-4 space-y-6 mt-2">
+      <div className="max-w-2xl mx-auto px-4 space-y-6 mt-6">
         
         {/* CHECKLIST ÉCHAUFFEMENT OBLIGATOIRE (AVEC GIFS LAZY LOADED) */}
         {!isWorkoutUnlocked ? (

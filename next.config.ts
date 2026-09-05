@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
+// @ts-expect-error - next-pwa ne fournit pas de types TypeScript officiels
+import withPWAInit from 'next-pwa';
+
+const withPWA = withPWAInit({
+  dest: 'public',
+  disable: process.env.NODE_ENV === 'development',
+});
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['192.168.1.120'], // Autorise votre appareil mobile local
+  // Vos configurations Next.js s'il y en a
 };
 
-export default nextConfig;
+export default withPWA(nextConfig);

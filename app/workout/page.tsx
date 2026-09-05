@@ -1,31 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, RefreshCw } from "lucide-react";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
-const getInstructions = (name: string, lang: string) => {
-  const lowerName = name.toLowerCase();
-  if (lowerName.includes('squat') || lowerName.includes('presse') || lowerName.includes('leg press')) return lang === 'FR' ? "Gardez le buste droit et le regard fixe.\nVerrouillez le gainage.\nDescendez en contrôlant la charge.\nPoussez fort sur vos talons pour remonter." : "Keep your chest up and eyes forward.\nBrace your core.\nDescend under control.\nDrive explosively through your heels to ascend.";
-  if (lowerName.includes('fente') || lowerName.includes('lunge') || lowerName.includes('bulgare')) return lang === 'FR' ? "Gardez le torse droit.\nLe genou avant doit rester dans l'axe de l'orteil.\nDescendez jusqu'à frôler le sol avec le genou arrière." : "Keep your torso upright.\nYour front knee should track over your toes.\nLower yourself until your back knee gently taps the floor.";
-  if (lowerName.includes('soulevé de terre') || lowerName.includes('deadlift') || lowerName.includes('rdl')) return lang === 'FR' ? "Maintenez le dos droit.\nGardez la charge collée à vos tibias.\nPoussez le sol avec vos jambes et contractez les fessiers en haut." : "Maintain a straight back.\nKeep the weight close to your shins.\nPush the floor away with your legs and squeeze your glutes at the top.";
-  if (lowerName.includes('couché') || lowerName.includes('bench') || lowerName.includes('floor press')) return lang === 'FR' ? "Rétractez vos omoplates contre le banc.\nContrôlez la descente de la charge.\nPoussez de manière explosive." : "Retract your scapula against the bench.\nControl the descent of the weight.\nPush explosively.";
-  if (lowerName.includes('pompe') || lowerName.includes('push-up') || lowerName.includes('dips')) return lang === 'FR' ? "Maintenez un gainage actif.\nDescendez en contrôlant le mouvement.\nPoussez fort pour revenir en position initiale." : "Maintain an active core.\nLower yourself under control.\nPush strongly to the starting position.";
-  if (lowerName.includes('militaire') || lowerName.includes('ohp') || lowerName.includes('shoulder press')) return lang === 'FR' ? "Contractez les fessiers et les abdos.\nPoussez la charge au-dessus de la tête.\nRedescendez en contrôlant." : "Squeeze your glutes and abs.\nPress the weight overhead.\nLower the weight under control.";
-  if (lowerName.includes('traction') || lowerName.includes('pull-up') || lowerName.includes('pulldown')) return lang === 'FR' ? "Démarrez avec un étirement complet.\nTirez en cherchant à amener la poitrine vers la barre.\nContrôlez la descente." : "Start with a full stretch.\nPull by trying to bring your chest to the bar.\nControl the eccentric descent.";
-  if (lowerName.includes('rowing') || lowerName.includes('tirage horizontal') || lowerName.includes('t-bar')) return lang === 'FR' ? "Gardez le dos droit.\nTirez la charge vers votre nombril en resserrant les omoplates." : "Keep your back straight.\nPull the weight towards your belly button while squeezing your shoulder blades.";
-  if (lowerName.includes('curl')) return lang === 'FR' ? "Gardez les coudes fixés près du corps.\nContractez fort le biceps en haut du mouvement." : "Keep your elbows pinned to your sides.\nSqueeze the bicep hard at the top.";
-  if (lowerName.includes('triceps') || lowerName.includes('skullcrusher') || lowerName.includes('kickback')) return lang === 'FR' ? "Gardez les coudes serrés et immobiles.\nEffectuez une extension complète." : "Keep your elbows tucked and stationary.\nPerform a full extension.";
-  return lang === 'FR' ? "Maintenez une posture stable et un bon gainage.\nContrôlez la phase excentrique.\nSoyez explosif sur la phase concentrique." : "Maintain a stable posture and brace your core.\nControl the eccentric phase.\nBe explosive on the concentric phase.";
-};
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 const SPORT_LABELS: Record<string, string> = { jjb: "JJB / MMA", football: "Football", basketball: "Basketball", running: "Running", natation: "Natation", cyclisme: "Cyclisme", randonnee: "Randonnée", padel_tennis: "Padel / Tennis" };
 
@@ -33,9 +18,9 @@ const fetchProgramData = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No user");
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  if (!profile) throw new Error("No profile");
   
-  const { data: existingProgram } = await supabase.from("user_programs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).single();
+  const { data: allPrograms } = await supabase.from("user_programs").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+  const existingProgram = allPrograms?.find((p: any) => p.is_active) || null;
 
   let weeklyPlan = [];
   let isDeloadWeek = false;
@@ -48,7 +33,7 @@ const fetchProgramData = async () => {
       isDeloadWeek = sessions.some(s => s.workout_exercises?.some((we:any) => we.target_reps?.includes("Léger")));
     }
   }
-  return { profile, weeklyPlan, isDeloadWeek, existingProgram };
+  return { profile, weeklyPlan, isDeloadWeek, existingProgram, allPrograms: allPrograms || [] };
 };
 
 export default function WorkoutPage() {
@@ -57,33 +42,81 @@ export default function WorkoutPage() {
   const { data, error, mutate, isLoading } = useSWR('workoutData', fetchProgramData);
 
   const [generating, setGenerating] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showManagerModal, setShowManagerModal] = useState(false);
   const [showNewCycleModal, setShowNewCycleModal] = useState(false);
+  const [showProgressModal, setShowProgressModal] = useState(false);
   
   const [swapModal, setSwapModal] = useState({ show: false, weId: "", currentEx: null as any, alternatives: [] as any[] });
   const [swapLoading, setSwapLoading] = useState(false);
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
 
-  // LOGIQUE DE DÉCALAGE DYNAMIQUE DE LA SEMAINE (Aujourd'hui = Premier)
   const currentJsDay = new Date().getDay();
-  const jsToOrdered = [6, 0, 1, 2, 3, 4, 5]; // Dimanche=6, Lundi=0...
+  const jsToOrdered = [6, 0, 1, 2, 3, 4, 5]; 
   const todayOrderedIndex = jsToOrdered[currentJsDay];
   
   const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
   const todayKey = DAYS_ORDER[todayOrderedIndex];
-
-  // Crée un tableau trié dynamiquement commençant par aujourd'hui
   const dynamicDaysOrder = [...DAYS_ORDER.slice(todayOrderedIndex), ...DAYS_ORDER.slice(0, todayOrderedIndex)];
 
-  type TranslationDict = Record<string, string>;
-  const t: Record<string, TranslationDict> = {
-    FR: { title: "Mon Programme d'Entraînement", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Semaine Suivante", newCycle: "Nouveau Cycle (Changer d'exos)", rest: "Repos Total", start: "Démarrer la séance", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", modalTitle: "Générer la suite ?", modalSub: "Cette action mettra à jour vos charges selon vos dernières performances.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va bannir temporairement vos exercices actuels pour vous en proposer de nouveaux et éviter la stagnation nerveuse.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives compatibles avec votre matériel :", noAlt: "Aucune alternative disponible.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "L'algorithme a réduit le volume et l'intensité de 20% pour dissiper votre fatigue articulaire.", noProg: "Aucun programme en cours. Cliquez pour générer votre première semaine d'entraînement." },
-    EN: { title: "My Training Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Next Week", newCycle: "New Cycle (Swap Exos)", rest: "Total Rest", start: "Start Workout", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", modalTitle: "Generate next week?", modalSub: "This action will update your weights based on recent performance.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will temporarily ban your current exercises to propose new ones and prevent CNS stagnation.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives matching your equipment:", noAlt: "No alternatives available.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "The algorithm reduced volume and intensity by 20% to dissipate joint fatigue.", noProg: "No active program found. Click to generate your first training week." }
+  const t: Record<string, Record<string, string>> = {
+    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser vos performances de cette semaine et augmenter les poids cibles du programme actuel.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va bannir temporairement vos exercices actuels pour vous en proposer de nouveaux et éviter la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 3 Perso / 2 Algo. ⚠️ Attention : Supprimer un programme efface l'historique de ses séances.", deleteErr: "Impossible de supprimer ce programme." },
+    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your performances and increase target weights for the current plan.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will temporarily ban your current exercises to propose new ones.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 3 Custom / 2 Algo. ⚠️ Warning: Deleting removes session history.", deleteErr: "Cannot delete this program." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
-  if (error) router.push("/login");
+  useEffect(() => {
+    if (error) router.push("/login");
+  }, [error, router]);
+
+  const customProgs = data?.allPrograms?.filter((p: any) => p.program_type === 'custom') || [];
+  const algoProgs = data?.allPrograms?.filter((p: any) => p.program_type === 'ai') || [];
+
+  const handleCreateCustomClick = () => {
+    if (customProgs.length >= 3) setShowManagerModal(true);
+    else router.push("/workout/builder");
+  };
+
+  const handleNewCycleClick = () => {
+    if (algoProgs.length >= 2) setShowManagerModal(true);
+    else setShowNewCycleModal(true);
+  };
+
+  const applyProgressiveOverload = async () => {
+    if (!data?.existingProgram || !data?.weeklyPlan) return;
+    setGenerating(true);
+    try {
+      const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
+      
+      for (const session of data.weeklyPlan) {
+        if (!session.workout_exercises) continue;
+        
+        for (const we of session.workout_exercises) {
+          const pastLogs = historyLogs?.filter(h => h.exercise_id === we.exercise_id) || [];
+          if (pastLogs.length > 0) {
+            pastLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            const lastSessionId = pastLogs[0].session_id;
+            const lastSessionLogs = pastLogs.filter(l => l.session_id === lastSessionId);
+            lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
+            const bestSet = lastSessionLogs[0];
+            
+            const maxTargetRep = parseInt((we.target_reps || "12").split('-')[1] || "12");
+            
+            if (bestSet.reps >= maxTargetRep && bestSet.weight > 0) {
+              const newWeight = bestSet.weight + 2.5;
+              await supabase.from("workout_exercises").update({ recommended_weight: newWeight }).eq("id", we.id);
+            }
+          }
+        }
+      }
+      await mutate();
+      setShowProgressModal(false);
+    } catch (error) {
+      console.error("Overload error:", error);
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const generateProgram = async (isNewCycle: boolean = false) => {
     if (!data?.profile) return;
@@ -102,19 +135,20 @@ export default function WorkoutPage() {
         if (currentSessions && historyLogs) {
            const sessionIds = currentSessions.map(s => s.id);
            const logsForCurrentProgram = historyLogs.filter(log => sessionIds.includes(log.session_id));
-           if (logsForCurrentProgram.length > 20 && !isNewCycle) deloadFlag = true;
-           if (isNewCycle) {
-              const oldIds = new Set<string>();
-              currentSessions.forEach(s => s.workout_exercises?.forEach((we:any) => oldIds.add(we.exercise_id)));
-              excludedIds = Array.from(oldIds);
-           }
+           if (logsForCurrentProgram.length > 20) deloadFlag = true;
+           const oldIds = new Set<string>();
+           currentSessions.forEach(s => s.workout_exercises?.forEach((we:any) => oldIds.add(we.exercise_id)));
+           excludedIds = Array.from(oldIds);
         }
-        await supabase.from("user_programs").delete().eq("user_id", user.id);
+        await supabase.from("user_programs").update({ is_active: false }).eq("user_id", user.id);
       }
 
       const generatedPlan = generateSmartWorkoutPlan(data.profile, library || [], historyLogs || [], deloadFlag, excludedIds);
+      const cycleName = `Programme Algo - Cycle ${algoProgs.length + 1}`;
 
-      const { data: newProgram } = await supabase.from("user_programs").insert([{ user_id: user.id, name: `Programme - ${data.profile.current_goal}` }]).select().single();
+      const { data: newProgram } = await supabase.from("user_programs").insert([{ 
+        user_id: user.id, name: cycleName, is_active: true, program_type: 'ai'
+      }]).select().single();
       
       let orderIndex = 0;
       for (const day of generatedPlan) {
@@ -125,9 +159,32 @@ export default function WorkoutPage() {
       }
       
       await mutate(); 
-      setShowConfirmModal(false);
       setShowNewCycleModal(false);
     } catch (error) { console.error(error); } finally { setGenerating(false); }
+  };
+
+  const activateProgram = async (programId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from("user_programs").update({ is_active: false }).eq("user_id", user.id);
+      await supabase.from("user_programs").update({ is_active: true }).eq("id", programId);
+      await mutate();
+      setShowManagerModal(false);
+    } catch (error) { console.error(error); }
+  };
+
+  const deleteProgram = async (programId: string, isActive: boolean) => {
+    try {
+      await supabase.from("user_programs").delete().eq("id", programId);
+      if (isActive) {
+        const remaining = data?.allPrograms?.filter((p: any) => p.id !== programId) || [];
+        if (remaining.length > 0) await activateProgram(remaining[0].id);
+        else await mutate();
+      } else {
+        await mutate();
+      }
+    } catch (error) { console.error(error); alert(txt.deleteErr); }
   };
 
   const openSwapModal = async (weId: string, currentEx: any) => {
@@ -147,49 +204,65 @@ export default function WorkoutPage() {
   };
 
   if (isLoading && !data) return <div className="flex min-h-[80vh] items-center justify-center"><div className="w-16 h-16 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
-  
-  if (!data?.weeklyPlan || data.weeklyPlan.length === 0) return (
-    <div className="flex flex-col min-h-[80vh] items-center justify-center space-y-6 px-4 text-center">
-      <Dumbbell className="w-20 h-20 text-zinc-300 dark:text-zinc-700" />
-      <h2 className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{txt.noProg}</h2>
-      <Button onClick={() => generateProgram(false)} disabled={generating} className="bg-teal-500 hover:bg-teal-600 text-white font-bold h-12 px-8 text-lg">
-        {generating ? "..." : "Générer"}
-      </Button>
-    </div>
-  );
 
-  const weeklySchedule = data.profile.weekly_schedule || {};
-
-  // TRI DYNAMIQUE DE LA SEMAINE
-  const sortedPlan = [...data.weeklyPlan].sort((a: any, b: any) => {
+  const weeklySchedule = data?.profile?.weekly_schedule || {};
+  const sortedPlan = data?.weeklyPlan ? [...data.weeklyPlan].sort((a: any, b: any) => {
     return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
-  });
+  }) : [];
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
+      
+      {/* HEADER DE LA PAGE */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
-        <div><h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">{txt.title}</h2><p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p></div>
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
+            {txt.title} {data?.existingProgram?.program_type === 'custom' && <span className="ml-3 text-[10px] bg-indigo-500 text-white px-2 py-1 rounded-full uppercase tracking-widest font-black">Perso</span>}
+          </h2>
+          <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
+        </div>
+        
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          <Button onClick={() => setShowNewCycleModal(true)} variant="outline" className="w-full sm:w-auto border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-bold"><RefreshCw className="w-4 h-4 mr-2" /> {txt.newCycle}</Button>
-          <Button onClick={() => setShowConfirmModal(true)} className="w-full sm:w-auto bg-teal-500 text-white hover:bg-teal-600 font-bold"><Repeat className="w-4 h-4 mr-2" /> {txt.genNext}</Button>
+          {data && data.allPrograms.length > 0 && (
+            <Button onClick={() => setShowManagerModal(true)} variant="outline" className="w-full sm:w-auto border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <FolderGit2 className="w-4 h-4 mr-2" /> {txt.manage}
+            </Button>
+          )}
+          {data?.existingProgram?.program_type === 'ai' && (
+            <Button onClick={handleNewCycleClick} variant="outline" className="w-full sm:w-auto border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800">
+              <RefreshCw className="w-4 h-4 mr-2" /> {txt.newCycle}
+            </Button>
+          )}
+          <Button onClick={handleCreateCustomClick} variant="outline" className="w-full sm:w-auto border-indigo-500 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-bold">
+            <PenTool className="w-4 h-4 mr-2" /> {txt.createCustom}
+          </Button>
+          <Button onClick={() => setShowProgressModal(true)} className="w-full sm:w-auto bg-teal-500 text-white hover:bg-teal-600 font-bold">
+            <Zap className="w-4 h-4 mr-2" /> {txt.genNext}
+          </Button>
         </div>
       </div>
 
-      {data.isDeloadWeek && (
+      {/* ETAT VIDE */}
+      {(!data?.weeklyPlan || data.weeklyPlan.length === 0) && (
+        <div className="flex flex-col items-center justify-center space-y-4 py-12 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <Dumbbell className="w-16 h-16 text-zinc-300 dark:text-zinc-700" />
+          <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">{txt.noProg}</h2>
+        </div>
+      )}
+
+      {/* BADGE DELOAD */}
+      {data?.isDeloadWeek && (
         <div className="bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800 p-4 rounded-xl flex items-start space-x-3">
           <BatteryCharging className="w-6 h-6 text-blue-500 shrink-0" />
           <div><h4 className="font-bold text-blue-700 dark:text-blue-400">{txt.deloadBadge}</h4><p className="text-sm text-blue-600 dark:text-blue-300 font-medium">{txt.deloadSub}</p></div>
         </div>
       )}
 
+      {/* LISTE DES SEANCES */}
       <div className="space-y-6">
         {sortedPlan.map((session: any) => {
           const dayKey = session.day_name;
-          const sessionDayIndex = DAYS_ORDER.indexOf(dayKey);
-          
-          // VERROUILLAGE (Vérifie la chronologie par rapport à aujourd'hui)
           const isFuture = dynamicDaysOrder.indexOf(dayKey) > dynamicDaysOrder.indexOf(todayKey);
-
           const externalSports = weeklySchedule[dayKey] || [];
           const hasLifting = session.workout_exercises && session.workout_exercises.length > 0;
           const isRestDay = !hasLifting && externalSports.length === 0;
@@ -223,7 +296,7 @@ export default function WorkoutPage() {
               
               {hasLifting && (
                 <CardContent className="pt-4">
-                  <div className={`space-y-3 ${isFuture ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
+                  <div className={`space-y-3 ${isFuture ? 'opacity-60 grayscale' : ''}`}>
                     {session.workout_exercises.map((we: any, index: number) => {
                       const ex = we.exercise_library;
                       const uniqueKey = we.id || `we-${session.id}-${index}`;
@@ -238,16 +311,21 @@ export default function WorkoutPage() {
                             </div>
                             <div className="flex items-start">
                               <div><h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4><p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p></div>
-                              <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"><Info className="w-4 h-4" /></button>
+                              
+                              <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer relative z-20 pointer-events-auto">
+                                <Info className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 text-sm mt-2 sm:mt-0">
+                          <div className="flex flex-wrap items-center gap-3 text-sm mt-2 sm:mt-0 relative z-10">
                             {we.recommended_weight !== null && we.recommended_weight !== undefined && (
                               <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800"><Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}</div>
                             )}
                             <div className="flex items-center text-zinc-700 dark:text-zinc-300 font-bold bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded"><Repeat className="w-4 h-4 mr-2 text-zinc-500" /> {we.sets} {txt.sets} × {we.target_reps}</div>
                             <div className="flex items-center text-zinc-500 font-medium"><Clock className="w-4 h-4 mr-1.5" />{we.rest_seconds}s</div>
-                            <button onClick={() => openSwapModal(we.id, ex)} disabled={swapLoading} className="p-1.5 ml-2 text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded-md transition-colors"><ArrowLeftRight className="w-5 h-5" /></button>
+                            <button onClick={() => !isFuture && openSwapModal(we.id, ex)} disabled={swapLoading || isFuture} className={`p-1.5 ml-2 rounded-md transition-colors ${isFuture ? 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed' : 'text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30'}`}>
+                              <ArrowLeftRight className="w-5 h-5" />
+                            </button>
                           </div>
                         </div>
                       );
@@ -260,58 +338,78 @@ export default function WorkoutPage() {
         })}
       </div>
 
-      <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
-        <DialogContent className="sm:max-w-[700px] flex flex-col p-0 overflow-hidden bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          {infoModal.exercise && (
-            <>
-              <DialogHeader className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900"><DialogTitle className="text-xl font-black dark:text-zinc-50">{infoModal.exercise.name}</DialogTitle></DialogHeader>
-              <div className="flex-1 p-4 md:p-6 overflow-y-auto max-h-[75vh]">
-                <div className="space-y-6">
-                  {infoModal.exercise.gif_url ? (
-                    <div className="flex flex-col sm:flex-row items-stretch justify-center gap-4 w-full">
-                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col"><div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Position de départ" : "Starting Position"}</div><div className="p-4 flex justify-center items-center h-48 md:h-64"><img src={`${infoModal.exercise.gif_url}/0.jpg`} alt="Départ" className="max-w-full max-h-full object-contain" loading="lazy" /></div></div>
-                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col"><div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Contraction" : "Contraction"}</div><div className="p-4 flex justify-center items-center h-48 md:h-64"><img src={`${infoModal.exercise.gif_url}/1.jpg`} alt="Fin" className="max-w-full max-h-full object-contain" loading="lazy" /></div></div>
-                    </div>
-                  ) : (<div className="flex flex-col items-center justify-center min-h-[200px] text-zinc-400 dark:text-zinc-600 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800"><Dumbbell className="w-12 h-12 mb-3 opacity-50" /><p className="text-sm font-bold">{lang === 'FR' ? "Aucun visuel disponible." : "No visual available."}</p></div>)}
-                  <div className="bg-white dark:bg-zinc-900/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm"><h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100 mb-3 border-b border-zinc-100 dark:border-zinc-800 pb-2"><Info className="w-4 h-4 mr-2 text-teal-500" />{lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}</h4><ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400 font-medium">{getInstructions(infoModal.exercise.name, lang).split('\n').map((line: string, i: number) => (<li key={i} className="flex items-start"><span className="text-teal-500 mr-2 mt-0.5">•</span><span className="leading-relaxed">{line}</span></li>))}</ul></div>
+      {/* MODALE GESTIONNAIRE DE PROGRAMMES */}
+      <Dialog open={showManagerModal} onOpenChange={setShowManagerModal}>
+        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-zinc-900 dark:text-zinc-100">
+              <FolderGit2 className="w-5 h-5 mr-2 text-indigo-500"/> {txt.manage}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500 dark:text-zinc-400">
+              <span className="font-bold text-orange-500">{txt.limitSub}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-4 max-h-[60vh] overflow-y-auto pr-2">
+            {data?.allPrograms?.map((prog: any) => (
+              <div key={prog.id} className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${prog.is_active ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-[0_0_15px_rgba(20,184,166,0.1)]' : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900'}`}>
+                <div>
+                  <h4 className={`font-bold ${prog.is_active ? 'text-teal-700 dark:text-teal-400' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                    {prog.name}
+                  </h4>
+                  <div className="flex space-x-2 mt-1">
+                    <span className={`text-[9px] uppercase font-black tracking-widest px-2 py-0.5 rounded ${prog.program_type === 'custom' ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400' : 'bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'}`}>
+                      {prog.program_type === 'custom' ? 'Perso' : 'Algo'}
+                    </span>
+                    {prog.is_active && (
+                      <span className="text-[9px] uppercase font-black tracking-widest px-2 py-0.5 rounded bg-teal-500 text-white flex items-center shadow-sm">
+                        <CheckCircle2 className="w-3 h-3 mr-1" /> Actif
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  {!prog.is_active && (
+                    <Button size="sm" onClick={() => activateProgram(prog.id)} variant="outline" className="font-bold border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">Charger</Button>
+                  )}
+                  <Button size="sm" onClick={() => deleteProgram(prog.id, prog.is_active)} variant="destructive" className="px-3 bg-red-500 hover:bg-red-600 transition-transform active:scale-90"><Trash2 className="w-4 h-4" /></Button>
                 </div>
               </div>
-            </>
+            ))}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button className="w-full font-bold dark:text-white" variant="outline" onClick={() => setShowManagerModal(false)}>{txt.cancel}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* INFO EXERCICE */}
+      <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
+          {infoModal.exercise && (
+            <div className="p-6 text-center space-y-4">
+              <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
+              {infoModal.exercise.gif_url ? (
+                <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center">
+                  <img src={infoModal.exercise.gif_url.endsWith('.jpg') ? infoModal.exercise.gif_url : `${infoModal.exercise.gif_url}/0.jpg`} className="max-h-full object-contain" alt="Aperçu" />
+                </div>
+              ) : (
+                <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
+              )}
+              <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+            </div>
           )}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="flex items-center dark:text-zinc-100"><ArrowLeftRight className="w-5 h-5 mr-2 text-teal-500"/> {txt.swapTitle}</DialogTitle><DialogDescription className="text-zinc-500 dark:text-zinc-400">{txt.swapSub} <span className="font-bold text-teal-600">{swapModal.currentEx?.target_muscle}</span></DialogDescription></DialogHeader>
-          <div className="space-y-3 mt-4 max-h-[50vh] overflow-y-auto pr-2">
-            {swapModal.alternatives.length === 0 ? <div className="text-center p-4 text-zinc-500 bg-zinc-50 dark:bg-zinc-900 rounded-lg">{txt.noAlt}</div> : (
-              swapModal.alternatives.map((alt) => {
-                const altThumbnailUrl = alt.gif_url ? (alt.gif_url.endsWith('.jpg') ? alt.gif_url : `${alt.gif_url}/0.jpg`) : null;
-                return (
-                  <div key={alt.id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-teal-500 dark:hover:border-teal-500 transition-colors bg-zinc-50 dark:bg-zinc-900">
-                    <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 bg-white rounded flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative p-1">
-                        {altThumbnailUrl ? <img src={altThumbnailUrl} alt={alt.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}<Dumbbell className="h-5 w-5 text-zinc-400 absolute z-0" />
-                      </div>
-                      <div><h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{alt.name}</h4><p className="text-xs text-zinc-500">{alt.equipment_required.replace('_', ' ')} • Impact SNC: {alt.cns_impact}/5</p></div>
-                    </div>
-                    <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{txt.select}</Button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+      {/* MODALE DE SURCHARGE PROGRESSIVE */}
+      <Dialog open={showProgressModal} onOpenChange={setShowProgressModal}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="text-teal-600 flex items-center"><Repeat className="mr-2 h-5 w-5"/> {txt.modalTitle}</DialogTitle><DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.modalSub}</DialogDescription></DialogHeader>
-          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300 font-bold" onClick={() => setShowConfirmModal(false)}>{txt.cancel}</Button><Button className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold" onClick={() => generateProgram(false)} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
+          <DialogHeader><DialogTitle className="text-teal-600 flex items-center"><Zap className="mr-2 h-5 w-5"/> {txt.progTitle}</DialogTitle><DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.progSub}</DialogDescription></DialogHeader>
+          <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300 font-bold" onClick={() => setShowProgressModal(false)}>{txt.cancel}</Button><Button className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold" onClick={applyProgressiveOverload} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
         </DialogContent>
       </Dialog>
 
+      {/* MODALE NOUVEAU CYCLE ALGO */}
       <Dialog open={showNewCycleModal} onOpenChange={setShowNewCycleModal}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader><DialogTitle className="text-indigo-600 dark:text-indigo-400 flex items-center"><RefreshCw className="mr-2 h-5 w-5"/> {txt.cycleTitle}</DialogTitle><DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.cycleSub}</DialogDescription></DialogHeader>

@@ -14,11 +14,11 @@ export interface UserProfile {
   training_frequency: string;
   equipment_access: string;
   weekly_schedule?: Record<string, string[]>;
+  experience_level?: string;
 }
 
 const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
-// AJOUT DES PARAMÈTRES : isDeload (Délestage) et excludedExerciseIds (Nouveau Cycle)
 export function generateSmartWorkoutPlan(
   profile: UserProfile, 
   library: Exercise[], 
@@ -29,15 +29,15 @@ export function generateSmartWorkoutPlan(
   const userEquipment = profile.equipment_access.split(",").map(e => e.trim());
   let availableExercises = library.filter(ex => userEquipment.includes(ex.equipment_required));
   
-  // LOGIQUE ANTI-LASSITUDE : Exclure les anciens exercices si on a assez d'alternatives
   if (excludedExerciseIds.length > 0) {
     const filteredEx = availableExercises.filter(ex => !excludedExerciseIds.includes(ex.id));
-    if (filteredEx.length >= 15) { // Sécurité : On s'assure qu'il reste assez d'exos pour générer un programme
+    if (filteredEx.length >= 15) { 
       availableExercises = filteredEx;
     }
   }
   
   const schedule = profile.weekly_schedule || {};
+  const expLevel = profile.experience_level || 'debutant';
   
   let externalSportsCount = 0;
   DAYS_ORDER.forEach(day => {
@@ -75,6 +75,7 @@ export function generateSmartWorkoutPlan(
   }
 
   const volumeReductionFactor = externalSportsCount >= 3 ? 0.70 : 1.0;
+  const expVolumeModifier = expLevel === 'avance' ? 1 : expLevel === 'debutant' ? -1 : 0;
 
   const TEMPLATE_A = ["Squat", "Push Horizontal", "Pull Vertical", "Core"];
   const TEMPLATE_B = ["Hinge", "Push Vertical", "Pull Horizontal", "Core"];
@@ -100,13 +101,11 @@ export function generateSmartWorkoutPlan(
       if (!basePatterns.includes("Pull Horizontal")) basePatterns.push("Pull Horizontal");
     }
     
-    let maxCnsAllowed = 5;
-    if (daySports.some(s => ["jjb", "boxe"].includes(s))) {
-      maxCnsAllowed = 3; 
-    }
-    if (daySports.includes("randonnee")) {
-      maxCnsAllowed = 4; 
-    }
+    // Impact SNC maximum selon le niveau d'expérience et les sports
+    let maxCnsAllowed = expLevel === 'debutant' ? 3 : expLevel === 'intermediaire' ? 4 : 5;
+    if (daySports.some(s => ["jjb", "boxe"].includes(s))) maxCnsAllowed -= 2; 
+    if (daySports.includes("randonnee")) maxCnsAllowed -= 1;
+    maxCnsAllowed = Math.max(2, maxCnsAllowed); 
 
     const sessionExercises: any[] = [];
     const uniquePatterns = Array.from(new Set(basePatterns));
@@ -121,26 +120,22 @@ export function generateSmartWorkoutPlan(
       if (candidates.length > 0) {
         const ex = candidates[0];
         const baseSets = ex.cns_impact >= 4 ? 3 : 4;
-        let finalSets = Math.max(2, Math.round(baseSets * volumeReductionFactor));
+        let finalSets = Math.max(2, Math.round(baseSets * volumeReductionFactor) + expVolumeModifier);
         
         let defaultReps = externalSportsCount >= 3 ? "6-8" : "8-12";
         let recommendedWeight = null;
 
-        // --- MAGIE DE LA SURCHARGE PROGRESSIVE ET DU PLATEAU SCIENTIFIQUE ---
         const pastLogs = history.filter(h => h.exercise_id === ex.id);
         
         if (pastLogs.length > 0) {
-          // Trier par date la plus récente
           pastLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-          
           const lastSessionId = pastLogs[0].session_id;
           const lastSessionLogs = pastLogs.filter(l => l.session_id === lastSessionId);
-          lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps); // Prendre la meilleure perf de la dernière séance
+          lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
           const bestSet = lastSessionLogs[0];
           
           const maxTargetRep = parseInt(defaultReps.split('-')[1] || "12");
           
-          // DETECTER UN PLATEAU (Comparaison avec l'avant-dernière séance)
           let isPlateau = false;
           const previousSessions = pastLogs.filter(l => l.session_id !== lastSessionId);
           if (previousSessions.length > 0) {
@@ -149,34 +144,28 @@ export function generateSmartWorkoutPlan(
             prevSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps);
             const bestPrevSet = prevSessionLogs[0];
             
-            // Si le poids et les reps sont bloqués en dessous de l'objectif sur 2 séances de suite = Plateau
             if (bestSet.weight === bestPrevSet.weight && bestSet.reps === bestPrevSet.reps && bestSet.reps < maxTargetRep) {
               isPlateau = true;
             }
           }
 
           if (isDeload) {
-            // SEMAINE DE DÉLESTAGE (Deload) : Baisse de 20% du poids, -1 série
             recommendedWeight = bestSet.weight > 0 ? Number((bestSet.weight * 0.8).toFixed(1)) : 0;
             finalSets = Math.max(2, finalSets - 1);
             defaultReps = "8-10 (Léger)";
           } 
           else if (isPlateau) {
-            // CASSURE DE PLATEAU : Micro-Deload (Baisse de 10% de la charge, on demande + de reps, on n'ajoute PAS de série poubelle)
             recommendedWeight = bestSet.weight > 0 ? Number((bestSet.weight * 0.9).toFixed(1)) : 0;
             defaultReps = `Viser > ${bestSet.reps + 2} reps`; 
           } 
           else if (bestSet.reps >= maxTargetRep) {
-            // PROGRESSION NORMALE : L'objectif a été atteint, on augmente la charge
             recommendedWeight = bestSet.weight > 0 ? bestSet.weight + (ex.cns_impact >= 4 ? 2.5 : 1.25) : 2.5;
             defaultReps = `${parseInt(defaultReps.split('-')[0])}-${maxTargetRep}`; 
           } else {
-            // MAINTIEN : Pas encore atteint le max reps, on garde le même poids
             recommendedWeight = bestSet.weight;
             defaultReps = `Viser > ${bestSet.reps} reps`;
           }
         } else if (isDeload) {
-            // S'il n'a pas d'historique mais qu'on est en deload, on baisse quand même le volume
             finalSets = Math.max(2, finalSets - 1);
         }
 

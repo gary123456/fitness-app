@@ -99,7 +99,11 @@ export default function AnalyticsPage() {
     if (data?.exerciseList && data.exerciseList.length > 0 && !selectedExercise) setSelectedExercise(data.exerciseList[0].id);
   }, [data, selectedExercise]);
 
-  if (error) router.push("/login");
+  useEffect(() => {
+    if (error) {
+      router.push("/login");
+    }
+  }, [error, router]);
 
   const t = {
     FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Poids Corporel", weightSub: "Évolution en kg", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas de données.", loading: "Analyse...", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm" },

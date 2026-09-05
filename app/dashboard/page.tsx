@@ -10,8 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Activity, Flame, Scale, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight } from "lucide-react";
+import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -62,7 +61,7 @@ const fetchDashboardData = async () => {
   let todayWorkoutId: string | null = null;
   let isTodayWorkoutCompleted = false;
 
-  const { data: program } = await supabase.from("user_programs").select("id").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).single();
+  const { data: program } = await supabase.from("user_programs").select("id").eq("user_id", user.id).eq("is_active", true).order("created_at", { ascending: false }).limit(1).single();
   if (program) {
     const todayKey = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()];
     const { data: session } = await supabase.from("workout_sessions").select(`id, workout_exercises(id)`).eq("program_id", program.id).eq("day_name", todayKey).single();
@@ -98,12 +97,14 @@ export default function DashboardPage() {
   
   const [editWeight, setEditWeight] = useState("");
   const [editGoal, setEditGoal] = useState("");
+  const [editExperience, setEditExperience] = useState("");
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (data?.profile) {
       setEditWeight(data.profile.weight_kg.toString());
       setEditGoal(data.profile.current_goal);
+      setEditExperience(data.profile.experience_level || "debutant");
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
     }
   }, [data?.profile]);
@@ -121,7 +122,13 @@ export default function DashboardPage() {
     setActionLoading(true);
     try {
       const newWeight = parseFloat(editWeight);
-      await supabase.from("profiles").update({ weight_kg: newWeight, current_goal: editGoal, weekly_schedule: editSchedule }).eq("id", data.profile.id);
+      await supabase.from("profiles").update({ 
+        weight_kg: newWeight, 
+        current_goal: editGoal, 
+        experience_level: editExperience, 
+        weekly_schedule: editSchedule 
+      }).eq("id", data.profile.id);
+      
       if (newWeight !== data.profile.weight_kg) await supabase.from("measurements").insert([{ user_id: data.profile.id, weight_kg: newWeight }]);
       await mutate();
       setIsEditModalOpen(false); setIsGoalModalOpen(false); setIsBioModalOpen(false);
@@ -131,7 +138,18 @@ export default function DashboardPage() {
   const handleDeleteProfile = async () => {
     if (!data?.profile || (deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE")) return;
     setActionLoading(true);
-    await supabase.from("profiles").delete().eq("id", data.profile.id);
+    
+    const userId = data.profile.id;
+    try {
+      const { data: files } = await supabase.storage.from('progress-photos').list(userId);
+      if (files && files.length > 0) {
+        const filePaths = files.map(file => `${userId}/${file.name}`);
+        await supabase.storage.from('progress-photos').remove(filePaths);
+      }
+      await supabase.rpc('delete_account');
+    } catch (error) {
+      console.error("Erreur lors de la purge :", error);
+    }
     await supabase.auth.signOut();
     router.push("/login");
   };
@@ -223,7 +241,6 @@ export default function DashboardPage() {
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
       
-      {/* HEADER GAMIFIÉ : Message + Streak */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <div className="flex items-center space-x-3 mb-1">
@@ -238,22 +255,36 @@ export default function DashboardPage() {
           </div>
           <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
         </div>
+        
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="outline" className="shadow-sm border-zinc-300 dark:border-zinc-700"><Settings className="w-4 h-4 mr-2" /> {txt.param}</Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-            <DropdownMenuLabel>{txt.account}</DropdownMenuLabel><DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setIsEditModalOpen(true)} className="cursor-pointer font-medium dark:text-zinc-100"><Edit3 className="w-4 h-4 mr-2" /> {txt.edit}</DropdownMenuItem>
-            <DropdownMenuItem onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="cursor-pointer font-medium text-orange-600"><LogOut className="w-4 h-4 mr-2" /> {txt.out}</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setIsDeleteModalOpen(true)} className="cursor-pointer font-medium text-red-600"><Trash2 className="w-4 h-4 mr-2" /> {txt.del}</DropdownMenuItem>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md hover:bg-white dark:hover:bg-zinc-800 transition-all rounded-xl font-bold px-5 h-10">
+              <Settings className="w-4 h-4 mr-2 text-zinc-500 dark:text-zinc-400" /> {txt.param}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 p-3 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
+            <DropdownMenuLabel className="px-3 py-2 text-xs font-black tracking-widest text-zinc-400 uppercase">{txt.account}</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50 my-2" />
+            
+            <DropdownMenuItem onClick={() => setIsEditModalOpen(true)} className="cursor-pointer p-3 rounded-xl font-bold dark:text-zinc-100 focus:bg-teal-50 dark:focus:bg-teal-500/10 focus:text-teal-600 dark:focus:text-teal-400 transition-colors outline-none">
+              <Edit3 className="w-5 h-5 mr-3 opacity-70" /> {txt.edit}
+            </DropdownMenuItem>
+            
+            <DropdownMenuItem onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="cursor-pointer p-3 rounded-xl font-bold text-orange-600 focus:bg-orange-50 dark:focus:bg-orange-500/10 focus:text-orange-500 transition-colors outline-none">
+              <LogOut className="w-5 h-5 mr-3 opacity-70" /> {txt.out}
+            </DropdownMenuItem>
+            
+            <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50 my-2" />
+            
+            <DropdownMenuItem onClick={() => setIsDeleteModalOpen(true)} className="cursor-pointer p-3 rounded-xl font-bold text-red-600 focus:bg-red-50 dark:focus:bg-red-500/10 focus:text-red-500 transition-colors outline-none">
+              <Trash2 className="w-5 h-5 mr-3 opacity-70" /> {txt.del}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* BANNIÈRE DE SÉANCE INTELLIGENTE */}
       {renderSmartBanner()}
 
-      {/* MINI-CARTE TONNAGE LUDIQUE */}
       <div onClick={() => router.push("/analytics#tonnage-chart")} className="cursor-pointer bg-gradient-to-r from-zinc-900 to-zinc-800 dark:from-zinc-800 dark:to-zinc-900 rounded-xl p-4 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-zinc-700 hover:ring-2 hover:ring-zinc-600 transition-all group">
         <div className="flex items-center space-x-4">
           <div className="bg-white/10 p-2 rounded-lg group-hover:bg-yellow-400/20 transition-colors"><Zap className="w-5 h-5 text-yellow-400" /></div>
@@ -268,7 +299,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 3 CARTES DYNAMIQUES PRINCIPALES */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-zinc-900 text-zinc-50 dark:bg-zinc-100 dark:text-zinc-900 cursor-pointer hover:bg-zinc-800 dark:hover:bg-white transition-colors group relative overflow-hidden" onClick={() => setIsGoalModalOpen(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-bold opacity-80">{txt.goal}</CardTitle><RefreshCw className="h-5 w-5 opacity-40 group-hover:opacity-100 transition-opacity" /></CardHeader>
@@ -320,7 +350,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* CARTE MICRONUTRIMENTS */}
         <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-xl text-zinc-900 dark:text-zinc-100">
@@ -342,9 +371,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* --- MODALES LUDIQUES & DYNAMIQUES --- */}
-
-      {/* Modale STREAK (Flamme & Semaine Actuelle) */}
       <Dialog open={isStreakModalOpen} onOpenChange={setIsStreakModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader>
@@ -371,7 +397,6 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modale EAU */}
       <Dialog open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader>
@@ -401,7 +426,6 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
       
-      {/* Modale Repas Dynamique */}
       <Dialog open={mealModal?.show || false} onOpenChange={(open) => !open && setMealModal(null)}>
         <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -436,7 +460,6 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modale Calories "La Salle des Machines" */}
       <Dialog open={isCalModalOpen} onOpenChange={setIsCalModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader>
@@ -462,7 +485,6 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modale Indice Masse Grasse */}
       <Dialog open={isImgModalOpen} onOpenChange={setIsImgModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader>
@@ -579,6 +601,20 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
+            
+            <div className="space-y-2">
+              <Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2" /> Niveau d'Expérience</Label>
+              <Select value={editExperience} onValueChange={(val) => { setEditExperience(val); }}>
+                <SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder="Sélectionnez un niveau" /></SelectTrigger>
+                <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800">
+                  <SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem>
+                  <SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem>
+                  <SelectItem value="avance">Avancé (+3 ans)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-zinc-500 mt-1">L'IA ajustera le volume et la difficulté nerveuse des prochains programmes générés.</p>
+            </div>
+
             <div className="space-y-4">
               <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100"><Calendar className="h-4 w-4 mr-2"/> Sports Annexes (Fatigue)</h4>
               <div className="space-y-3">

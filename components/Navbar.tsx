@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon, Camera } from "lucide-react";
+import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon, Camera, User } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/lib/useLanguage";
@@ -22,28 +22,28 @@ export function Navbar() {
   };
 
   const t = {
-    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", track: "Progression", logout: "Sortir" },
-    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", track: "Progress", logout: "Logout" }
+    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", track: "Progression", profile: "Profil", logout: "Sortir" },
+    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", track: "Progress", profile: "Profile", logout: "Logout" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
-  // AJOUT DE LA PAGE PROGRESSION ICI
   const navItems = [
     { name: txt.dash, href: "/dashboard", icon: LayoutDashboard },
     { name: txt.prog, href: "/workout", icon: Dumbbell },
     { name: txt.track, href: "/progress", icon: Camera },
     { name: txt.stats, href: "/analytics", icon: Activity },
+    { name: txt.profile, href: "/profile", icon: User },
   ];
 
   const LanguageSelector = () => (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center space-x-2 rounded-md p-2 text-sm font-bold text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900 focus:outline-none">
-        <Globe className="h-5 w-5" />
+      <DropdownMenuTrigger className="flex items-center space-x-2 rounded-xl px-4 py-2 text-sm font-bold bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md shadow-sm border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 transition-all outline-none">
+        <Globe className="h-4 w-4" />
         <span>{lang === "FR" ? "🇫🇷 FR" : "🇬🇧 EN"}</span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[120px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-        <DropdownMenuItem onClick={() => setLang("FR")} className="cursor-pointer font-bold dark:text-zinc-100">🇫🇷 Français</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setLang("EN")} className="cursor-pointer font-bold dark:text-zinc-100">🇬🇧 English</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 mt-2 rounded-2xl p-2 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
+        <DropdownMenuItem onClick={() => setLang("FR")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 focus:text-teal-600 dark:focus:text-teal-400 transition-colors outline-none">🇫🇷 Français</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setLang("EN")} className="font-bold cursor-pointer rounded-xl p-3 mt-1 focus:bg-teal-50 dark:focus:bg-teal-500/10 focus:text-teal-600 dark:focus:text-teal-400 transition-colors outline-none">🇬🇧 English</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -65,7 +65,7 @@ export function Navbar() {
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-8">
           <div className="flex items-center space-x-8">
             <Link href="/dashboard" className="flex items-center">
-              <img src="/logo.png" alt="Vivex Logo" className="h-20 w-auto object-contain drop-shadow-sm" />
+              <img src="/Logo_GSC_NoBG.png" alt="Vivex Logo" className="h-10 w-auto object-contain drop-shadow-sm hover:opacity-80 transition-opacity" />
             </Link>
 
             <div className="flex space-x-2">
@@ -99,7 +99,7 @@ export function Navbar() {
       {/* TOP BAR MOBILE */}
       <div className="md:hidden sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 h-20 flex items-center justify-between px-4">
         <Link href="/dashboard">
-          <img src="/logo.png" alt="Vivex Logo" className="h-14 w-auto object-contain drop-shadow-sm" />
+          <img src="/Logo_GSC_NoBG.png" alt="Vivex Logo" className="h-10 w-auto object-contain drop-shadow-sm" />
         </Link>
         <div className="flex items-center space-x-1">
           <ThemeToggle />
@@ -121,10 +121,6 @@ export function Navbar() {
               </Link>
             );
           })}
-          <button onClick={handleLogout} className="flex flex-col items-center space-y-1 p-2 w-16 text-zinc-400 hover:text-red-500 transition-colors">
-            <LogOut className="h-6 w-6 stroke-[2px]" />
-            <span className="text-[9px] font-extrabold uppercase tracking-wider text-center">{txt.logout}</span>
-          </button>
         </div>
       </nav>
     </>

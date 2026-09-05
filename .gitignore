@@ -51,3 +51,5 @@ next-env.d.ts
 # Dépendances et Build
 node_modules/
 .next/
+
+certificates

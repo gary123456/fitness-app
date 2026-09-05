@@ -16,9 +16,13 @@ export const metadata: Metadata = {
   title: "Vivex | Masterclass Fitness",
   description: "Écosystème de recomposition corporelle sur-mesure.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Vivex",
   },
 };
