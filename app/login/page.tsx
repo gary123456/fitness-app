@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,19 @@ export default function LoginPage() {
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
+  // Sécurité PWA : Écouteur d'état global pour garantir que la session est écrite
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setSuccessMode(true);
+        const { data: profile } = await supabase.from('profiles').select('id').eq('id', session.user.id).single();
+        router.refresh();
+        router.push(profile ? "/dashboard" : "/onboarding");
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); 
     if (!email || !password) { setMessage({ text: txt.errFill, type: "error" }); return; }
@@ -33,21 +46,9 @@ export default function LoginPage() {
 
     try {
       if (isLoginMode) {
-        const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        
-        if (authData.user) {
-          setSuccessMode(true);
-          const { data: profile } = await supabase.from('profiles').select('id').eq('id', authData.user.id).single();
-          
-          // On rafraîchit le cache du routeur pour préparer la PWA
-          router.refresh();
-          
-          // Délai de 800ms crucial pour laisser le temps à la mémoire du téléphone (localStorage) de s'écrire
-          setTimeout(() => {
-            router.push(profile ? "/dashboard" : "/onboarding");
-          }, 800);
-        }
+        // La redirection est désormais gérée de manière sécurisée par le useEffect (onAuthStateChange)
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
