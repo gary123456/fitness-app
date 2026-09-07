@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
 import { awardWorkoutXP } from "@/lib/gamification-engine";
+import AudioHapticTimer from "@/components/AudioHapticTimer";
 
 const getSessionInsights = (exercises: any[], lang: string) => {
   const patterns = exercises.map(we => we.exercise_library?.movement_pattern || "");
@@ -58,12 +59,16 @@ const getSessionInsights = (exercises: any[], lang: string) => {
   };
 };
 
-// L'EXTRACTEUR INTELLIGENT DE RÉPÉTITIONS
+const extractMaxNumber = (str: string) => {
+  if (!str) return 0;
+  const matches = str.match(/\d+/g);
+  return matches ? parseInt(matches[matches.length - 1]) : 0; 
+};
+
+// Extraction exacte de la répétition cible
 const getRecommendedReps = (str: string) => {
   if (!str) return "";
-  // Si c'est une fourchette "8-12", il faut commencer au bas de la fourchette (8)
   if (str.includes("-")) return str.split("-")[0].trim(); 
-  // Si c'est un objectif simple "Viser > 10 reps", on extrait le chiffre exact (10)
   const match = str.match(/\d+/); 
   return match ? match[0] : "";
 };
@@ -81,13 +86,11 @@ const fetchActiveSession = async (id: string) => {
   sessionData.workout_exercises.forEach((we: any) => {
     const identifier = we.id || we.exercise_id;
     
-    // Extraction exacte de la charge
     let defaultWeight = "";
     if (we.recommended_weight !== null && we.recommended_weight !== undefined && we.recommended_weight > 0) {
       defaultWeight = we.recommended_weight.toString();
     }
 
-    // Extraction exacte des répétitions
     const defaultReps = getRecommendedReps(we.target_reps);
 
     for (let i = 0; i < we.sets; i++) {
@@ -103,7 +106,6 @@ export default function ActiveWorkoutSession() {
   const router = useRouter();
   const { lang } = useLanguage();
 
-  // LE CACHE DESTROYER : Date.now() force une requête réseau fraîche à 100%
   const [sessionKey] = useState(`session-${params.id}-${Date.now()}`);
   
   const { data, error, isLoading } = useSWR(sessionKey, () => fetchActiveSession(params.id as string), { 
@@ -191,6 +193,10 @@ export default function ActiveWorkoutSession() {
     if (isCompleted) {
       setCompletedSets((prev) => ({ ...prev, [setKey]: false }));
     } else {
+      // HAPTIC FEEDBACK (Vibration satisfaisante au clic)
+      if (typeof window !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(40);
+      }
       setCompletedSets((prev) => ({ ...prev, [setKey]: true }));
       setRestTimer(restSeconds);
     }
@@ -209,12 +215,6 @@ export default function ActiveWorkoutSession() {
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60); const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
-  };
-
-  const extractMaxNumber = (str: string) => {
-    if (!str) return 0;
-    const matches = str.match(/\d+/g);
-    return matches ? parseInt(matches[matches.length - 1]) : 0; 
   };
 
   const finishWorkout = async () => {
@@ -237,6 +237,7 @@ export default function ActiveWorkoutSession() {
         const we = data.sessionData.workout_exercises.find((item: any) => item.id === workoutExerciseId || item.exercise_id === workoutExerciseId);
 
         const weight = parseFloat(values.weight) || 0;
+        
         const fallbackRep = extractMaxNumber(we?.target_reps || "0");
         const reps = parseInt(values.reps) || fallbackRep;
 
@@ -383,7 +384,8 @@ export default function ActiveWorkoutSession() {
                   <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                     <div className="flex items-center space-x-3">
                       <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-700 relative p-1">
-                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} loading="lazy" decoding="async" className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}<Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
+                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
+                        <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
                       </div>
                       <div className="flex items-start">
                         <div>
@@ -423,13 +425,8 @@ export default function ActiveWorkoutSession() {
         )}
       </div>
 
-      {restTimer !== null && (
-        <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-6 py-3 rounded-full flex items-center space-x-4 shadow-[0_10px_40px_rgba(0,0,0,0.3)] transition-all ${restTimer > 0 ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'} z-50`}>
-          <Timer className="w-5 h-5 animate-pulse text-teal-400 dark:text-teal-600" /><span className="font-mono text-xl font-black w-16 text-center">{formatTime(restTimer)}</span><button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-white dark:hover:text-zinc-900"><X className="w-5 h-5" /></button>
-        </div>
-      )}
+      <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
 
-      {/* MODALE DE RESPIRATION */}
       <Dialog open={showBreathingModal}>
         <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-none p-0 overflow-hidden outline-none [&>button]:hidden">
           <div className="p-8 flex flex-col items-center justify-center text-center relative h-[80vh] sm:h-[600px] overflow-hidden">
@@ -461,7 +458,6 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
 
-      {/* MODALE DE FIN DE SEANCE */}
       <Dialog open={showEndModal} onOpenChange={setShowEndModal}>
         <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[750px] outline-none">
           <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center relative hide-scrollbar">

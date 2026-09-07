@@ -82,7 +82,7 @@ export default function WorkoutPage() {
     else setShowNewCycleModal(true);
   };
 
-  // LOGIQUE MATHÉMATIQUE ABSOLUE : La Double Progression
+  // LOGIQUE MATHÉMATIQUE ABSOLUE : Surcharge, Maintien, et Deload
   const applyProgressiveOverload = async () => {
     if (!data?.existingProgram || !data?.weeklyPlan) return;
     setGenerating(true);
@@ -107,27 +107,44 @@ export default function WorkoutPage() {
             
             const isRange = we.target_reps?.includes("-");
             const targetMatch = (we.target_reps || "12").match(/\d+/g);
+            
+            // Calcul du Plancher (Min) et Plafond (Max)
+            const minTargetRep = targetMatch && targetMatch.length > 1 ? parseInt(targetMatch[0]) : (targetMatch ? parseInt(targetMatch[0]) : 8);
             const maxTargetRep = targetMatch ? parseInt(targetMatch[targetMatch.length - 1]) : 12;
             
-            // Le plafond scientifique de l'hypertrophie (12) ou pdc (15)
             const ceiling = bestSet.weight === 0 ? 15 : 12;
+            const floor = bestSet.weight === 0 ? 5 : minTargetRep;
             
             let newWeight = bestSet.weight;
             let newTargetReps = we.target_reps;
 
-            // Loi de progression : A-t-on franchi le palier des répétitions cibles ?
+            // 1. SURCHARGE (Plafond atteint)
             if (bestSet.reps >= ceiling || (isRange && bestSet.reps >= maxTargetRep)) {
               if (bestSet.weight > 0) {
-                // On monte le poids ET ON REDESCEND LA CIBLE au bas de la fourchette
                 const increment = we.exercise_library?.cns_impact >= 4 ? 2.5 : 1.25;
                 newWeight = bestSet.weight + increment;
                 newTargetReps = "8-12"; 
               } else {
-                // Au poids du corps, on vise simplement 2 reps de plus
-                newTargetReps = `Viser > ${bestSet.reps + 2} reps`;
+                if (bestSet.reps >= 14) {
+                  newTargetReps = "Plafond atteint ➔ Lestez-vous !";
+                } else {
+                  newTargetReps = `Viser > ${bestSet.reps + 2} reps`;
+                }
               }
-            } else {
-              // Si le palier n'est pas franchi, on GARDE LE POIDS et on cible 1 rep de plus
+            } 
+            // 2. DELOAD (Échec musculaire - Sous le plancher)
+            else if (bestSet.reps < floor) {
+              if (bestSet.weight > 0) {
+                // Baisse de 10% arrondie au palier de 1.25kg le plus proche
+                const rawDeload = bestSet.weight * 0.9;
+                newWeight = Math.round(rawDeload / 1.25) * 1.25;
+                newTargetReps = "8-12";
+              } else {
+                newTargetReps = `Viser > ${Math.max(1, bestSet.reps)} reps`;
+              }
+            } 
+            // 3. MAINTIEN (Progression dans la fourchette)
+            else {
               if (bestSet.weight > 0) newWeight = bestSet.weight;
               const nextTarget = Math.min(bestSet.reps + 1, ceiling);
               newTargetReps = `Viser > ${nextTarget} reps`;

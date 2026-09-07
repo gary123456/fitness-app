@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal } from "lucide-react";
+import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Star } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -58,6 +58,9 @@ const fetchDashboardData = async () => {
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   const { data: logs } = await supabase.from("workout_logs").select("created_at, weight, reps, session_id").eq("user_id", user.id);
   
+  // FETCH GAMIFICATION DATA
+  const { data: gamification } = await supabase.from("user_gamification").select("*").eq("user_id", user.id).maybeSingle();
+
   let todayWorkoutId: string | null = null;
   let isTodayWorkoutCompleted = false;
 
@@ -72,7 +75,7 @@ const fetchDashboardData = async () => {
       if (todayLogs.length > 0) isTodayWorkoutCompleted = true;
     }
   }
-  return { profile, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [] };
+  return { profile, gamification, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [] };
 };
 
 export default function DashboardPage() {
@@ -163,7 +166,7 @@ export default function DashboardPage() {
 
   if (isLoading || !data?.profile) return <div className="flex min-h-[80vh] items-center justify-center"><div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  const { profile, todayWorkoutId, isTodayWorkoutCompleted, logs } = data;
+  const { profile, gamification, todayWorkoutId, isTodayWorkoutCompleted, logs } = data;
   const age = calculateAge(profile.birth_date);
   const bmi = calculateBMI(profile.weight_kg, profile.height_cm);
   const bmr = calculateBMR(profile.weight_kg, profile.height_cm, age, profile.gender);
@@ -182,6 +185,12 @@ export default function DashboardPage() {
   const currentWeek = getCurrentWeekStreak(logs, lang);
   const tonnage = calculateWeeklyTonnage(logs, lang);
   const greeting = getContextualGreeting(lang, profile.first_name);
+
+  // Gamification Calcs
+  const currentLevel = gamification?.level || 1;
+  const currentXp = gamification?.current_xp || 0;
+  const nextLevelXP = currentLevel * 1000;
+  const xpProgress = Math.min((currentXp / nextLevelXP) * 100, 100);
 
   let bmiColor = "text-teal-500"; let bmiLabel = txt.weight;
   if (bmi < 18.5) { bmiColor = "text-blue-500"; bmiLabel = txt.under; }
@@ -281,6 +290,29 @@ export default function DashboardPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+
+      {/* GAMIFICATION WIDGET */}
+      <div 
+        onClick={() => router.push("/profile")}
+        className="cursor-pointer group relative bg-white/60 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 sm:p-6 shadow-sm hover:shadow-md hover:border-teal-500/50 transition-all overflow-hidden"
+      >
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-teal-500/5 to-transparent pointer-events-none"></div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center shadow-lg shadow-teal-500/20 group-hover:scale-110 transition-transform">
+              <span className="text-xl font-black text-white">{currentLevel}</span>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-widest">{lang === 'FR' ? "Niveau Actuel" : "Current Level"}</h3>
+              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{currentXp} / {nextLevelXP} XP</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-zinc-400 group-hover:text-teal-500 transition-colors" />
+        </div>
+        <div className="mt-4 relative w-full h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+          <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-teal-400 to-cyan-400 rounded-full transition-all duration-1000" style={{ width: `${xpProgress}%` }}></div>
+        </div>
       </div>
 
       {renderSmartBanner()}
