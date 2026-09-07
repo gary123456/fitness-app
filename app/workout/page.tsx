@@ -59,8 +59,8 @@ export default function WorkoutPage() {
   const dynamicDaysOrder = [...DAYS_ORDER.slice(todayOrderedIndex), ...DAYS_ORDER.slice(0, todayOrderedIndex)];
 
   const t: Record<string, Record<string, string>> = {
-    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser vos performances de cette semaine et augmenter les poids cibles du programme actuel.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va bannir temporairement vos exercices actuels pour vous en proposer de nouveaux et éviter la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 3 Perso / 2 Algo. ⚠️ Attention : Supprimer un programme efface l'historique de ses séances.", deleteErr: "Impossible de supprimer ce programme." },
-    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your performances and increase target weights for the current plan.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will temporarily ban your current exercises to propose new ones.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 3 Custom / 2 Algo. ⚠️ Warning: Deleting removes session history.", deleteErr: "Cannot delete this program." }
+    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser votre dernière séance (N-1) et appliquer la Loi de la Double Progression.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va générer de nouveaux exercices pour casser la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 2 Perso / 2 Algo.", deleteErr: "Impossible de supprimer ce programme." },
+    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your last session (N-1) and apply Double Progression Law.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will generate new exercises to break plateaus.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 2 Custom / 2 Algo.", deleteErr: "Cannot delete this program." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -73,7 +73,7 @@ export default function WorkoutPage() {
   const algoProgs = data?.allPrograms?.filter((p: any) => p.program_type === 'ai') || [];
 
   const handleCreateCustomClick = () => {
-    if (customProgs.length >= 3) setShowManagerModal(true);
+    if (customProgs.length >= 2) setShowManagerModal(true);
     else router.push("/workout/builder");
   };
 
@@ -82,37 +82,72 @@ export default function WorkoutPage() {
     else setShowNewCycleModal(true);
   };
 
+  // LOGIQUE MATHÉMATIQUE ABSOLUE : La Double Progression
   const applyProgressiveOverload = async () => {
     if (!data?.existingProgram || !data?.weeklyPlan) return;
     setGenerating(true);
     try {
-      const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
-      
+      const { data: historyLogs, error: histError } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
+      if (histError) throw new Error("Erreur lecture logs: " + histError.message);
+
       for (const session of data.weeklyPlan) {
         if (!session.workout_exercises) continue;
         
         for (const we of session.workout_exercises) {
-          const pastLogs = historyLogs?.filter(h => h.exercise_id === we.exercise_id) || [];
+          const pastLogs = historyLogs?.filter(h => h.exercise_id === we.exercise_id && h.session_id === session.id) || [];
+          
           if (pastLogs.length > 0) {
             pastLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-            const lastSessionId = pastLogs[0].session_id;
-            const lastSessionLogs = pastLogs.filter(l => l.session_id === lastSessionId);
-            lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
-            const bestSet = lastSessionLogs[0];
+            const lastSessionId = pastLogs[0].session_id; 
+            const lastSessionTime = new Date(pastLogs[0].created_at).toISOString().split('T')[0];
             
-            const maxTargetRep = parseInt((we.target_reps || "12").split('-')[1] || "12");
+            const logsOfLastSession = pastLogs.filter(l => l.session_id === lastSessionId && new Date(l.created_at).toISOString().split('T')[0] === lastSessionTime);
+            logsOfLastSession.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
+            const bestSet = logsOfLastSession[0];
             
-            if (bestSet.reps >= maxTargetRep && bestSet.weight > 0) {
-              const newWeight = bestSet.weight + 2.5;
-              await supabase.from("workout_exercises").update({ recommended_weight: newWeight }).eq("id", we.id);
+            const isRange = we.target_reps?.includes("-");
+            const targetMatch = (we.target_reps || "12").match(/\d+/g);
+            const maxTargetRep = targetMatch ? parseInt(targetMatch[targetMatch.length - 1]) : 12;
+            
+            // Le plafond scientifique de l'hypertrophie (12) ou pdc (15)
+            const ceiling = bestSet.weight === 0 ? 15 : 12;
+            
+            let newWeight = bestSet.weight;
+            let newTargetReps = we.target_reps;
+
+            // Loi de progression : A-t-on franchi le palier des répétitions cibles ?
+            if (bestSet.reps >= ceiling || (isRange && bestSet.reps >= maxTargetRep)) {
+              if (bestSet.weight > 0) {
+                // On monte le poids ET ON REDESCEND LA CIBLE au bas de la fourchette
+                const increment = we.exercise_library?.cns_impact >= 4 ? 2.5 : 1.25;
+                newWeight = bestSet.weight + increment;
+                newTargetReps = "8-12"; 
+              } else {
+                // Au poids du corps, on vise simplement 2 reps de plus
+                newTargetReps = `Viser > ${bestSet.reps + 2} reps`;
+              }
+            } else {
+              // Si le palier n'est pas franchi, on GARDE LE POIDS et on cible 1 rep de plus
+              if (bestSet.weight > 0) newWeight = bestSet.weight;
+              const nextTarget = Math.min(bestSet.reps + 1, ceiling);
+              newTargetReps = `Viser > ${nextTarget} reps`;
             }
+
+            const { error: updateError } = await supabase.from("workout_exercises").update({ 
+                recommended_weight: newWeight > 0 ? newWeight : null,
+                target_reps: newTargetReps
+            }).eq("id", we.id);
+
+            if (updateError) throw new Error("Erreur de mise à jour: " + updateError.message);
           }
         }
       }
+      
       await mutate();
       setShowProgressModal(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Overload error:", error);
+      alert("Erreur de surcharge: " + error.message);
     } finally {
       setGenerating(false);
     }
@@ -124,11 +159,16 @@ export default function WorkoutPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: library } = await supabase.from("exercise_library").select("*");
-      const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", user.id);
+      const { data: library, error: libError } = await supabase.from("exercise_library").select("*");
+      if (libError) throw new Error("Erreur lecture librairie: " + libError.message);
+
+      const { data: historyLogs, error: histError } = await supabase.from("workout_logs").select("*").eq("user_id", user.id);
+      if (histError) throw new Error("Erreur lecture historique: " + histError.message);
       
       let excludedIds: string[] = [];
       let deloadFlag = false;
+
+      const isFirstProgram = data.allPrograms.length === 0;
 
       if (data.existingProgram) {
         const { data: currentSessions } = await supabase.from("workout_sessions").select(`id, workout_exercises (exercise_id)`).eq("program_id", data.existingProgram.id);
@@ -144,23 +184,44 @@ export default function WorkoutPage() {
       }
 
       const generatedPlan = generateSmartWorkoutPlan(data.profile, library || [], historyLogs || [], deloadFlag, excludedIds);
-      const cycleName = `Programme Algo - Cycle ${algoProgs.length + 1}`;
+      if (!generatedPlan || generatedPlan.length === 0) {
+        throw new Error("Impossible de générer le programme : Vérifiez vos équipements ou vos jours de sport.");
+      }
 
-      const { data: newProgram } = await supabase.from("user_programs").insert([{ 
-        user_id: user.id, name: cycleName, is_active: true, program_type: 'ai'
+      const cycleName = isFirstProgram ? "Programme Base (Défaut)" : `Programme Algo - Cycle ${algoProgs.length + 1}`;
+
+      const { data: newProgram, error: progError } = await supabase.from("user_programs").insert([{ 
+        user_id: user.id, 
+        name: cycleName, 
+        is_active: true, 
+        program_type: 'ai',
+        is_default: isFirstProgram
       }]).select().single();
       
+      if (progError) throw new Error("Impossible de sauvegarder le programme : " + progError.message);
+      if (!newProgram) throw new Error("Programme non créé.");
+
       let orderIndex = 0;
       for (const day of generatedPlan) {
-        const { data: newSession } = await supabase.from("workout_sessions").insert([{ program_id: newProgram.id, day_name: day.day, order_index: orderIndex }]).select().single();
+        const { data: newSession, error: sessError } = await supabase.from("workout_sessions").insert([{ program_id: newProgram.id, day_name: day.day, order_index: orderIndex }]).select().single();
+        if (sessError) throw new Error("Erreur de session : " + sessError.message);
+
         const exercisesToInsert = day.exercises.map((ex: any) => ({ session_id: newSession.id, exercise_id: ex.exercise.id, sets: ex.sets, target_reps: ex.target_reps, recommended_weight: ex.recommended_weight, rest_seconds: ex.rest_seconds, order_index: ex.order_index }));
-        if (exercisesToInsert.length > 0) await supabase.from("workout_exercises").insert(exercisesToInsert);
+        if (exercisesToInsert.length > 0) {
+          const { error: exError } = await supabase.from("workout_exercises").insert(exercisesToInsert);
+          if (exError) throw new Error("Erreur d'exercices : " + exError.message);
+        }
         orderIndex++;
       }
       
       await mutate(); 
       setShowNewCycleModal(false);
-    } catch (error) { console.error(error); } finally { setGenerating(false); }
+    } catch (error: any) { 
+      console.error(error); 
+      alert(error.message); 
+    } finally { 
+      setGenerating(false); 
+    }
   };
 
   const activateProgram = async (programId: string) => {
@@ -171,12 +232,17 @@ export default function WorkoutPage() {
       await supabase.from("user_programs").update({ is_active: true }).eq("id", programId);
       await mutate();
       setShowManagerModal(false);
-    } catch (error) { console.error(error); }
+    } catch (error: any) { 
+      console.error(error); 
+      alert("Erreur lors de l'activation: " + error.message);
+    }
   };
 
   const deleteProgram = async (programId: string, isActive: boolean) => {
     try {
-      await supabase.from("user_programs").delete().eq("id", programId);
+      const { error: delError } = await supabase.from("user_programs").delete().eq("id", programId);
+      if (delError) throw new Error(delError.message);
+
       if (isActive) {
         const remaining = data?.allPrograms?.filter((p: any) => p.id !== programId) || [];
         if (remaining.length > 0) await activateProgram(remaining[0].id);
@@ -184,13 +250,18 @@ export default function WorkoutPage() {
       } else {
         await mutate();
       }
-    } catch (error) { console.error(error); alert(txt.deleteErr); }
+    } catch (error: any) { 
+      console.error(error); 
+      alert(txt.deleteErr + " : " + error.message); 
+    }
   };
 
   const openSwapModal = async (weId: string, currentEx: any) => {
     if (!data?.profile) return;
     setSwapLoading(true);
-    const { data: alts } = await supabase.from('exercise_library').select('*').eq('movement_pattern', currentEx.movement_pattern).neq('id', currentEx.id);
+    const { data: alts, error: altsError } = await supabase.from('exercise_library').select('*').eq('movement_pattern', currentEx.movement_pattern).neq('id', currentEx.id);
+    if (altsError) { setSwapLoading(false); alert("Erreur chargement alternatives"); return; }
+    
     const userEq = data.profile.equipment_access.split(',').map((e: string) => e.trim());
     const validAlts = (alts || []).filter((ex: any) => userEq.includes(ex.equipment_required));
     setSwapModal({ show: true, weId, currentEx, alternatives: validAlts });
@@ -198,9 +269,14 @@ export default function WorkoutPage() {
   };
 
   const confirmSwap = async (newEx: any) => {
-    await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
-    await mutate();
-    setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] });
+    try {
+      const { error } = await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
+      if (error) throw new Error(error.message);
+      await mutate();
+      setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] });
+    } catch (error: any) {
+      alert("Erreur lors du remplacement : " + error.message);
+    }
   };
 
   if (isLoading && !data) return <div className="flex min-h-[80vh] items-center justify-center"><div className="w-16 h-16 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
@@ -213,7 +289,6 @@ export default function WorkoutPage() {
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
       
-      {/* HEADER DE LA PAGE */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
@@ -223,34 +298,42 @@ export default function WorkoutPage() {
         </div>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-          {data && data.allPrograms.length > 0 && (
+          {data && (data.allPrograms?.length || 0) > 0 && (
             <Button onClick={() => setShowManagerModal(true)} variant="outline" className="w-full sm:w-auto border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <FolderGit2 className="w-4 h-4 mr-2" /> {txt.manage}
             </Button>
           )}
-          {data?.existingProgram?.program_type === 'ai' && (
+
+          {(!data?.existingProgram || data.existingProgram.program_type === 'ai') && (data?.allPrograms?.length || 0) > 0 && (
             <Button onClick={handleNewCycleClick} variant="outline" className="w-full sm:w-auto border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-bold hover:bg-zinc-100 dark:hover:bg-zinc-800">
               <RefreshCw className="w-4 h-4 mr-2" /> {txt.newCycle}
             </Button>
           )}
+
           <Button onClick={handleCreateCustomClick} variant="outline" className="w-full sm:w-auto border-indigo-500 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950 font-bold">
             <PenTool className="w-4 h-4 mr-2" /> {txt.createCustom}
           </Button>
-          <Button onClick={() => setShowProgressModal(true)} className="w-full sm:w-auto bg-teal-500 text-white hover:bg-teal-600 font-bold">
-            <Zap className="w-4 h-4 mr-2" /> {txt.genNext}
-          </Button>
+
+          {data?.existingProgram && (
+            <Button onClick={() => setShowProgressModal(true)} className="w-full sm:w-auto bg-teal-500 text-white hover:bg-teal-600 font-bold">
+              <Zap className="w-4 h-4 mr-2" /> {txt.genNext}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* ETAT VIDE */}
       {(!data?.weeklyPlan || data.weeklyPlan.length === 0) && (
         <div className="flex flex-col items-center justify-center space-y-4 py-12 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <Dumbbell className="w-16 h-16 text-zinc-300 dark:text-zinc-700" />
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">{txt.noProg}</h2>
+          {(data?.allPrograms?.length || 0) === 0 && (
+            <Button onClick={() => generateProgram(true)} disabled={generating} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold mt-4">
+              {generating ? "Création en cours..." : "Générer mon programme"}
+            </Button>
+          )}
         </div>
       )}
 
-      {/* BADGE DELOAD */}
       {data?.isDeloadWeek && (
         <div className="bg-blue-50 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800 p-4 rounded-xl flex items-start space-x-3">
           <BatteryCharging className="w-6 h-6 text-blue-500 shrink-0" />
@@ -258,7 +341,6 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {/* LISTE DES SEANCES */}
       <div className="space-y-6">
         {sortedPlan.map((session: any) => {
           const dayKey = session.day_name;
@@ -338,9 +420,8 @@ export default function WorkoutPage() {
         })}
       </div>
 
-      {/* MODALE GESTIONNAIRE DE PROGRAMMES */}
       <Dialog open={showManagerModal} onOpenChange={setShowManagerModal}>
-        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+        <DialogContent className="sm:max-w-sm w-[90vw] mx-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center text-zinc-900 dark:text-zinc-100">
               <FolderGit2 className="w-5 h-5 mr-2 text-indigo-500"/> {txt.manage}
@@ -365,13 +446,20 @@ export default function WorkoutPage() {
                         <CheckCircle2 className="w-3 h-3 mr-1" /> Actif
                       </span>
                     )}
+                    {prog.is_default && (
+                      <span className="text-[9px] uppercase font-black tracking-widest px-2 py-0.5 rounded bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400 flex items-center shadow-sm">
+                        <Lock className="w-3 h-3 mr-1" /> Défaut
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex space-x-2">
                   {!prog.is_active && (
                     <Button size="sm" onClick={() => activateProgram(prog.id)} variant="outline" className="font-bold border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">Charger</Button>
                   )}
-                  <Button size="sm" onClick={() => deleteProgram(prog.id, prog.is_active)} variant="destructive" className="px-3 bg-red-500 hover:bg-red-600 transition-transform active:scale-90"><Trash2 className="w-4 h-4" /></Button>
+                  {!prog.is_default && (
+                    <Button size="sm" onClick={() => deleteProgram(prog.id, prog.is_active)} variant="destructive" className="px-3 bg-red-500 hover:bg-red-600 transition-transform active:scale-90"><Trash2 className="w-4 h-4" /></Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -382,7 +470,6 @@ export default function WorkoutPage() {
         </DialogContent>
       </Dialog>
 
-      {/* INFO EXERCICE */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
           {infoModal.exercise && (
@@ -401,17 +488,15 @@ export default function WorkoutPage() {
         </DialogContent>
       </Dialog>
 
-      {/* MODALE DE SURCHARGE PROGRESSIVE */}
       <Dialog open={showProgressModal} onOpenChange={setShowProgressModal}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+        <DialogContent className="sm:max-w-sm w-[90vw] mx-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader><DialogTitle className="text-teal-600 flex items-center"><Zap className="mr-2 h-5 w-5"/> {txt.progTitle}</DialogTitle><DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.progSub}</DialogDescription></DialogHeader>
           <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300 font-bold" onClick={() => setShowProgressModal(false)}>{txt.cancel}</Button><Button className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold" onClick={applyProgressiveOverload} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
         </DialogContent>
       </Dialog>
 
-      {/* MODALE NOUVEAU CYCLE ALGO */}
       <Dialog open={showNewCycleModal} onOpenChange={setShowNewCycleModal}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+        <DialogContent className="sm:max-w-sm w-[90vw] mx-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader><DialogTitle className="text-indigo-600 dark:text-indigo-400 flex items-center"><RefreshCw className="mr-2 h-5 w-5"/> {txt.cycleTitle}</DialogTitle><DialogDescription className="text-zinc-600 dark:text-zinc-400 pt-2">{txt.cycleSub}</DialogDescription></DialogHeader>
           <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4"><Button variant="outline" className="w-full dark:border-zinc-700 dark:text-zinc-300 font-bold" onClick={() => setShowNewCycleModal(false)}>{txt.cancel}</Button><Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold" onClick={() => generateProgram(true)} disabled={generating}>{generating ? "..." : txt.confirm}</Button></div>
         </DialogContent>

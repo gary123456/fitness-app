@@ -5,10 +5,11 @@ import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, AlertCircle, CheckCircle2, Repeat, Info, Flame, Brain, Share2, Loader2, Wind } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Flame, Brain, Share2, Loader2, Wind, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
+import { awardWorkoutXP } from "@/lib/gamification-engine";
 
 const getSessionInsights = (exercises: any[], lang: string) => {
   const patterns = exercises.map(we => we.exercise_library?.movement_pattern || "");
@@ -57,23 +58,13 @@ const getSessionInsights = (exercises: any[], lang: string) => {
   };
 };
 
-const getInstructions = (name: string, lang: string) => {
-  const lowerName = name.toLowerCase();
-  if (lowerName.includes('squat') || lowerName.includes('presse') || lowerName.includes('leg press')) return lang === 'FR' ? "Gardez le buste droit et le regard fixe.\nVerrouillez le gainage.\nDescendez en contrôlant la charge.\nPoussez fort sur vos talons pour remonter." : "Keep your chest up and eyes forward.\nBrace your core.\nDescend under control.\nDrive explosively through your heels to ascend.";
-  if (lowerName.includes('fente') || lowerName.includes('lunge') || lowerName.includes('bulgare')) return lang === 'FR' ? "Gardez le torse droit.\nLe genou avant doit rester dans l'axe de l'orteil.\nDescendez jusqu'à frôler le sol avec le genou arrière." : "Keep your torso upright.\nYour front knee should track over your toes.\nLower yourself until your back knee gently taps the floor.";
-  if (lowerName.includes('soulevé de terre') || lowerName.includes('deadlift') || lowerName.includes('rdl')) return lang === 'FR' ? "Maintenez le dos droit.\nGardez la charge collée à vos tibias.\nPoussez le sol avec vos jambes et contractez les fessiers en haut." : "Maintain a straight back.\nKeep the weight close to your shins.\nPush the floor away with your legs and squeeze your glutes at the top.";
-  if (lowerName.includes('couché') || lowerName.includes('bench') || lowerName.includes('floor press')) return lang === 'FR' ? "Rétractez vos omoplates contre le banc.\nContrôlez la descente de la charge.\nPoussez de manière explosive." : "Retract your scapula against the bench.\nControl the descent of the weight.\nPush explosively.";
-  if (lowerName.includes('pompe') || lowerName.includes('push-up') || lowerName.includes('dips')) return lang === 'FR' ? "Maintenez un gainage actif.\nDescendez en contrôlant le mouvement.\nPoussez fort pour revenir en position initiale." : "Maintain an active core.\nLower yourself under control.\nPush strongly to the starting position.";
-  if (lowerName.includes('militaire') || lowerName.includes('ohp') || lowerName.includes('shoulder press')) return lang === 'FR' ? "Contractez les fessiers et les abdos.\nPoussez la charge au-dessus de la tête.\nRedescendez en contrôlant." : "Squeeze your glutes and abs.\nPress the weight overhead.\nLower the weight under control.";
-  if (lowerName.includes('traction') || lowerName.includes('pull-up') || lowerName.includes('pulldown')) return lang === 'FR' ? "Démarrez avec un étirement complet.\nTirez en cherchant à amener la poitrine vers la barre.\nContrôlez la descente." : "Start with a full stretch.\nPull by trying to bring your chest to the bar.\nControl the eccentric descent.";
-  if (lowerName.includes('rowing') || lowerName.includes('tirage horizontal') || lowerName.includes('t-bar')) return lang === 'FR' ? "Gardez le dos droit.\nTirez la charge vers votre nombril en resserrant les omoplates." : "Keep your back straight.\nPull the weight towards your belly button while squeezing your shoulder blades.";
-  if (lowerName.includes('curl')) return lang === 'FR' ? "Gardez les coudes fixés près du corps.\nContractez fort le biceps en haut du mouvement." : "Keep your elbows pinned to your sides.\nSqueeze the bicep hard at the top.";
-  if (lowerName.includes('triceps') || lowerName.includes('skullcrusher') || lowerName.includes('kickback')) return lang === 'FR' ? "Gardez les coudes serrés et immobiles.\nEffectuez une extension complète." : "Keep your elbows tucked and stationary.\nPerform a full extension.";
-  return lang === 'FR' ? "Maintenez une posture stable et un bon gainage.\nContrôlez la phase excentrique.\nSoyez explosif sur la phase concentrique." : "Maintain a stable posture and brace your core.\nControl the eccentric phase.\nBe explosive on the concentric phase.";
-};
-
-const extractNumber = (str: string) => {
-  const match = str.match(/\d+/);
+// L'EXTRACTEUR INTELLIGENT DE RÉPÉTITIONS
+const getRecommendedReps = (str: string) => {
+  if (!str) return "";
+  // Si c'est une fourchette "8-12", il faut commencer au bas de la fourchette (8)
+  if (str.includes("-")) return str.split("-")[0].trim(); 
+  // Si c'est un objectif simple "Viser > 10 reps", on extrait le chiffre exact (10)
+  const match = str.match(/\d+/); 
   return match ? match[0] : "";
 };
 
@@ -86,26 +77,25 @@ const fetchActiveSession = async (id: string) => {
   if (sessionData.workout_exercises) sessionData.workout_exercises.sort((a: any, b: any) => a.order_index - b.order_index);
 
   const initialInputs: Record<string, { weight: string, reps: string }> = {};
+  
   sessionData.workout_exercises.forEach((we: any) => {
     const identifier = we.id || we.exercise_id;
-    const defaultReps = extractNumber(we.target_reps);
-    const defaultWeight = we.recommended_weight && we.recommended_weight > 0 ? we.recommended_weight.toString() : "";
-    for (let i = 0; i < we.sets; i++) initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
+    
+    // Extraction exacte de la charge
+    let defaultWeight = "";
+    if (we.recommended_weight !== null && we.recommended_weight !== undefined && we.recommended_weight > 0) {
+      defaultWeight = we.recommended_weight.toString();
+    }
+
+    // Extraction exacte des répétitions
+    const defaultReps = getRecommendedReps(we.target_reps);
+
+    for (let i = 0; i < we.sets; i++) {
+      initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
+    }
   });
 
-  const { data: logs } = await supabase.from("workout_logs").select("*").eq("session_id", id);
-  const loadedCompleted: Record<string, boolean> = {};
-  if (logs && logs.length > 0) {
-    logs.forEach((log) => {
-      const we = sessionData.workout_exercises.find((w: any) => w.exercise_id === log.exercise_id);
-      if (we) {
-        const setKey = `${we.id || we.exercise_id}_${log.set_number - 1}`;
-        initialInputs[setKey] = { weight: log.weight.toString(), reps: log.reps.toString() };
-        loadedCompleted[setKey] = true;
-      }
-    });
-  }
-  return { sessionData, initialInputs, loadedCompleted, profile };
+  return { sessionData, initialInputs, loadedCompleted: {}, profile };
 };
 
 export default function ActiveWorkoutSession() {
@@ -113,10 +103,11 @@ export default function ActiveWorkoutSession() {
   const router = useRouter();
   const { lang } = useLanguage();
 
-  // OPTIMISATION ANTI-VEILLE : On empêche SWR de revalider au focus et de supprimer les données en cas de fail silencieux.
-  const { data, error, isLoading } = useSWR(`session-${params.id}`, () => fetchActiveSession(params.id as string), { 
+  // LE CACHE DESTROYER : Date.now() force une requête réseau fraîche à 100%
+  const [sessionKey] = useState(`session-${params.id}-${Date.now()}`);
+  
+  const { data, error, isLoading } = useSWR(sessionKey, () => fetchActiveSession(params.id as string), { 
     revalidateOnFocus: false,
-    revalidateIfStale: false,
     keepPreviousData: true 
   });
 
@@ -127,7 +118,7 @@ export default function ActiveWorkoutSession() {
   const [isWorkoutUnlocked, setIsWorkoutUnlocked] = useState(false);
   const [warmupChecks, setWarmupChecks] = useState<boolean[]>([]);
   const [sessionStartTime] = useState(Date.now());
-  const [sessionStats, setSessionStats] = useState({ duration: 0, tonnage: 0, bestSet: "" });
+  const [sessionStats, setSessionStats] = useState({ duration: 0, tonnage: 0, bestSet: "", xpEarned: 0, leveledUp: false });
   const [isSharing, setIsSharing] = useState(false);
   
   const [showBreathingModal, setShowBreathingModal] = useState(false);
@@ -142,10 +133,9 @@ export default function ActiveWorkoutSession() {
   useEffect(() => {
     if (data && warmupChecks.length === 0) {
       setInputs(data.initialInputs);
-      setCompletedSets(data.loadedCompleted);
+      setCompletedSets({}); 
       const stepsCount = getSessionInsights(data.sessionData.workout_exercises, lang).warmup.length;
       setWarmupChecks(new Array(stepsCount).fill(false));
-      if (Object.keys(data.loadedCompleted).length > 0) setIsWorkoutUnlocked(true);
     }
   }, [data, lang, warmupChecks.length]);
 
@@ -166,10 +156,9 @@ export default function ActiveWorkoutSession() {
     return () => clearInterval(interval);
   }, [showBreathingModal, breatheTime]);
 
-  type TranslationDict = Record<string, string>;
-  const t: Record<string, TranslationDict> = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", helpBtn: "Comment utiliser ?", helpTitle: "Instructions", help1: "1. Pré-remplissage des poids recommandés.", help2: "2. Ajustez le premier set et dupliquez.", help3: "3. Validez pour lancer le timer.", helpGo: "C'est parti !" },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", helpBtn: "How to use?", helpTitle: "Instructions", help1: "1. Pre-filled recommended weights.", help2: "2. Adjust first set and duplicate.", help3: "3. Validate to start timer.", helpGo: "Let's go!" }
+  const t: Record<string, any> = {
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau." },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -222,6 +211,12 @@ export default function ActiveWorkoutSession() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const extractMaxNumber = (str: string) => {
+    if (!str) return 0;
+    const matches = str.match(/\d+/g);
+    return matches ? parseInt(matches[matches.length - 1]) : 0; 
+  };
+
   const finishWorkout = async () => {
     const hasCompletedSets = Object.values(completedSets).some(val => val === true);
     if (!hasCompletedSets) { setErrorModal({ show: true, title: txt.noSetTitle, message: txt.noSetMsg }); return; }
@@ -242,7 +237,8 @@ export default function ActiveWorkoutSession() {
         const we = data.sessionData.workout_exercises.find((item: any) => item.id === workoutExerciseId || item.exercise_id === workoutExerciseId);
 
         const weight = parseFloat(values.weight) || 0;
-        const reps = parseInt(values.reps) || parseInt(extractNumber(we?.target_reps || "0"));
+        const fallbackRep = extractMaxNumber(we?.target_reps || "0");
+        const reps = parseInt(values.reps) || fallbackRep;
 
         calcTonnage += (weight * reps);
 
@@ -265,11 +261,18 @@ export default function ActiveWorkoutSession() {
     if (error) { setErrorModal({ show: true, title: txt.sqlErr, message: error.message }); return; }
 
     const durMins = Math.max(1, Math.floor((Date.now() - sessionStartTime) / 60000));
-    
     let bestSetStr = maxWeight > 0 ? `${maxWeight}kg × ${maxRepsForWeight}` : (lang === 'FR' ? "Poids du corps" : "Bodyweight");
     if (bestExName) bestSetStr += ` (${bestExName})`;
 
-    setSessionStats({ duration: durMins, tonnage: calcTonnage, bestSet: bestSetStr });
+    const gamification = await awardWorkoutXP(user.id, calcTonnage);
+
+    setSessionStats({ 
+      duration: durMins, 
+      tonnage: calcTonnage, 
+      bestSet: bestSetStr,
+      xpEarned: gamification.xpEarned || 0,
+      leveledUp: gamification.leveledUp || false
+    });
     
     setRestTimer(null);
     setShowBreathingModal(true);
@@ -316,7 +319,7 @@ export default function ActiveWorkoutSession() {
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
       <div className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-teal-500/30 dark:border-teal-500/20 px-4 py-4 flex items-center justify-between shadow-[0_10px_30px_-15px_rgba(20,184,166,0.4)] relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-transparent pointer-events-none"></div>
-        <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors relative z-10">
+        <button onClick={() => router.push("/workout")} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors relative z-10">
           <ArrowLeft className="w-6 h-6 dark:text-zinc-100" />
         </button>
         <h2 className="text-lg font-black uppercase tracking-widest text-teal-700 dark:text-teal-400 drop-shadow-sm relative z-10">{txt.activeTracker}</h2>
@@ -325,7 +328,6 @@ export default function ActiveWorkoutSession() {
 
       <div className="max-w-2xl mx-auto px-4 space-y-6 mt-6">
         
-        {/* CHECKLIST ÉCHAUFFEMENT OBLIGATOIRE (AVEC GIFS LAZY LOADED) */}
         {!isWorkoutUnlocked ? (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
@@ -370,11 +372,6 @@ export default function ActiveWorkoutSession() {
           </div>
         ) : (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-5 shadow-sm flex items-start space-x-3">
-              <Brain className="w-6 h-6 text-indigo-500 shrink-0 mt-0.5" />
-              <div><h3 className="font-bold text-indigo-700 dark:text-indigo-400 mb-1">{txt.whyTitle}</h3><p className="text-sm text-indigo-600 dark:text-indigo-300 font-medium leading-relaxed">{insights.why}</p></div>
-            </div>
-
             {session.workout_exercises.map((we: any, index: number) => {
               const ex = we.exercise_library;
               const identifier = we.id || we.exercise_id;
@@ -391,9 +388,8 @@ export default function ActiveWorkoutSession() {
                       <div className="flex items-start">
                         <div>
                           <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
-                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps {we.recommended_weight ? `| ${txt.rec}: ${we.recommended_weight}kg` : ""}</p>
+                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps</p>
                         </div>
-                        <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors"><Info className="w-4 h-4" /></button>
                       </div>
                     </div>
                     <button onClick={() => duplicateFirstSet(identifier, we.sets)} className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors" title={txt.dup}><Repeat className="w-5 h-5" /></button>
@@ -433,28 +429,7 @@ export default function ActiveWorkoutSession() {
         </div>
       )}
 
-      <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
-        <DialogContent className="sm:max-w-[700px] flex flex-col p-0 overflow-hidden bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          {infoModal.exercise && (
-            <>
-              <DialogHeader className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900"><DialogTitle className="text-xl font-black dark:text-zinc-50">{infoModal.exercise.name}</DialogTitle></DialogHeader>
-              <div className="flex-1 p-4 md:p-6 overflow-y-auto max-h-[75vh]">
-                <div className="space-y-6">
-                  {infoModal.exercise.gif_url ? (
-                    <div className="flex flex-col sm:flex-row items-stretch justify-center gap-4 w-full">
-                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col"><div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Position de départ" : "Starting Position"}</div><div className="p-4 flex justify-center items-center h-48 md:h-64"><img src={`${infoModal.exercise.gif_url}/0.jpg`} loading="lazy" decoding="async" alt="Départ" className="max-w-full max-h-full object-contain" /></div></div>
-                      <div className="flex-1 bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden flex flex-col"><div className="bg-zinc-100/80 px-3 py-2 border-b border-zinc-200 text-[10px] font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Contraction" : "Contraction"}</div><div className="p-4 flex justify-center items-center h-48 md:h-64"><img src={`${infoModal.exercise.gif_url}/1.jpg`} loading="lazy" decoding="async" alt="Fin" className="max-w-full max-h-full object-contain" /></div></div>
-                    </div>
-                  ) : (<div className="flex flex-col items-center justify-center min-h-[200px] text-zinc-400 dark:text-zinc-600 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800"><Dumbbell className="w-12 h-12 mb-3 opacity-50" /><p className="text-sm font-bold">{lang === 'FR' ? "Aucun visuel disponible." : "No visual available."}</p></div>)}
-                  <div className="bg-white dark:bg-zinc-900/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm"><h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100 mb-3 border-b border-zinc-100 dark:border-zinc-800 pb-2"><Info className="w-4 h-4 mr-2 text-teal-500" />{lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}</h4><ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400 font-medium">{getInstructions(infoModal.exercise.name, lang).split('\n').map((line: string, i: number) => (<li key={i} className="flex items-start"><span className="text-teal-500 mr-2 mt-0.5">•</span><span className="leading-relaxed">{line}</span></li>))}</ul></div>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* MODALE 1 : SAS DE DÉCOMPRESSION (Respiration sans trigger onClick background) */}
+      {/* MODALE DE RESPIRATION */}
       <Dialog open={showBreathingModal}>
         <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-none p-0 overflow-hidden outline-none [&>button]:hidden">
           <div className="p-8 flex flex-col items-center justify-center text-center relative h-[80vh] sm:h-[600px] overflow-hidden">
@@ -464,9 +439,7 @@ export default function ActiveWorkoutSession() {
               <h2 className="text-3xl font-black text-teal-400 flex items-center justify-center">
                 <Wind className="mr-3 w-8 h-8" /> {txt.breatheTitle}
               </h2>
-              <p className="text-zinc-400 font-medium pt-3">
-                {txt.breatheSub}
-              </p>
+              <p className="text-zinc-400 font-medium pt-3">{txt.breatheSub}</p>
             </div>
 
             <div className="relative flex items-center justify-center w-64 h-64 mx-auto my-auto z-10">
@@ -488,98 +461,67 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
 
-      {/* MODALE 2 : POPUP DE FIN DE SÉANCE VIRALITÉ STRAVA (Gold Edition) */}
+      {/* MODALE DE FIN DE SEANCE */}
       <Dialog open={showEndModal} onOpenChange={setShowEndModal}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
-          <div className="bg-zinc-950 p-6 flex flex-col items-center justify-center text-center relative overflow-hidden">
-            
-            <div className="relative z-10 w-full mb-6 flex flex-col items-center">
-              
-              {/* LA CARTE INVISIBLE (Générée en HD pour Insta/WhatsApp) */}
-              <div className="absolute -left-[9999px]">
-                <div ref={stravaCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-between py-24 px-16 text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
-                  
-                  {/* L'IMAGE DE FOND CANVA STRICTEMENT SANS FILTRE MASQUANT */}
-                  <img src="/strava-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
-                  
-                  {/* Contenu au dessus du fond z-10 */}
-                  <div className="relative z-10 text-center space-y-6 mt-16">
-                    <div className="flex justify-center mb-8">
-                      <div className="bg-yellow-500/10 p-10 rounded-full shadow-[0_0_100px_rgba(234,179,8,0.3)]">
-                        <Trophy className="w-56 h-56 text-yellow-400 drop-shadow-[0_0_30px_rgba(234,179,8,0.8)]" />
-                      </div>
-                    </div>
-                    
-                    <h2 className="text-[100px] font-black uppercase tracking-tighter leading-none text-white drop-shadow-lg">
-                      {data?.profile?.first_name} <br/> {lang === 'FR' ? "A DÉTRUIT SA SÉANCE !" : "CRUSHED IT!"}
-                    </h2>
-                  </div>
-                  
-                  <div className="relative z-10 w-full grid grid-cols-1 gap-12 mt-12 px-12">
-                    <div className="bg-zinc-950/60 backdrop-blur-xl border-2 border-yellow-500/30 rounded-[3rem] p-16 flex flex-col items-center justify-center space-y-6 shadow-[0_0_50px_rgba(234,179,8,0.1)]">
-                      <span className="text-5xl font-bold text-zinc-400 uppercase tracking-widest">{txt.tonnage}</span>
-                      <span className="text-[120px] font-black text-yellow-400">{sessionStats.tonnage.toLocaleString()} <span className="text-6xl text-zinc-500">kg</span></span>
-                    </div>
-
-                    <div className="bg-zinc-950/60 backdrop-blur-xl border-2 border-yellow-500/30 rounded-[3rem] p-16 flex flex-col items-center justify-center space-y-6 shadow-[0_0_50px_rgba(234,179,8,0.1)]">
-                      <span className="text-5xl font-bold text-zinc-400 uppercase tracking-widest">{txt.bestSet}</span>
-                      <span className="text-[80px] font-black text-white text-center leading-tight">{sessionStats.bestSet}</span>
-                    </div>
-                  </div>
-
-                  <div className="relative z-10 flex items-center space-x-6 bg-zinc-950/80 px-16 py-8 rounded-full backdrop-blur-md mt-auto border border-zinc-800 mb-12">
-                    <Dumbbell className="w-16 h-16 text-yellow-400" />
-                    <span className="text-5xl font-black tracking-widest text-zinc-100">VIVEX FITNESS</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* APERÇU MINIATURE DANS LA MODALE POUR L'UTILISATEUR */}
-              <div className="w-full max-w-[280px] aspect-[9/16] bg-zinc-950 rounded-2xl border border-zinc-800 relative flex flex-col items-center justify-between p-5 shadow-2xl overflow-hidden">
+        <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[750px] outline-none">
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center relative hide-scrollbar">
+            <div className="absolute -left-[9999px]">
+              <div ref={stravaCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-between py-24 px-16 text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
                 <img src="/strava-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
-                
-                <div className="mt-8 bg-yellow-500/10 p-3 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.3)] relative z-10">
-                  <Trophy className="w-10 h-10 text-yellow-400" />
+                <div className="relative z-10 text-center space-y-6 mt-16">
+                  <div className="flex justify-center mb-8"><div className="bg-yellow-500/10 p-10 rounded-full shadow-[0_0_100px_rgba(234,179,8,0.3)]"><Trophy className="w-56 h-56 text-yellow-400 drop-shadow-[0_0_30px_rgba(234,179,8,0.8)]" /></div></div>
+                  <h2 className="text-[100px] font-black uppercase tracking-tighter leading-none text-white drop-shadow-lg">{data?.profile?.first_name} <br/> {lang === 'FR' ? "A DÉTRUIT SA SÉANCE !" : "CRUSHED IT!"}</h2>
                 </div>
-                
-                <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mt-4 text-center z-10 drop-shadow-md">
-                  {data?.profile?.first_name} <br/> {lang === 'FR' ? "A DÉTRUIT SA SÉANCE" : "CRUSHED IT"}
-                </h3>
-                
-                <div className="w-full space-y-3 mt-auto mb-6 relative z-10">
-                  <div className="bg-zinc-950/80 backdrop-blur-sm rounded-xl p-4 text-center border border-yellow-500/20 flex flex-col shadow-lg">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase">{txt.tonnage}</span>
-                    <span className="text-2xl font-black text-yellow-400">{sessionStats.tonnage.toLocaleString()}kg</span>
+                <div className="relative z-10 w-full grid grid-cols-1 gap-12 mt-12 px-12">
+                  <div className="bg-zinc-950/60 backdrop-blur-xl border-2 border-yellow-500/30 rounded-[3rem] p-16 flex flex-col items-center justify-center space-y-6 shadow-[0_0_50px_rgba(234,179,8,0.1)]">
+                    <span className="text-5xl font-bold text-zinc-400 uppercase tracking-widest">{txt.tonnage}</span>
+                    <span className="text-[120px] font-black text-yellow-400">{sessionStats.tonnage.toLocaleString()} <span className="text-6xl text-zinc-500">kg</span></span>
                   </div>
-                  <div className="bg-zinc-950/80 backdrop-blur-sm rounded-xl p-4 text-center border border-yellow-500/20 flex flex-col shadow-lg">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase">{txt.bestSet}</span>
-                    <span className="text-sm font-black text-white truncate px-1">{sessionStats.bestSet}</span>
+                  <div className="bg-zinc-950/60 backdrop-blur-xl border-2 border-yellow-500/30 rounded-[3rem] p-16 flex flex-col items-center justify-center space-y-6 shadow-[0_0_50px_rgba(234,179,8,0.1)]">
+                    <span className="text-5xl font-bold text-zinc-400 uppercase tracking-widest">{txt.bestSet}</span>
+                    <span className="text-[80px] font-black text-white text-center leading-tight">{sessionStats.bestSet}</span>
                   </div>
                 </div>
-
-                <div className="flex items-center space-x-2 opacity-80 relative z-10 mb-2">
-                  <Dumbbell className="w-4 h-4 text-yellow-500" />
-                  <span className="text-xs font-black tracking-widest text-zinc-300">VIVEX</span>
+                <div className="relative z-10 flex items-center space-x-6 bg-zinc-950/80 px-16 py-8 rounded-full backdrop-blur-md mt-auto border border-zinc-800 mb-12">
+                  <Dumbbell className="w-16 h-16 text-yellow-400" />
+                  <span className="text-5xl font-black tracking-widest text-zinc-100">VIVEX FITNESS</span>
                 </div>
               </div>
-
-              {/* RAPPEL NUTRITION ANABOLIQUE */}
-              <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-3 mt-6 w-full text-center">
-                <p className="text-xs font-bold text-orange-400 leading-relaxed">
-                  {txt.anabTarget}
-                </p>
+            </div>
+            
+            {sessionStats.xpEarned > 0 && (
+              <div className="w-full max-w-[280px] bg-gradient-to-r from-teal-500 to-cyan-500 border-2 border-teal-300 rounded-xl p-4 mb-6 shadow-[0_0_30px_rgba(20,184,166,0.4)] flex flex-col items-center justify-center space-y-1 animate-in slide-in-from-top-8 duration-700">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-6 h-6 text-white animate-pulse" />
+                  <span className="text-xl font-black text-white uppercase tracking-widest">+{sessionStats.xpEarned} XP</span>
+                </div>
+                {sessionStats.leveledUp && <span className="mt-2 bg-yellow-400 text-yellow-950 px-3 py-1 rounded-full text-xs font-black tracking-widest shadow-sm">LEVEL UP !</span>}
               </div>
+            )}
 
+            <div className="w-full max-w-[280px] aspect-[9/16] bg-zinc-950 rounded-2xl border border-zinc-800 relative flex flex-col items-center justify-between p-5 shadow-2xl overflow-hidden shrink-0">
+              <img src="/strava-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
+              <div className="mt-8 bg-yellow-500/10 p-3 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.3)] relative z-10"><Trophy className="w-10 h-10 text-yellow-400" /></div>
+              <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mt-4 text-center z-10 drop-shadow-md">{data?.profile?.first_name} <br/> {lang === 'FR' ? "A DÉTRUIT SA SÉANCE" : "CRUSHED IT"}</h3>
+              <div className="w-full space-y-3 mt-auto mb-6 relative z-10">
+                <div className="bg-zinc-950/80 backdrop-blur-sm rounded-xl p-4 text-center border border-yellow-500/20 flex flex-col shadow-lg"><span className="text-[10px] font-bold text-zinc-400 uppercase">{txt.tonnage}</span><span className="text-2xl font-black text-yellow-400">{sessionStats.tonnage.toLocaleString()}kg</span></div>
+                <div className="bg-zinc-950/80 backdrop-blur-sm rounded-xl p-4 text-center border border-yellow-500/20 flex flex-col shadow-lg"><span className="text-[10px] font-bold text-zinc-400 uppercase">{txt.bestSet}</span><span className="text-sm font-black text-white truncate px-1">{sessionStats.bestSet}</span></div>
+              </div>
+              <div className="flex items-center space-x-2 opacity-80 relative z-10 mb-2"><Dumbbell className="w-4 h-4 text-yellow-500" /><span className="text-xs font-black tracking-widest text-zinc-300">VIVEX</span></div>
             </div>
 
-            <div className="w-full space-y-3 relative z-10">
-              <Button onClick={shareToSocials} disabled={isSharing} className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-zinc-950 font-black text-lg h-14 shadow-lg shadow-yellow-500/20 transition-transform active:scale-95">
-                {isSharing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Share2 className="w-5 h-5 mr-2" /> {txt.shareInsta}</>}
-              </Button>
-              <Button onClick={() => router.push("/dashboard")} variant="outline" className="w-full h-12 font-bold bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800">
-                {txt.back}
-              </Button>
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-3 mt-6 w-full max-w-[280px] text-center shrink-0">
+              <p className="text-xs font-bold text-orange-400 leading-relaxed">{txt.anabTarget}</p>
             </div>
+          </div>
+
+          <div className="p-4 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800 w-full shrink-0 space-y-3 z-50">
+            <Button onClick={shareToSocials} disabled={isSharing} className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-zinc-950 font-black text-lg h-12 shadow-lg shadow-yellow-500/20 transition-transform active:scale-95">
+              {isSharing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Share2 className="w-5 h-5 mr-2" /> {txt.shareInsta}</>}
+            </Button>
+            <Button onClick={() => router.push("/workout")} variant="outline" className="w-full h-12 font-bold bg-zinc-900 border-zinc-700 text-zinc-300 hover:bg-zinc-800 transition-colors">
+              {txt.back}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
