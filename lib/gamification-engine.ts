@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 
-export async function awardWorkoutXP(userId: string, sessionTonnage: number) {
+export async function awardWorkoutXP(userId: string, sessionTonnage: number, isReplay: boolean = false) {
   try {
     // 1. Récupération du profil
     let { data: gamification } = await supabase
@@ -18,8 +18,20 @@ export async function awardWorkoutXP(userId: string, sessionTonnage: number) {
       gamification = newGamification;
     }
 
+    // 🛡️ SÉCURITÉ ANTI-TRICHE (IDEMPOTENCE)
+    if (isReplay) {
+      return {
+        success: true,
+        xpEarned: 0,
+        leveledUp: false,
+        newLevel: gamification.level || 1,
+        newBadges: [],
+        isReplay: true // Flag pour l'interface
+      };
+    }
+
     // 2. Calcul dynamique de l'XP
-    // 100 XP de base + 10 XP par tranche de 100kg soulevés (Max 800 XP)
+    // 150 XP de base + 10 XP par tranche de 100kg soulevés (Max 800 XP)
     const baseXP = 150;
     const bonusXP = Math.floor(sessionTonnage / 100) * 10;
     const earnedXP = Math.min(baseXP + bonusXP, 800); 
@@ -88,7 +100,8 @@ export async function awardWorkoutXP(userId: string, sessionTonnage: number) {
       xpEarned: earnedXP,
       leveledUp,
       newLevel,
-      newBadges
+      newBadges,
+      isReplay: false
     };
 
   } catch (error) {
