@@ -109,3 +109,60 @@ export async function awardWorkoutXP(userId: string, sessionTonnage: number, isR
     return { success: false, error };
   }
 }
+
+export async function awardQuizXP(userId: string, difficulty: string) {
+  try {
+    const { data: gamification } = await supabase
+      .from("user_gamification")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (!gamification) throw new Error("Profil introuvable");
+
+    const xpReward = difficulty === 'easy' ? 30 : difficulty === 'medium' ? 60 : 100;
+    const newXp = (gamification.current_xp || 0) + xpReward;
+    
+    // Calcul de l'évolution de niveau
+    let newLevel = gamification.level || 1;
+    let leveledUp = false;
+    let tempXp = newXp;
+    let nextLevelXP = newLevel * 1000;
+    
+    while (tempXp >= nextLevelXP) {
+      tempXp -= nextLevelXP;
+      newLevel++;
+      leveledUp = true;
+      nextLevelXP = newLevel * 1000;
+    }
+
+    const totalAnswered = (gamification.answered_quizzes || []).length + 1; // +1 car on vient de répondre juste
+    let badges: string[] = gamification.unlocked_badges || [];
+    
+    // 🛡️ DÉBLOCAGE DES BADGES QUIZ
+    if (totalAnswered >= 5 && !badges.includes("quiz_initie")) badges.push("quiz_initie");
+    if (totalAnswered >= 15 && !badges.includes("quiz_erudit")) badges.push("quiz_erudit");
+    if (totalAnswered >= 30 && !badges.includes("quiz_genie")) badges.push("quiz_genie");
+
+    // Détection des Paliers de Rang pour le Partage Social
+    const isMilestone = totalAnswered === 5 || totalAnswered === 15 || totalAnswered === 30 || totalAnswered === 60;
+    
+    let rankName = "Initié 📘";
+    if (totalAnswered >= 60) rankName = "Génie Ultime 🌌";
+    else if (totalAnswered >= 30) rankName = "Maître Biomécanique 🧬";
+    else if (totalAnswered >= 15) rankName = "Érudit 🧠";
+
+    await supabase
+      .from("user_gamification")
+      .update({
+        current_xp: newXp,
+        level: newLevel,
+        unlocked_badges: badges
+      })
+      .eq("user_id", userId);
+
+    return { success: true, xpEarned: xpReward, isMilestone, rankName, totalAnswered };
+  } catch (error) {
+    return { success: false, error };
+  }
+}

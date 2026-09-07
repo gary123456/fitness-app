@@ -1,26 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
+import { toPng } from "html-to-image";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Star } from "lucide-react";
+import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2 } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/lib/useLanguage";
+import { awardQuizXP } from "@/lib/gamification-engine";
 
 const EXTRA_SPORTS = [ 
   { id: "jjb", label: "JJB / MMA" }, { id: "football", label: "Football / Rugby" }, 
   { id: "basketball", label: "Basketball / Volley" }, { id: "running", label: "Running / Sprint" }, 
   { id: "natation", label: "Natation" }, { id: "cyclisme", label: "Cyclisme / Vélo" }, 
   { id: "randonnee", label: "Randonnée / Marche" }, { id: "padel_tennis", label: "Padel / Tennis" } 
+];
+
+// 🎨 GALERIE D'AVATARS (Incluant la diversité)
+const AVATAR_LIST = [
+  { id: "default", label: "Initial" },
+  { id: "🧑", label: "Gars 1" }, { id: "👦🏽", label: "Gars 2" }, { id: "👨🏿‍🦲", label: "Gars 3" }, { id: "👱‍♂️", label: "Gars 4" }, { id: "🧔🏾‍♂️", label: "Gars 5" },
+  { id: "👩", label: "Fille 1" }, { id: "👩🏽", label: "Fille 2" }, { id: "👩🏾‍🦱", label: "Fille 3" }, { id: "👱‍♀️", label: "Fille 4" }, { id: "👩🏿", label: "Fille 5" },
+  { id: "🦊", label: "Renard" }, { id: "🐯", label: "Tigre" }, { id: "🐺", label: "Loup" }, { id: "🦍", label: "Gorille" }, 
+  { id: "🐉", label: "Dragon" }, { id: "👽", label: "Alien" }, { id: "🤖", label: "Robot" }, { id: "👻", label: "Fantôme" }, { id: "🥷", label: "Ninja" }
 ];
 
 const getMicroDetails = (name: string, lang: string) => {
@@ -57,9 +68,29 @@ const fetchDashboardData = async () => {
   
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   const { data: logs } = await supabase.from("workout_logs").select("created_at, weight, reps, session_id").eq("user_id", user.id);
-  
-  // FETCH GAMIFICATION DATA
   const { data: gamification } = await supabase.from("user_gamification").select("*").eq("user_id", user.id).maybeSingle();
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  let dailyQuiz = null;
+  const disableQuiz = profile?.disable_quiz || false;
+
+  if (!disableQuiz && gamification?.last_quiz_date !== todayStr) {
+    const userLevel = gamification?.level || 1;
+    const targetDiff = userLevel < 3 ? 'easy' : userLevel < 7 ? 'medium' : 'hard';
+    const answeredQuizzes = gamification?.answered_quizzes || [];
+    
+    const { data: questions } = await supabase
+      .from("quiz_questions")
+      .select("*")
+      .eq("difficulty", targetDiff);
+      
+    if (questions && questions.length > 0) {
+      const unanswered = questions.filter(q => !answeredQuizzes.includes(q.id));
+      if (unanswered.length > 0) {
+        dailyQuiz = unanswered[Math.floor(Math.random() * unanswered.length)];
+      }
+    }
+  }
 
   let todayWorkoutId: string | null = null;
   let isTodayWorkoutCompleted = false;
@@ -70,18 +101,18 @@ const fetchDashboardData = async () => {
     const { data: session } = await supabase.from("workout_sessions").select(`id, workout_exercises(id)`).eq("program_id", program.id).eq("day_name", todayKey).single();
     if (session && session.workout_exercises && session.workout_exercises.length > 0) {
       todayWorkoutId = session.id;
-      const todayStr = new Date().toISOString().split('T')[0];
       const todayLogs = (logs || []).filter(l => l.session_id === todayWorkoutId && l.created_at.startsWith(todayStr));
       if (todayLogs.length > 0) isTodayWorkoutCompleted = true;
     }
   }
-  return { profile, gamification, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [] };
+  return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [] };
 };
 
 export default function DashboardPage() {
   const router = useRouter();
   const { lang } = useLanguage();
   const { data, isLoading, mutate } = useSWR('dashboardData', fetchDashboardData);
+  const quizCardRef = useRef<HTMLDivElement>(null);
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
@@ -95,27 +126,43 @@ export default function DashboardPage() {
   const [microModal, setMicroModal] = useState({ show: false, micro: null as any });
   const [mealModal, setMealModal] = useState<{show: boolean, type: 'protein'|'carbs'|'fat', target: number} | null>(null);
 
+  const [quizState, setQuizState] = useState<'playing' | 'success' | 'fail'>('playing');
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [showQuizShareModal, setShowQuizShareModal] = useState(false);
+  const [quizMilestoneData, setQuizMilestoneData] = useState({ rank: "", answered: 0 });
+  const [isSharing, setIsSharing] = useState(false);
+
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editHeight, setEditHeight] = useState("");
   const [editWeight, setEditWeight] = useState("");
   const [editGoal, setEditGoal] = useState("");
   const [editExperience, setEditExperience] = useState("");
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
+  const [editDisableQuiz, setEditDisableQuiz] = useState(false);
+  const [editAvatar, setEditAvatar] = useState("default");
 
   useEffect(() => {
     if (data?.profile) {
-      setEditWeight(data.profile.weight_kg.toString());
+      setEditFirstName(data.profile.first_name || "");
+      setEditLastName(data.profile.last_name || "");
+      setEditHeight(data.profile.height_cm?.toString() || "");
+      setEditWeight(data.profile.weight_kg?.toString() || "");
       setEditGoal(data.profile.current_goal);
       setEditExperience(data.profile.experience_level || "debutant");
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
+      setEditDisableQuiz(data.profile.disable_quiz || false);
+      setEditAvatar(data.profile.avatar_url || "default");
     }
   }, [data?.profile]);
 
   type TranslationDict = Record<string, string>;
   const t: Record<string, TranslationDict> = {
-    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Modifier constantes & planning", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Le Radar Corporel", imgSub: "L'Indice de Masse Grasse est une estimation de la quantité de gras sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde." },
-    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Edit metrics & schedule", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Radar", imgSub: "The Body Fat Index is an estimation of the amount of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads." }
+    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Le Radar Corporel", imgSub: "L'Indice de Masse Grasse est une estimation de la quantité de gras sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story" },
+    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Radar", imgSub: "The Body Fat Index is an estimation of the amount of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -125,11 +172,17 @@ export default function DashboardPage() {
     setActionLoading(true);
     try {
       const newWeight = parseFloat(editWeight);
+      const newHeight = parseFloat(editHeight);
       await supabase.from("profiles").update({ 
+        first_name: editFirstName,
+        last_name: editLastName,
+        height_cm: newHeight,
         weight_kg: newWeight, 
         current_goal: editGoal, 
         experience_level: editExperience, 
-        weekly_schedule: editSchedule 
+        weekly_schedule: editSchedule,
+        disable_quiz: editDisableQuiz,
+        avatar_url: editAvatar
       }).eq("id", data.profile.id);
       
       if (newWeight !== data.profile.weight_kg) await supabase.from("measurements").insert([{ user_id: data.profile.id, weight_kg: newWeight }]);
@@ -164,9 +217,60 @@ export default function DashboardPage() {
     });
   };
 
+  const submitQuiz = async () => {
+    if (selectedAnswer === null || !data?.dailyQuiz || !data?.profile) return;
+    const isCorrect = selectedAnswer === data.dailyQuiz.correct_index;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    if (isCorrect) {
+      setQuizState('success');
+      
+      // On passe par le moteur de gamification pour sécuriser le déblocage des badges
+      const gamificationResult = await awardQuizXP(data.profile.id, data.dailyQuiz.difficulty);
+      const newAnsweredArray = [...(data.gamification?.answered_quizzes || []), data.dailyQuiz.id];
+      
+      await supabase.from("user_gamification").update({ 
+        last_quiz_date: todayStr,
+        answered_quizzes: newAnsweredArray
+      }).eq("user_id", data.profile.id);
+      
+      if (gamificationResult.isMilestone) {
+        setQuizMilestoneData({ rank: gamificationResult.rankName, answered: gamificationResult.totalAnswered });
+        setTimeout(() => { setShowQuizShareModal(true); mutate(); }, 1500);
+      } else {
+        setTimeout(() => { mutate(); }, 2500); 
+      }
+    } else {
+      setQuizState('fail');
+      setTimeout(() => { setQuizState('playing'); setSelectedAnswer(null); }, 3500); 
+    }
+  };
+
+  const shareQuizMilestone = async () => {
+    if (!quizCardRef.current) return;
+    setIsSharing(true);
+    try {
+      const dataUrl = await toPng(quizCardRef.current, { cacheBust: true, quality: 1, pixelRatio: 3 });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], 'vivex-brain-rank.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: 'Rang Vivex', files: [file] });
+      } else {
+        const link = document.createElement('a');
+        link.download = 'vivex-brain-rank.png';
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (err) {
+      console.error('Erreur de partage', err);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   if (isLoading || !data?.profile) return <div className="flex min-h-[80vh] items-center justify-center"><div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  const { profile, gamification, todayWorkoutId, isTodayWorkoutCompleted, logs } = data;
+  const { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs } = data;
   const age = calculateAge(profile.birth_date);
   const bmi = calculateBMI(profile.weight_kg, profile.height_cm);
   const bmr = calculateBMR(profile.weight_kg, profile.height_cm, age, profile.gender);
@@ -186,7 +290,6 @@ export default function DashboardPage() {
   const tonnage = calculateWeeklyTonnage(logs, lang);
   const greeting = getContextualGreeting(lang, profile.first_name);
 
-  // Gamification Calcs
   const currentLevel = gamification?.level || 1;
   const currentXp = gamification?.current_xp || 0;
   const nextLevelXP = currentLevel * 1000;
@@ -265,13 +368,23 @@ export default function DashboardPage() {
           <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
         </div>
         
+        {/* 🎨 UX : AVATAR MASSIF (W-16) & ENGRENAGE (Golden Standard) */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md hover:bg-white dark:hover:bg-zinc-800 transition-all rounded-xl font-bold px-5 h-10">
-              <Settings className="w-4 h-4 mr-2 text-zinc-500 dark:text-zinc-400" /> {txt.param}
-            </Button>
+            <button className="relative outline-none group focus:ring-2 focus:ring-teal-500 rounded-full shrink-0">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-teal-400 to-indigo-500 flex items-center justify-center text-white font-black shadow-sm group-hover:shadow-md transition-all">
+                {profile.avatar_url && profile.avatar_url !== 'default' ? (
+                  <span className="text-4xl leading-none">{profile.avatar_url}</span>
+                ) : (
+                  <span className="text-3xl leading-none">{profile.first_name ? profile.first_name.charAt(0).toUpperCase() : <User className="w-8 h-8" />}</span>
+                )}
+              </div>
+              <div className="absolute -bottom-1 -right-1 bg-white dark:bg-zinc-900 rounded-full p-1.5 shadow-sm border border-zinc-200 dark:border-zinc-800">
+                <Settings className="w-4 h-4 text-zinc-600 dark:text-zinc-400 group-hover:rotate-90 transition-transform duration-500" />
+              </div>
+            </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 p-3 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
+          <DropdownMenuContent align="end" className="w-72 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 p-3 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] mt-2">
             <DropdownMenuLabel className="px-3 py-2 text-xs font-black tracking-widest text-zinc-400 uppercase">{txt.account}</DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50 my-2" />
             
@@ -315,7 +428,53 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {renderSmartBanner()}
+      {/* 🧠 DAILY BRAIN GAIN (QUIZ WIDGET) */}
+      {dailyQuiz && (
+        <Card className={`border-2 transition-all duration-500 overflow-hidden relative ${quizState === 'success' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : quizState === 'fail' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-indigo-500/30 bg-white dark:bg-zinc-900 shadow-[0_10px_40px_-15px_rgba(99,102,241,0.2)]'}`}>
+          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Brain className="w-32 h-32" /></div>
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <CardTitle className="flex items-center text-indigo-600 dark:text-indigo-400"><Brain className="w-5 h-5 mr-2" /> {txt.quizTitle}</CardTitle>
+              <span className={`text-[10px] uppercase font-black px-2 py-1 rounded tracking-widest ${dailyQuiz.difficulty === 'easy' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : dailyQuiz.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400'}`}>
+                {dailyQuiz.difficulty === 'easy' ? txt.easy : dailyQuiz.difficulty === 'medium' ? txt.medium : txt.hard}
+              </span>
+            </div>
+            <CardDescription className="text-zinc-500">{txt.quizSub}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 relative z-10">
+            {quizState === 'playing' ? (
+              <>
+                <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg leading-snug">{lang === 'FR' ? dailyQuiz.question_fr : dailyQuiz.question_en}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                  {(lang === 'FR' ? dailyQuiz.options_fr : dailyQuiz.options_en).map((opt: string, i: number) => (
+                    <button 
+                      key={i} 
+                      onClick={() => setSelectedAnswer(i)}
+                      className={`p-3 rounded-xl border text-left font-bold transition-colors ${selectedAnswer === i ? 'bg-indigo-500 border-indigo-600 text-white shadow-md' : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:border-indigo-400 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-indigo-600'}`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+                <Button onClick={submitQuiz} disabled={selectedAnswer === null} className="w-full mt-2 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold">{txt.checkAns}</Button>
+              </>
+            ) : quizState === 'success' ? (
+              <div className="text-center py-6 animate-in zoom-in">
+                <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-2" />
+                <h3 className="text-xl font-black text-green-700 dark:text-green-400 mb-1">{txt.correct}</h3>
+                <p className="text-sm font-medium text-green-600 dark:text-green-500">{lang === 'FR' ? dailyQuiz.explanation_fr : dailyQuiz.explanation_en}</p>
+                <p className="mt-4 font-black text-green-600 dark:text-green-400 animate-pulse">+{dailyQuiz.difficulty === 'easy' ? 30 : dailyQuiz.difficulty === 'medium' ? 60 : 100} XP</p>
+              </div>
+            ) : (
+              <div className="text-center py-6 animate-in shake">
+                <XCircle className="w-12 h-12 text-red-500 mx-auto mb-2" />
+                <h3 className="text-xl font-black text-red-700 dark:text-red-400 mb-1">{txt.wrong}</h3>
+                <p className="text-sm font-medium text-red-600 dark:text-red-500">{lang === 'FR' ? dailyQuiz.explanation_fr : dailyQuiz.explanation_en}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div onClick={() => router.push("/analytics#tonnage-chart")} className="cursor-pointer bg-gradient-to-r from-zinc-900 to-zinc-800 dark:from-zinc-800 dark:to-zinc-900 rounded-xl p-4 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border border-zinc-700 hover:ring-2 hover:ring-zinc-600 transition-all group">
         <div className="flex items-center space-x-4">
@@ -402,6 +561,56 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* MODALE DE PARTAGE QUIZ */}
+      <Dialog open={showQuizShareModal} onOpenChange={setShowQuizShareModal}>
+        <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[600px] outline-none">
+          <div className="flex-1 overflow-y-auto flex flex-col items-center relative hide-scrollbar p-6">
+            <div className="absolute -left-[9999px]">
+              <div ref={quizCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-center text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
+                {/* L'URL A ÉTÉ CHANGÉE ICI POUR UNE IMAGE SANS WATERMARK */}
+                <img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?q=80&w=1080&h=1920&fit=crop" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0 opacity-40" crossOrigin="anonymous" />
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent z-0"></div>
+                
+                <div className="relative z-10 text-center space-y-12 mt-32">
+                  <div className="flex justify-center mb-12"><div className="bg-indigo-500/20 p-12 rounded-full shadow-[0_0_120px_rgba(99,102,241,0.5)]"><Brain className="w-64 h-64 text-indigo-400 drop-shadow-[0_0_40px_rgba(99,102,241,0.8)]" /></div></div>
+                  <h2 className="text-[120px] font-black uppercase tracking-tighter leading-none text-white drop-shadow-2xl">{data?.profile?.first_name}</h2>
+                  <p className="text-[60px] font-bold text-indigo-300 uppercase tracking-widest">{lang === 'FR' ? "A atteint le rang" : "Has reached the rank"}</p>
+                  <div className="bg-zinc-950/80 backdrop-blur-xl border-4 border-indigo-500/50 rounded-full py-8 px-24 shadow-[0_0_80px_rgba(99,102,241,0.3)] mt-8">
+                    <span className="text-[80px] font-black text-indigo-400 uppercase tracking-widest">{quizMilestoneData.rank}</span>
+                  </div>
+                </div>
+                <div className="absolute bottom-24 relative z-10 flex items-center space-x-6 bg-zinc-950/90 px-16 py-8 rounded-full backdrop-blur-md border border-zinc-800">
+                  <Brain className="w-16 h-16 text-indigo-500" />
+                  <span className="text-5xl font-black tracking-widest text-zinc-100">VIVEX BRAIN GAIN</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full max-w-[280px] aspect-[9/16] bg-zinc-950 rounded-2xl border border-zinc-800 relative flex flex-col items-center justify-between p-5 shadow-2xl overflow-hidden shrink-0 mt-8">
+              {/* L'URL A ÉTÉ CHANGÉE ICI POUR L'APERCU MODALE AUSSI */}
+              <img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?q=80&w=400&h=700&fit=crop" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0 opacity-40" />
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent z-0"></div>
+              
+              <div className="mt-8 bg-indigo-500/20 p-4 rounded-full shadow-[0_0_30px_rgba(99,102,241,0.5)] relative z-10"><Brain className="w-12 h-12 text-indigo-400" /></div>
+              <h3 className="text-3xl font-black text-white uppercase tracking-tighter leading-none mt-6 text-center z-10 drop-shadow-md">{data?.profile?.first_name}</h3>
+              <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest z-10">{lang === 'FR' ? "Nouveau Rang" : "New Rank"}</p>
+              
+              <div className="w-full mt-auto mb-8 relative z-10">
+                <div className="bg-zinc-950/80 backdrop-blur-sm rounded-xl p-6 text-center border-2 border-indigo-500/50 flex flex-col shadow-[0_0_30px_rgba(99,102,241,0.2)]">
+                  <span className="text-xl font-black text-indigo-400 uppercase tracking-widest text-balance">{quizMilestoneData.rank}</span>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 opacity-80 relative z-10 mb-2"><Brain className="w-4 h-4 text-indigo-500" /><span className="text-xs font-black tracking-widest text-zinc-300">VIVEX</span></div>
+            </div>
+          </div>
+          <div className="p-4 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800 w-full shrink-0 z-50">
+            <Button onClick={shareQuizMilestone} disabled={isSharing} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-black text-lg h-12 shadow-lg shadow-indigo-500/20 transition-transform active:scale-95">
+              {isSharing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Share2 className="w-5 h-5 mr-2" /> {txt.shareInsta}</>}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isStreakModalOpen} onOpenChange={setIsStreakModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
@@ -611,31 +820,72 @@ export default function DashboardPage() {
 
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="dark:text-zinc-100">{txt.adjust}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="dark:text-zinc-100 flex items-center"><User className="w-5 h-5 mr-2" /> {txt.adjust}</DialogTitle></DialogHeader>
           <div className="grid gap-6 py-4">
+            
+            {/* GROUP 1: Identité */}
             <div className="space-y-4">
+              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Identité</h4>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="dark:text-zinc-300">Poids (kg)</Label>
-                  <Input type="number" step="0.1" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100" />
+                  <Label className="dark:text-zinc-300">Prénom</Label>
+                  <Input type="text" value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="dark:text-zinc-300">Objectif Principal</Label>
+                  <Label className="dark:text-zinc-300">Nom</Label>
+                  <Input type="text" value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
+                </div>
+              </div>
+            </div>
+
+            {/* GROUP 2: Avatar (OFFLINE FRIENDLY) */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Avatar</h4>
+              <div className="grid grid-cols-8 gap-2">
+                {AVATAR_LIST.map((av) => (
+                  <button
+                    key={av.id}
+                    type="button"
+                    onClick={() => setEditAvatar(av.id)}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${editAvatar === av.id ? 'ring-2 ring-teal-500 scale-110 bg-teal-50 dark:bg-teal-900/30' : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-70 hover:opacity-100'}`}
+                    title={av.label}
+                  >
+                    {av.id === 'default' ? <User className="w-5 h-5 text-zinc-500 dark:text-zinc-400" /> : av.id}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* GROUP 3: Corps & Objectifs */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Biométrie & Objectif</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label className="dark:text-zinc-300">Poids (kg)</Label>
+                  <Input type="number" step="0.1" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="dark:text-zinc-300">Taille (cm)</Label>
+                  <Input type="number" step="1" value={editHeight} onChange={(e) => setEditHeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
+                </div>
+                <div className="space-y-2 col-span-3 sm:col-span-1">
+                  <Label className="dark:text-zinc-300">Objectif</Label>
                   <Select value={editGoal} onValueChange={(val) => { setEditGoal(val); }}>
                     <SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue /></SelectTrigger>
                     <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800">
-                      <SelectItem value="perte_poids">Perte de masse grasse</SelectItem>
-                      <SelectItem value="recomposition">Recomposition corporelle</SelectItem>
-                      <SelectItem value="performance">Performance martiale</SelectItem>
-                      <SelectItem value="prise_masse">Prise de masse musculaire</SelectItem>
+                      <SelectItem value="perte_poids">Perte de gras</SelectItem>
+                      <SelectItem value="recomposition">Recomposition</SelectItem>
+                      <SelectItem value="performance">Performance</SelectItem>
+                      <SelectItem value="prise_masse">Prise de masse</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
             </div>
             
+            {/* GROUP 4: Expérience */}
             <div className="space-y-2">
-              <Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2" /> Niveau d'Expérience</Label>
+              <Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2 text-yellow-500" /> Niveau d'Expérience</Label>
               <Select value={editExperience} onValueChange={(val) => { setEditExperience(val); }}>
                 <SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder="Sélectionnez un niveau" /></SelectTrigger>
                 <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800">
@@ -644,9 +894,10 @@ export default function DashboardPage() {
                   <SelectItem value="avance">Avancé (+3 ans)</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-zinc-500 mt-1">L'IA ajustera le volume et la difficulté nerveuse des prochains programmes générés.</p>
+              <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest">Ajuste le volume généré par l'IA.</p>
             </div>
 
+            {/* GROUP 5: Sports */}
             <div className="space-y-4">
               <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100"><Calendar className="h-4 w-4 mr-2"/> Sports Annexes (Fatigue)</h4>
               <div className="space-y-3">
@@ -670,8 +921,26 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
+
+            {/* BASCULE QUIZ */}
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base font-bold dark:text-zinc-100 flex items-center"><Brain className="w-4 h-4 mr-2 text-indigo-500" /> Daily Brain Gain</Label>
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Afficher les quiz sur l'accueil</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditDisableQuiz(!editDisableQuiz)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!editDisableQuiz ? 'bg-teal-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}
+                >
+                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!editDisableQuiz ? 'translate-x-5' : 'translate-x-0'}`} />
+                </button>
+              </div>
+            </div>
+
           </div>
-          <DialogFooter>
+          <DialogFooter className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
             <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 font-bold">{txt.cancel}</Button>
             <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 text-white hover:bg-teal-600 font-bold">{actionLoading ? "..." : txt.save}</Button>
           </DialogFooter>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { Trophy, Flame, Award, Star, Target, Zap, Loader2 } from "lucide-react";
+import { Trophy, Flame, Award, Star, Target, Zap, Loader2, Brain, BookOpen, GraduationCap } from "lucide-react";
 
 interface GamificationData {
   level: number;
@@ -15,6 +15,7 @@ export default function ProfilePage() {
   const [data, setData] = useState<GamificationData | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 🛡️ LISTE DES BADGES ENRICHIE (SPORT + QUIZ)
   const ALL_BADGES = [
     { id: "first_step", name: "Premier Pas", icon: Star, color: "text-yellow-400" },
     { id: "warrior", name: "Warrior", icon: Trophy, color: "text-teal-400" },
@@ -22,6 +23,9 @@ export default function ProfilePage() {
     { id: "titan", name: "Titan", icon: Zap, color: "text-blue-400" },
     { id: "precision", name: "Précision", icon: Target, color: "text-indigo-400" },
     { id: "legend", name: "Légende", icon: Award, color: "text-purple-400" },
+    { id: "quiz_initie", name: "Initié (5 Quiz)", icon: BookOpen, color: "text-cyan-400" },
+    { id: "quiz_erudit", name: "Érudit (15 Quiz)", icon: Brain, color: "text-fuchsia-400" },
+    { id: "quiz_genie", name: "Génie (30 Quiz)", icon: GraduationCap, color: "text-yellow-500" },
   ];
 
   useEffect(() => {
@@ -41,7 +45,6 @@ export default function ProfilePage() {
 
       if (fetchError) throw fetchError;
 
-      // Si le profil n'existe pas, on l'insère
       if (!gamification) {
         const { data: newGamification, error: insertError } = await supabase
           .from("user_gamification")
@@ -50,7 +53,6 @@ export default function ProfilePage() {
           .maybeSingle();
           
         if (insertError) {
-          // Si l'erreur est 23505 (Doublon dû au React Strict Mode), on re-fetch simplement
           if (insertError.code === '23505') {
             const { data: existingData } = await supabase.from("user_gamification").select("*").eq("user_id", user.id).single();
             gamification = existingData;
@@ -155,7 +157,8 @@ export default function ProfilePage() {
           {data.unlocked_badges?.length || 0} / {ALL_BADGES.length} badges obtenus
         </p>
         
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+        {/* 🛠️ GRILLE RÉACTIVE POUR AFFICHER TOUS LES BADGES SANS DÉBORDER */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {ALL_BADGES.map((badge) => {
             const isUnlocked = data.unlocked_badges?.includes(badge.id);
             const Icon = badge.icon;
@@ -163,7 +166,7 @@ export default function ProfilePage() {
             return (
               <div
                 key={badge.id}
-                className={`flex flex-col items-center gap-3 p-4 rounded-xl border transition-all ${
+                className={`flex flex-col items-center justify-center gap-3 p-4 rounded-xl border transition-all ${
                   isUnlocked
                     ? "border-teal-500/30 bg-teal-50 dark:bg-teal-500/5 shadow-sm"
                     : "border-zinc-200 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-900/20 opacity-60 grayscale hover:grayscale-0"
