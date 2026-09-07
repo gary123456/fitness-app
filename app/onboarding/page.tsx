@@ -6,16 +6,13 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { User, Dumbbell, Utensils, Activity } from "lucide-react";
+import { Dumbbell, Activity, ChevronRight, ChevronLeft, CheckCircle2, Zap } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
-// CORRECTION TYPESCRIPT : Déclaration stricte du format
-interface ExtraSport { id: string; label: string; }
-
-const EXTRA_SPORTS: ExtraSport[] = [
+const EXTRA_SPORTS = [
   { id: "jjb", label: "JJB / Lutte / MMA" }, { id: "football", label: "Football / Rugby" },
   { id: "basketball", label: "Basketball / Volley" }, { id: "running", label: "Running / Sprint" },
   { id: "natation", label: "Natation" }, { id: "cyclisme", label: "Cyclisme / Vélo" },
@@ -31,16 +28,18 @@ export default function OnboardingPage() {
   const [userEmail, setUserEmail] = useState<string>("");
   const { lang } = useLanguage();
 
+  // 🚀 NOUVEAU : GESTION DES ÉTAPES
+  const [step, setStep] = useState(0);
+
   const t = {
-    FR: { title: "Bilan Initial Athlète", sub: "L'algorithme va cartographier votre fatigue globale pour concevoir votre programme sur-mesure.", fname: "Prénom", lname: "Nom", dob: "Date de naissance", height: "Taille (cm)", weight: "Poids (kg)", gender: "Sexe (Biologique)", male: "Homme", female: "Femme", sports: "Planning des Sports Complémentaires", sportsSub: "Indiquez vos entraînements externes pour éviter le sur-entraînement.", goal: "Objectif Principal", freq: "Séances de Musculation / sem", exp: "Niveau en musculation", equip: "Matériel accessible", diet: "Contraintes alimentaires", activity: "Activité quotidienne", med: "Antécédents / Blessures", submit: "Générer mon programme", day: "Jour", month: "Mois", year: "Année" },
-    EN: { title: "Initial Athlete Assessment", sub: "The algorithm will map your global fatigue to design your custom program.", fname: "First Name", lname: "Last Name", dob: "Date of Birth", height: "Height (cm)", weight: "Weight (kg)", gender: "Gender (Biological)", male: "Male", female: "Female", sports: "Complementary Sports Schedule", sportsSub: "Indicate external training to avoid overtraining.", goal: "Main Goal", freq: "Lifting Sessions / week", exp: "Lifting Experience", equip: "Available Equipment", diet: "Dietary Restrictions", activity: "Daily Activity", med: "Medical Conditions / Injuries", submit: "Generate my program", day: "Day", month: "Month", year: "Year" }
+    FR: { welcome: "Bienvenue dans l'Écosystème", wSub: "Nous allons concevoir votre algorithme métabolique sur-mesure. Cela prend 2 minutes.", next: "Continuer", back: "Retour", finish: "Générer mon programme", day: "Jour", month: "Mois", year: "Année" },
+    EN: { welcome: "Welcome to the Ecosystem", wSub: "We are going to design your custom metabolic algorithm. It takes 2 minutes.", next: "Continue", back: "Back", finish: "Generate Program", day: "Day", month: "Month", year: "Year" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
-
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
   const [formData, setFormData] = useState({
-    firstName: "", lastName: "", birthDay: "", birthMonth: "", birthYear: "", height: "", weight: "", gender: "", activityLevel: "", goal: "", medicalConditions: "Aucune", alcohol: "", smoker: "", drugs: "", sleep: "", diet: "aucune", experience: "", frequency: "", equipment: [] as string[],
+    firstName: "", lastName: "", birthDay: "", birthMonth: "", birthYear: "", height: "", weight: "", gender: "", activityLevel: "", goal: "", medicalConditions: "Aucune", alcohol: "jamais", smoker: "non", drugs: "non", sleep: "moyen", diet: "aucune", experience: "", frequency: "", equipment: [] as string[],
     weeklySchedule: { monday: [] as string[], tuesday: [] as string[], wednesday: [] as string[], thursday: [] as string[], friday: [] as string[], saturday: [] as string[], sunday: [] as string[] }
   });
 
@@ -71,180 +70,270 @@ export default function OnboardingPage() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateStep = () => {
+    if (step === 1) {
+      if (!formData.firstName || !formData.lastName || !formData.birthDay || !formData.height || !formData.weight || !formData.gender) {
+        setErrorMsg("Veuillez remplir tous les champs obligatoires."); return false;
+      }
+    }
+    if (step === 2) {
+      if (!formData.activityLevel || !formData.experience || !formData.frequency) {
+        setErrorMsg("Veuillez remplir tous les champs obligatoires."); return false;
+      }
+    }
+    if (step === 3) {
+      if (!formData.goal || formData.equipment.length === 0) {
+        setErrorMsg("Veuillez choisir un objectif et au moins un équipement."); return false;
+      }
+    }
+    setErrorMsg(""); return true;
+  };
+
+  const nextStep = () => { if (validateStep()) setStep(s => s + 1); };
+  const prevStep = () => { setStep(s => s - 1); setErrorMsg(""); };
+
+  const handleSubmit = async () => {
+    if (!validateStep()) return;
     setLoading(true); setErrorMsg("");
     try {
       const birthDateStr = `${formData.birthYear}-${formData.birthMonth}-${formData.birthDay}`;
+      
       const { error: profileError } = await supabase.from("profiles").insert([{
         id: userId, email: userEmail, first_name: formData.firstName, last_name: formData.lastName, birth_date: birthDateStr, height_cm: parseFloat(formData.height), weight_kg: parseFloat(formData.weight), gender: formData.gender, activity_level: formData.activityLevel, current_goal: formData.goal, medical_conditions: formData.medicalConditions, alcohol_consumption: formData.alcohol, smoker: formData.smoker, recreational_drugs: formData.drugs, sleep_quality: formData.sleep, dietary_preferences: formData.diet, training_experience: formData.experience, training_frequency: formData.frequency, equipment_access: formData.equipment.join(", "), weekly_schedule: formData.weeklySchedule
       }]);
       if (profileError) throw profileError;
+      
       await supabase.from("measurements").insert([{ user_id: userId, weight_kg: parseFloat(formData.weight) }]);
       localStorage.removeItem("onboarding_form_backup");
-      window.location.href = "/dashboard";
-    } catch (error: any) { setErrorMsg(error.message); } finally { setLoading(false); }
+      
+      router.push("/dashboard");
+    } catch (error: any) { setErrorMsg(error.message); setLoading(false); }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 p-4 md:p-8 dark:bg-zinc-950">
-      <Card className="w-full max-w-4xl shadow-2xl border-zinc-200 dark:border-zinc-800 my-8 bg-white dark:bg-zinc-900/80">
-        <CardHeader className="space-y-3 text-center pb-8 border-b border-zinc-100 dark:border-zinc-800">
-          <CardTitle className="text-4xl font-extrabold tracking-tight dark:text-zinc-50">{txt.title}</CardTitle>
-          <CardDescription className="text-lg font-medium max-w-2xl mx-auto dark:text-zinc-400">{txt.sub}</CardDescription>
-        </CardHeader>
-        
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-10 pt-8">
-            <div className="space-y-5 bg-zinc-50 dark:bg-zinc-950/50 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="space-y-2"><Label>{txt.fname}</Label><Input required value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className="bg-white dark:bg-zinc-900" /></div>
-                <div className="space-y-2"><Label>{txt.lname}</Label><Input required value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})} className="bg-white dark:bg-zinc-900" /></div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{txt.dob}</Label>
-                  <div className="flex space-x-2">
-                    <Select value={formData.birthDay} onValueChange={(v) => setFormData({...formData, birthDay: v})} required>
-                      <SelectTrigger className="w-[90px] bg-white dark:bg-zinc-900"><SelectValue placeholder={txt.day} /></SelectTrigger>
-                      <SelectContent>{Array.from({length: 31}, (_, i) => i + 1).map(d => (<SelectItem key={d} value={d.toString().padStart(2, '0')}>{d}</SelectItem>))}</SelectContent>
-                    </Select>
-                    <Select value={formData.birthMonth} onValueChange={(v) => setFormData({...formData, birthMonth: v})} required>
-                      <SelectTrigger className="flex-1 bg-white dark:bg-zinc-900"><SelectValue placeholder={txt.month} /></SelectTrigger>
-                      <SelectContent>{Array.from({length: 12}, (_, i) => i + 1).map(m => (<SelectItem key={m} value={m.toString().padStart(2, '0')}>{m}</SelectItem>))}</SelectContent>
-                    </Select>
-                    <Select value={formData.birthYear} onValueChange={(v) => setFormData({...formData, birthYear: v})} required>
-                      <SelectTrigger className="w-[110px] bg-white dark:bg-zinc-900"><SelectValue placeholder={txt.year} /></SelectTrigger>
-                      <SelectContent>{Array.from({length: 80}, (_, i) => new Date().getFullYear() - 14 - i).map(y => (<SelectItem key={y} value={y.toString()}>{y}</SelectItem>))}</SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2"><Label>{txt.height}</Label><Input type="number" required value={formData.height} onChange={(e) => setFormData({...formData, height: e.target.value})} className="bg-white dark:bg-zinc-900" /></div>
-                <div className="space-y-2"><Label>{txt.weight}</Label><Input type="number" step="0.1" required value={formData.weight} onChange={(e) => setFormData({...formData, weight: e.target.value})} className="bg-white dark:bg-zinc-900" /></div>
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{txt.gender}</Label>
-                  <Select value={formData.gender} onValueChange={(v) => setFormData({...formData, gender: v})} required>
-                    <SelectTrigger className="bg-white dark:bg-zinc-900"><SelectValue placeholder="..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="homme">{txt.male}</SelectItem>
-                      <SelectItem value="femme">{txt.female}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-4 font-sans relative overflow-hidden">
+      
+      {/* BACKGROUND EFFECTS */}
+      <div className="absolute inset-0 w-full h-full pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-[120px]"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px]"></div>
+      </div>
 
-            <div className="space-y-5 bg-zinc-50 dark:bg-zinc-950/50 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <div className="flex items-center space-x-3 text-zinc-900 dark:text-zinc-50 font-bold text-xl mb-2">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg"><Activity className="text-purple-600 dark:text-purple-400" /></div>
-                <h3>{txt.sports}</h3>
+      <div className="w-full max-w-2xl relative z-10">
+        
+        {/* PROGRESS BAR */}
+        <div className="mb-8 px-4">
+          <div className="flex justify-between mb-2">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className={`h-1.5 flex-1 mx-1 rounded-full transition-colors duration-500 ${i <= step ? 'bg-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.5)]' : 'bg-zinc-800'}`}></div>
+            ))}
+          </div>
+          <p className="text-center text-xs font-bold text-zinc-500 uppercase tracking-widest mt-4">Étape {step + 1} sur 4</p>
+        </div>
+
+        <Card className="shadow-2xl border-zinc-800 bg-zinc-900/60 backdrop-blur-xl rounded-3xl overflow-hidden">
+          <CardContent className="p-8 sm:p-12 min-h-[400px]">
+            
+            {errorMsg && <div className="mb-6 p-4 rounded-xl text-sm font-bold text-red-400 bg-red-500/10 border border-red-500/20">{errorMsg}</div>}
+
+            {/* ETAPE 0 : ACCUEIL */}
+            {step === 0 && (
+              <div className="flex flex-col items-center justify-center text-center space-y-6 py-8 animate-in fade-in slide-in-from-bottom-4">
+                <div className="w-24 h-24 bg-teal-500/10 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(20,184,166,0.3)]">
+                  <Zap className="w-12 h-12 text-teal-400" />
+                </div>
+                <h1 className="text-3xl sm:text-4xl font-black text-white">{txt.welcome}</h1>
+                <p className="text-zinc-400 font-medium text-lg max-w-md">{txt.wSub}</p>
               </div>
-              <div className="space-y-4 pt-2">
-                {Object.keys(DAYS).map((dayKey) => (
-                  <div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 gap-2">
-                    <span className="font-bold w-28 text-zinc-800 dark:text-zinc-200">{DAYS[dayKey as keyof typeof DAYS]}</span>
-                    <div className="flex flex-wrap gap-4">
-                      {EXTRA_SPORTS.map((sport) => {
-                        const isChecked = (formData.weeklySchedule[dayKey as keyof typeof formData.weeklySchedule] || []).includes(sport.id);
-                        return (
-                          <div key={sport.id} className="flex items-center space-x-2">
-                            <Checkbox id={`${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => handleSportToggle(dayKey, sport.id, c as boolean)} />
-                            <Label htmlFor={`${dayKey}-${sport.id}`} className="text-xs cursor-pointer">{sport.label}</Label>
-                          </div>
-                        );
-                      })}
+            )}
+
+            {/* ETAPE 1 : BIOMÉTRIE */}
+            {step === 1 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-8">
+                <div className="mb-8">
+                  <h2 className="text-2xl font-black text-white">Identité & Biométrie</h2>
+                  <p className="text-zinc-400">Les bases de votre moteur métabolique.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-2"><Label className="text-zinc-300">Prénom</Label><Input value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white" /></div>
+                  <div className="space-y-2"><Label className="text-zinc-300">Nom</Label><Input value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white" /></div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label className="text-zinc-300">Date de Naissance</Label>
+                    <div className="flex space-x-2">
+                      <Select value={formData.birthDay} onValueChange={(v) => setFormData({...formData, birthDay: v})}><SelectTrigger className="w-[100px] bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Jour" /></SelectTrigger><SelectContent className="bg-zinc-900 border-zinc-800">{Array.from({length: 31}, (_, i) => i + 1).map(d => (<SelectItem key={d} value={d.toString().padStart(2, '0')}>{d}</SelectItem>))}</SelectContent></Select>
+                      <Select value={formData.birthMonth} onValueChange={(v) => setFormData({...formData, birthMonth: v})}><SelectTrigger className="flex-1 bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Mois" /></SelectTrigger><SelectContent className="bg-zinc-900 border-zinc-800">{Array.from({length: 12}, (_, i) => i + 1).map(m => (<SelectItem key={m} value={m.toString().padStart(2, '0')}>{m}</SelectItem>))}</SelectContent></Select>
+                      <Select value={formData.birthYear} onValueChange={(v) => setFormData({...formData, birthYear: v})}><SelectTrigger className="w-[120px] bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Année" /></SelectTrigger><SelectContent className="bg-zinc-900 border-zinc-800">{Array.from({length: 80}, (_, i) => new Date().getFullYear() - 14 - i).map(y => (<SelectItem key={y} value={y.toString()}>{y}</SelectItem>))}</SelectContent></Select>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-5 bg-zinc-50 dark:bg-zinc-950/50 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <Label>{txt.goal}</Label>
-                  <Select value={formData.goal} onValueChange={(v) => setFormData({...formData, goal: v})} required>
-                    <SelectTrigger className="bg-white dark:bg-zinc-900"><SelectValue/></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="perte_poids">Perte de masse grasse / Fat loss</SelectItem>
-                      <SelectItem value="recomposition">Recomposition corporelle / Recomp</SelectItem>
-                      <SelectItem value="performance">Performance & Explosivité / Power</SelectItem>
-                      <SelectItem value="prise_masse">Prise de masse musculaire / Bulking</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>{txt.freq}</Label>
-                  <Select value={formData.frequency} onValueChange={(v) => setFormData({...formData, frequency: v})} required>
-                    <SelectTrigger className="bg-white dark:bg-zinc-900"><SelectValue/></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2_jours">2 / {lang === 'FR' ? "semaine" : "week"}</SelectItem>
-                      <SelectItem value="3_jours">3 / {lang === 'FR' ? "semaine" : "week"}</SelectItem>
-                      <SelectItem value="4_jours">4 / {lang === 'FR' ? "semaine" : "week"}</SelectItem>
-                      <SelectItem value="5_plus">5+ / {lang === 'FR' ? "semaine" : "week"}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>{txt.exp}</Label>
-                  <Select value={formData.experience} onValueChange={(v) => setFormData({...formData, experience: v})} required>
-                    <SelectTrigger className="bg-white dark:bg-zinc-900"><SelectValue/></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="debutant">0-1 an</SelectItem>
-                      <SelectItem value="intermediaire">1-3 ans</SelectItem>
-                      <SelectItem value="avance">+3 ans</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-3 md:col-span-2">
-                  <Label>{txt.equip}</Label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900">
-                    <div className="flex items-center space-x-3"><Checkbox id="salle" checked={formData.equipment.includes("salle")} onCheckedChange={(c) => handleEquipmentChange("salle", c as boolean)} /><Label htmlFor="salle" className="text-sm cursor-pointer">Salle complète / Full Gym</Label></div>
-                    <div className="flex items-center space-x-3"><Checkbox id="home_gym" checked={formData.equipment.includes("home_gym")} onCheckedChange={(c) => handleEquipmentChange("home_gym", c as boolean)} /><Label htmlFor="home_gym" className="text-sm cursor-pointer">Home Gym</Label></div>
-                    <div className="flex items-center space-x-3"><Checkbox id="poids_corps" checked={formData.equipment.includes("poids_corps")} onCheckedChange={(c) => handleEquipmentChange("poids_corps", c as boolean)} /><Label htmlFor="poids_corps" className="text-sm cursor-pointer">Poids du corps / Bodyweight</Label></div>
+                  <div className="space-y-2"><Label className="text-zinc-300">Taille (cm)</Label><Input type="number" value={formData.height} onChange={(e) => setFormData({...formData, height: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white font-bold" /></div>
+                  <div className="space-y-2"><Label className="text-zinc-300">Poids Actuel (kg)</Label><Input type="number" step="0.1" value={formData.weight} onChange={(e) => setFormData({...formData, weight: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white font-bold" /></div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label className="text-zinc-300">Sexe Biologique (Pour calcul hormonal)</Label>
+                    <Select value={formData.gender} onValueChange={(v) => setFormData({...formData, gender: v})}>
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="homme">Homme</SelectItem>
+                        <SelectItem value="femme">Femme</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="space-y-5 bg-zinc-50 dark:bg-zinc-950/50 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>{txt.diet}</Label>
-                  <Select value={formData.diet} onValueChange={(v) => setFormData({...formData, diet: v})} required>
-                    <SelectTrigger className="bg-white dark:bg-zinc-900"><SelectValue/></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="aucune">Omnivore</SelectItem>
-                      <SelectItem value="vegetarien">Végétarien / Vegetarian</SelectItem>
-                      <SelectItem value="vegan">Vegan</SelectItem>
-                      <SelectItem value="halal_casher">Halal / Casher</SelectItem>
-                    </SelectContent>
-                  </Select>
+            {/* ETAPE 2 : MODE DE VIE */}
+            {step === 2 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-8">
+                <div className="mb-8">
+                  <h2 className="text-2xl font-black text-white">Mode de Vie & Sports</h2>
+                  <p className="text-zinc-400">Pour évaluer votre Dépense Énergétique (TDEE).</p>
                 </div>
-                <div className="space-y-2">
-                  <Label>{txt.activity}</Label>
-                  <Select value={formData.activityLevel} onValueChange={(v) => setFormData({...formData, activityLevel: v})} required>
-                    <SelectTrigger className="bg-white dark:bg-zinc-900"><SelectValue/></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sedentaire">Sédentaire / Sedentary</SelectItem>
-                      <SelectItem value="actif">Actif / Active</SelectItem>
-                      <SelectItem value="tres_actif">Très actif / Very Active</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label className="text-zinc-300">Activité Quotidienne (Travail)</Label>
+                    <Select value={formData.activityLevel} onValueChange={(v) => setFormData({...formData, activityLevel: v})}>
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="sedentaire">Sédentaire (Bureau, Voiture)</SelectItem>
+                        <SelectItem value="actif">Actif (Debout, Marche)</SelectItem>
+                        <SelectItem value="tres_actif">Très actif (Travail physique)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-300">Régime Alimentaire</Label>
+                    <Select value={formData.diet} onValueChange={(v) => setFormData({...formData, diet: v})}>
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="aucune">Omnivore (Classique)</SelectItem>
+                        <SelectItem value="vegetarien">Végétarien</SelectItem>
+                        <SelectItem value="vegan">Vegan</SelectItem>
+                        <SelectItem value="halal_casher">Halal / Casher</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-300">Expérience en Musculation</Label>
+                    <Select value={formData.experience} onValueChange={(v) => setFormData({...formData, experience: v})}>
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem>
+                        <SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem>
+                        <SelectItem value="avance">Avancé (+3 ans)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-zinc-300">Disponibilité (Séances/Semaine)</Label>
+                    <Select value={formData.frequency} onValueChange={(v) => setFormData({...formData, frequency: v})}>
+                      <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="2_jours">2 jours</SelectItem>
+                        <SelectItem value="3_jours">3 jours (Optimal)</SelectItem>
+                        <SelectItem value="4_jours">4 jours</SelectItem>
+                        <SelectItem value="5_plus">5 jours ou plus</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-3 sm:col-span-2 pt-4 border-t border-zinc-800">
+                    <Label className="text-zinc-300 flex items-center text-base"><Activity className="w-5 h-5 mr-2 text-indigo-400"/> Autres sports pratiqués ? (Optionnel)</Label>
+                    <p className="text-xs text-zinc-500">Pour que l'algorithme gère votre fatigue nerveuse.</p>
+                    <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                      {Object.keys(DAYS).map((dayKey) => (
+                        <div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-950 gap-2">
+                          <span className="font-bold w-24 text-zinc-300 text-sm">{DAYS[dayKey as keyof typeof DAYS]}</span>
+                          <div className="flex flex-wrap gap-2">
+                            {EXTRA_SPORTS.map((sport) => {
+                              const isChecked = (formData.weeklySchedule[dayKey as keyof typeof formData.weeklySchedule] || []).includes(sport.id);
+                              return (
+                                <div key={sport.id} className="flex items-center space-x-1 bg-zinc-900 px-2 py-1 rounded">
+                                  <Checkbox id={`${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => handleSportToggle(dayKey, sport.id, c as boolean)} className="border-zinc-700 data-[state=checked]:bg-teal-500" />
+                                  <Label htmlFor={`${dayKey}-${sport.id}`} className="text-[10px] cursor-pointer text-zinc-400">{sport.label}</Label>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2 md:col-span-2"><Label>{txt.med}</Label><Input required value={formData.medicalConditions} onChange={(e) => setFormData({...formData, medicalConditions: e.target.value})} className="bg-white dark:bg-zinc-900" /></div>
               </div>
-            </div>
+            )}
 
-            {errorMsg && <div className="p-4 rounded-lg text-sm font-bold text-center bg-red-50 text-red-600 border border-red-200">Erreur : {errorMsg}</div>}
+            {/* ETAPE 3 : OBJECTIF & MATERIEL */}
+            {step === 3 && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-right-8">
+                <div className="mb-8">
+                  <h2 className="text-2xl font-black text-white">Objectif & Arsenal</h2>
+                  <p className="text-zinc-400">La dernière étape avant la génération.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-6">
+                  <div className="space-y-3">
+                    <Label className="text-zinc-300 text-base">Votre Objectif Ultime</Label>
+                    <Select value={formData.goal} onValueChange={(v) => setFormData({...formData, goal: v})}>
+                      <SelectTrigger className="h-14 text-lg font-bold bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="perte_poids">🔥 Perte de Masse Grasse (Déficit)</SelectItem>
+                        <SelectItem value="recomposition">⚖️ Recomposition Corporelle (Maintien)</SelectItem>
+                        <SelectItem value="performance">⚡ Performance & Force (Léger surplus)</SelectItem>
+                        <SelectItem value="prise_masse">💪 Prise de Masse Musculaire (Surplus)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-3 pt-4 border-t border-zinc-800">
+                    <Label className="text-zinc-300 text-base">Où allez-vous vous entraîner ?</Label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("salle") ? 'border-teal-500 bg-teal-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
+                        <Checkbox className="sr-only" checked={formData.equipment.includes("salle")} onCheckedChange={(c) => handleEquipmentChange("salle", c as boolean)} />
+                        <Dumbbell className={`w-8 h-8 mb-2 ${formData.equipment.includes("salle") ? 'text-teal-400' : 'text-zinc-500'}`} />
+                        <span className="font-bold text-sm text-center text-zinc-300">Salle Complète</span>
+                      </label>
+                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("home_gym") ? 'border-teal-500 bg-teal-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
+                        <Checkbox className="sr-only" checked={formData.equipment.includes("home_gym")} onCheckedChange={(c) => handleEquipmentChange("home_gym", c as boolean)} />
+                        <Dumbbell className={`w-8 h-8 mb-2 ${formData.equipment.includes("home_gym") ? 'text-teal-400' : 'text-zinc-500'}`} />
+                        <span className="font-bold text-sm text-center text-zinc-300">Home Gym (Haltères)</span>
+                      </label>
+                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("poids_corps") ? 'border-teal-500 bg-teal-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
+                        <Checkbox className="sr-only" checked={formData.equipment.includes("poids_corps")} onCheckedChange={(c) => handleEquipmentChange("poids_corps", c as boolean)} />
+                        <Activity className={`w-8 h-8 mb-2 ${formData.equipment.includes("poids_corps") ? 'text-teal-400' : 'text-zinc-500'}`} />
+                        <span className="font-bold text-sm text-center text-zinc-300">Poids du Corps</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-4 border-t border-zinc-800">
+                    <Label className="text-zinc-500">Blessures ou contre-indications (Optionnel)</Label>
+                    <Input value={formData.medicalConditions} onChange={(e) => setFormData({...formData, medicalConditions: e.target.value})} className="bg-zinc-950 border-zinc-800 text-zinc-400" />
+                  </div>
+                </div>
+              </div>
+            )}
 
           </CardContent>
-          <CardFooter className="pt-6 pb-8 px-8">
-            <Button type="submit" className="w-full text-xl h-16 font-extrabold shadow-lg bg-teal-500 hover:bg-teal-600 text-white" disabled={loading || !userId}>
-              {loading ? "..." : txt.submit}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+
+          {/* FOOTER : BOUTONS DE NAVIGATION */}
+          <div className="p-6 bg-zinc-950/50 border-t border-zinc-800 flex justify-between items-center rounded-b-3xl">
+            {step > 0 ? (
+              <Button type="button" variant="ghost" onClick={prevStep} className="text-zinc-400 hover:text-white hover:bg-zinc-800 font-bold">
+                <ChevronLeft className="w-5 h-5 mr-1" /> {txt.back}
+              </Button>
+            ) : <div></div>}
+
+            {step < 3 ? (
+              <Button type="button" onClick={nextStep} className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-black tracking-wide px-8 py-6 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)]">
+                {txt.next} <ChevronRight className="w-5 h-5 ml-1" />
+              </Button>
+            ) : (
+              <Button type="button" onClick={handleSubmit} disabled={loading} className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-black tracking-wide px-8 py-6 rounded-xl shadow-[0_0_30px_rgba(20,184,166,0.5)]">
+                {loading ? "..." : <><CheckCircle2 className="w-5 h-5 mr-2" /> {txt.finish}</>}
+              </Button>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -25,7 +25,7 @@ const EXTRA_SPORTS = [
   { id: "randonnee", label: "Randonnée / Marche" }, { id: "padel_tennis", label: "Padel / Tennis" } 
 ];
 
-// 🎨 GALERIE D'AVATARS (Incluant la diversité)
+// 🎨 GALERIE D'AVATARS
 const AVATAR_LIST = [
   { id: "default", label: "Initial" },
   { id: "🧑", label: "Gars 1" }, { id: "👦🏽", label: "Gars 2" }, { id: "👨🏿‍🦲", label: "Gars 3" }, { id: "👱‍♂️", label: "Gars 4" }, { id: "🧔🏾‍♂️", label: "Gars 5" },
@@ -225,7 +225,6 @@ export default function DashboardPage() {
     if (isCorrect) {
       setQuizState('success');
       
-      // On passe par le moteur de gamification pour sécuriser le déblocage des badges
       const gamificationResult = await awardQuizXP(data.profile.id, data.dailyQuiz.difficulty);
       const newAnsweredArray = [...(data.gamification?.answered_quizzes || []), data.dailyQuiz.id];
       
@@ -368,7 +367,6 @@ export default function DashboardPage() {
           <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
         </div>
         
-        {/* 🎨 UX : AVATAR MASSIF (W-16) & ENGRENAGE (Golden Standard) */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="relative outline-none group focus:ring-2 focus:ring-teal-500 rounded-full shrink-0">
@@ -405,7 +403,6 @@ export default function DashboardPage() {
         </DropdownMenu>
       </div>
 
-      {/* GAMIFICATION WIDGET */}
       <div 
         onClick={() => router.push("/profile")}
         className="cursor-pointer group relative bg-white/60 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 sm:p-6 shadow-sm hover:shadow-md hover:border-teal-500/50 transition-all overflow-hidden"
@@ -428,7 +425,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 🧠 DAILY BRAIN GAIN (QUIZ WIDGET) */}
       {dailyQuiz && (
         <Card className={`border-2 transition-all duration-500 overflow-hidden relative ${quizState === 'success' ? 'border-green-500 bg-green-50 dark:bg-green-900/20' : quizState === 'fail' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-indigo-500/30 bg-white dark:bg-zinc-900 shadow-[0_10px_40px_-15px_rgba(99,102,241,0.2)]'}`}>
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none"><Brain className="w-32 h-32" /></div>
@@ -562,18 +558,19 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* MODALE DE PARTAGE QUIZ */}
+      {/* 🛡️ MODALE DE PARTAGE QUIZ (AVEC VOTRE IMAGE EN BACKGROUND) */}
       <Dialog open={showQuizShareModal} onOpenChange={setShowQuizShareModal}>
         <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[600px] outline-none">
           <div className="flex-1 overflow-y-auto flex flex-col items-center relative hide-scrollbar p-6">
             <div className="absolute -left-[9999px]">
               <div ref={quizCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-center text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
-                {/* L'URL A ÉTÉ CHANGÉE ICI POUR UNE IMAGE SANS WATERMARK */}
-                <img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?q=80&w=1080&h=1920&fit=crop" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0 opacity-40" crossOrigin="anonymous" />
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent z-0"></div>
+                
+                {/* INJECTION DE VOTRE IMAGE CANVA */}
+                <img src="/quiz-share-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent z-0"></div>
                 
                 <div className="relative z-10 text-center space-y-12 mt-32">
-                  <div className="flex justify-center mb-12"><div className="bg-indigo-500/20 p-12 rounded-full shadow-[0_0_120px_rgba(99,102,241,0.5)]"><Brain className="w-64 h-64 text-indigo-400 drop-shadow-[0_0_40px_rgba(99,102,241,0.8)]" /></div></div>
+                  <div className="flex justify-center mb-12"><div className="bg-indigo-500/10 p-12 rounded-full shadow-[0_0_120px_rgba(99,102,241,0.5)]"><Brain className="w-64 h-64 text-indigo-400 drop-shadow-[0_0_40px_rgba(99,102,241,0.8)]" /></div></div>
                   <h2 className="text-[120px] font-black uppercase tracking-tighter leading-none text-white drop-shadow-2xl">{data?.profile?.first_name}</h2>
                   <p className="text-[60px] font-bold text-indigo-300 uppercase tracking-widest">{lang === 'FR' ? "A atteint le rang" : "Has reached the rank"}</p>
                   <div className="bg-zinc-950/80 backdrop-blur-xl border-4 border-indigo-500/50 rounded-full py-8 px-24 shadow-[0_0_80px_rgba(99,102,241,0.3)] mt-8">
@@ -588,11 +585,12 @@ export default function DashboardPage() {
             </div>
 
             <div className="w-full max-w-[280px] aspect-[9/16] bg-zinc-950 rounded-2xl border border-zinc-800 relative flex flex-col items-center justify-between p-5 shadow-2xl overflow-hidden shrink-0 mt-8">
-              {/* L'URL A ÉTÉ CHANGÉE ICI POUR L'APERCU MODALE AUSSI */}
-              <img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?q=80&w=400&h=700&fit=crop" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0 opacity-40" />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent z-0"></div>
               
-              <div className="mt-8 bg-indigo-500/20 p-4 rounded-full shadow-[0_0_30px_rgba(99,102,241,0.5)] relative z-10"><Brain className="w-12 h-12 text-indigo-400" /></div>
+              {/* APERÇU MODALE - AVEC VOTRE IMAGE CANVA */}
+              <img src="/quiz-share-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent z-0"></div>
+              
+              <div className="mt-8 bg-indigo-500/10 p-4 rounded-full shadow-[0_0_30px_rgba(99,102,241,0.5)] relative z-10"><Brain className="w-12 h-12 text-indigo-400" /></div>
               <h3 className="text-3xl font-black text-white uppercase tracking-tighter leading-none mt-6 text-center z-10 drop-shadow-md">{data?.profile?.first_name}</h3>
               <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest z-10">{lang === 'FR' ? "Nouveau Rang" : "New Rank"}</p>
               

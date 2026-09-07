@@ -1,16 +1,14 @@
 import imageCompression from 'browser-image-compression';
 
 /**
- * Compresse un fichier image côté client
- * @param file - Le fichier image à compresser
- * @returns Le fichier compressé
+ * Compresse un fichier image côté client (Standard Silicon Valley)
  */
 export async function compressImageFile(file: File): Promise<File> {
   const options = {
-    maxSizeMB: 1, // Limite à 1MB
-    maxWidthOrHeight: 1920, // Dimension maximale de 1920px
+    maxSizeMB: 0.5, // 500 KB (Ultra rapide à uploader)
+    maxWidthOrHeight: 1080, // Résolution HD pour mobile
     useWebWorker: true,
-    fileType: 'image/jpeg' as const,
+    fileType: 'image/webp' as const, // Format WebP (30% plus léger que JPEG)
   };
 
   try {
