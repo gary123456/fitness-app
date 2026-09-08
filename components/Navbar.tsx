@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon, Camera, User } from "lucide-react";
+import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon, Camera, User, Wrench } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/lib/useLanguage";
@@ -22,8 +22,8 @@ export function Navbar() {
   };
 
   const t = {
-    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", track: "Progression", profile: "Profil", logout: "Sortir" },
-    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", track: "Progress", profile: "Profile", logout: "Logout" }
+    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", track: "Progression", tools: "Outils", profile: "Profil", logout: "Sortir" },
+    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", track: "Progress", tools: "Tools", profile: "Profile", logout: "Logout" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -32,6 +32,7 @@ export function Navbar() {
     { name: txt.prog, href: "/workout", icon: Dumbbell },
     { name: txt.track, href: "/progress", icon: Camera },
     { name: txt.stats, href: "/analytics", icon: Activity },
+    { name: txt.tools, href: "/tools", icon: Wrench },
     { name: txt.profile, href: "/profile", icon: User },
   ];
 
@@ -117,7 +118,7 @@ export function Navbar() {
                   isActive ? "text-teal-500 dark:text-teal-400" : "text-zinc-400 dark:text-zinc-500"
                 }`}>
                 <Icon className={`h-6 w-6 ${isActive ? "stroke-[2.5px]" : "stroke-[2px]"}`} />
-                <span className="text-[9px] font-extrabold uppercase tracking-wider text-center">{item.name}</span>
+                <span className="text-[9px] font-extrabold uppercase tracking-wider text-center line-clamp-1">{item.name}</span>
               </Link>
             );
           })}
