@@ -75,12 +75,17 @@ const fetchDashboardData = async () => {
   
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   
-  // 🛡️ SCALING OPTIMIZATION: Limitation stricte de l'historique à 90 jours
-  const d90 = new Date(); d90.setDate(d90.getDate() - 90);
+  // 🛡️ SCALING OPTIMIZATION: On récupère les métriques globales depuis le RPC (Tonnage d'hier et ACWR)
+  const { data: dashMetrics } = await supabase.rpc('get_dashboard_metrics', { p_user_id: user.id });
+  const acwrScore = dashMetrics?.acwr || 1;
+  const yesterdayVol = dashMetrics?.yesterday || 0;
+
+  // On télécharge uniquement les 30 derniers jours de logs pour l'UI (La série de flammes et le tonnage visuel)
+  const d30 = new Date(); d30.setDate(d30.getDate() - 30);
   const { data: logs } = await supabase.from("workout_logs")
     .select("created_at, weight, reps, session_id")
     .eq("user_id", user.id)
-    .gte("created_at", d90.toISOString());
+    .gte("created_at", d30.toISOString());
 
   const { data: gamification } = await supabase.from("user_gamification").select("*").eq("user_id", user.id).maybeSingle();
 
@@ -107,23 +112,7 @@ const fetchDashboardData = async () => {
     daysSinceLastWeighIn = 999;
   }
 
-  const d28 = new Date(); d28.setDate(d28.getDate() - 28);
-  const d7 = new Date(); d7.setDate(d7.getDate() - 7);
-  const d1 = new Date(); d1.setDate(d1.getDate() - 1);
-  const yStr = d1.toISOString().split('T')[0];
   const todayStr = new Date().toISOString().split('T')[0];
-
-  let vol7 = 0; let vol28 = 0; let yesterdayVol = 0;
-  (logs || []).filter(l => new Date(l.created_at) >= d28).forEach(l => {
-    const v = (l.weight || 0) * (l.reps || 0);
-    vol28 += v;
-    if (new Date(l.created_at) >= d7) vol7 += v;
-    if (l.created_at.startsWith(yStr)) yesterdayVol += v;
-  });
-  
-  const avg4Weeks = vol28 / 4;
-  const acwrScore = avg4Weeks > 0 ? Number((vol7 / avg4Weeks).toFixed(2)) : 1;
-
   const validSleepQuality = profile?.last_sleep_check === todayStr ? profile.sleep_quality : 'moyen';
 
   let rScore = 100;
@@ -163,8 +152,9 @@ const fetchDashboardData = async () => {
     const { data: session } = await supabase.from("workout_sessions").select(`id, workout_exercises(id)`).eq("program_id", program.id).eq("day_name", todayKey).single();
     if (session && session.workout_exercises && session.workout_exercises.length > 0) {
       todayWorkoutId = session.id;
-      const todayLogs = (logs || []).filter(l => l.session_id === todayWorkoutId && l.created_at.startsWith(todayStr));
-      if (todayLogs.length > 0) isTodayWorkoutCompleted = true;
+      
+      const { data: checkLogs } = await supabase.from("workout_logs").select("id").eq("session_id", todayWorkoutId).gte("created_at", todayStr + "T00:00:00.000Z").limit(1);
+      if (checkLogs && checkLogs.length > 0) isTodayWorkoutCompleted = true;
     }
   }
   return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [], daysSinceLastWeighIn, currentActualBodyFat, currentWeight, rScore };
