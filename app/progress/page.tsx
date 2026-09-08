@@ -75,12 +75,13 @@ export default function ProgressPage() {
 
   // ÉTATS DES MENSURATIONS
   const [weight, setWeight] = useState("");
+  const [bodyFat, setBodyFat] = useState(""); // 🛡️ PHASE 4 : Ajout du champ Masse Grasse
   const [arms, setArms] = useState("");
   const [chest, setChest] = useState("");
   const [waist, setWaist] = useState("");
   const [thighs, setThighs] = useState("");
   
-  // 🛡️ NOUVEAU : GESTION DE L'ÉDITION
+  // 🛡️ GESTION DE L'ÉDITION
   const [editingMeasId, setEditingMeasId] = useState<string | null>(null);
 
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -98,15 +99,16 @@ export default function ProgressPage() {
   const [successMessage, setSuccessMessage] = useState<string>("");
 
   const t = {
-    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", weight: "Poids (kg)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Supprimer cette donnée ?", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun." },
-    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", weight: "Weight (kg)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Delete this data?", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach." }
+    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", weight: "Poids (kg)", bfLabel: "Masse Grasse (%)", bfPlaceholder: "Optionnel (Ex: 15)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Supprimer cette donnée ?", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun." },
+    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", weight: "Weight (kg)", bfLabel: "Body Fat (%)", bfPlaceholder: "Optional (Ex: 15)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Delete this data?", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
   const { data, mutate, isLoading } = useSWR('progressData', fetchProgressData, {
     onSuccess: (res) => {
-      if (res.measurements.length > 0 && !weight && !arms && !chest && !waist && !thighs && !editingMeasId) { 
+      if (res.measurements.length > 0 && !weight && !arms && !chest && !waist && !thighs && !editingMeasId && !bodyFat) { 
         setWeight(res.currentWeight?.toString() || res.measurements[0].weight_kg?.toString() || "");
+        setBodyFat(res.measurements[0].body_fat_percentage?.toString() || ""); // 🛡️ PHASE 4
         setArms(res.measurements[0].arms_cm?.toString() || "");
         setChest(res.measurements[0].chest_cm?.toString() || "");
         setWaist(res.measurements[0].waist_cm?.toString() || "");
@@ -119,12 +121,13 @@ export default function ProgressPage() {
     if (!data?.user) return;
     
     const w = parseFloat(weight) || 0;
+    const bf = bodyFat ? parseFloat(bodyFat) : null; // 🛡️ PHASE 4
     const a = parseFloat(arms) || 0;
     const c = parseFloat(chest) || 0;
     const wa = parseFloat(waist) || 0;
     const th = parseFloat(thighs) || 0;
 
-    if (w === 0 && a === 0 && c === 0 && wa === 0 && th === 0) {
+    if (w === 0 && a === 0 && c === 0 && wa === 0 && th === 0 && !bf) {
       alert(txt.emptyMeasErr); return;
     }
 
@@ -133,6 +136,7 @@ export default function ProgressPage() {
     // 🛡️ LOGIQUE ARCHITECTURALE : UPDATE ou INSERT
     const payload = { 
       weight_kg: w || null, 
+      body_fat_percentage: bf, // 🛡️ PHASE 4
       arms_cm: a || null, 
       chest_cm: c || null, 
       waist_cm: wa || null, 
@@ -152,6 +156,7 @@ export default function ProgressPage() {
     await mutate(); 
     setSaving(false);
     setEditingMeasId(null); // On sort du mode édition
+    setBodyFat(""); // Reset
     
     setSuccessMessage(txt.successMsgMeas);
     setShowSuccessModal(true);
@@ -160,6 +165,7 @@ export default function ProgressPage() {
   const handleEditMeas = (m: any) => {
     setEditingMeasId(m.id);
     setWeight(m.weight_kg?.toString() || "");
+    setBodyFat(m.body_fat_percentage?.toString() || ""); // 🛡️ PHASE 4
     setArms(m.arms_cm?.toString() || "");
     setChest(m.chest_cm?.toString() || "");
     setWaist(m.waist_cm?.toString() || "");
@@ -267,9 +273,16 @@ export default function ProgressPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               
-              <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                <Label className="font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest mb-2 block">{txt.weight}</Label>
-                <Input type="number" step="0.1" value={weight} onChange={e=>setWeight(e.target.value)} className="font-black text-2xl h-14 dark:bg-zinc-900 dark:border-zinc-700 text-zinc-900 dark:text-white" placeholder="0.0" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                  <Label className="font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest mb-2 block">{txt.weight}</Label>
+                  <Input type="number" step="0.1" value={weight} onChange={e=>setWeight(e.target.value)} className="font-black text-2xl h-14 dark:bg-zinc-900 dark:border-zinc-700 text-zinc-900 dark:text-white" placeholder="0.0" />
+                </div>
+                {/* 🛡️ PHASE 4 : CHAMP MASSE GRASSE */}
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                  <Label className="font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest mb-2 block">{txt.bfLabel}</Label>
+                  <Input type="number" step="0.1" value={bodyFat} onChange={e=>setBodyFat(e.target.value)} className="font-black text-2xl h-14 dark:bg-zinc-900 dark:border-zinc-700 text-zinc-900 dark:text-white" placeholder={txt.bfPlaceholder} />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -283,7 +296,9 @@ export default function ProgressPage() {
                 {editingMeasId && (
                   <Button variant="outline" onClick={() => {
                     setEditingMeasId(null);
-                    setWeight(measurements[0]?.weight_kg?.toString() || "");
+                    // 🛡️ CORRECTION DU BUG TYPESCRIPT ICI (Utilisation de optional chaining)
+                    setWeight(data?.currentWeight?.toString() || "");
+                    setBodyFat(measurements[0]?.body_fat_percentage?.toString() || "");
                     setArms(measurements[0]?.arms_cm?.toString() || "");
                     setChest(measurements[0]?.chest_cm?.toString() || "");
                     setWaist(measurements[0]?.waist_cm?.toString() || "");
@@ -313,7 +328,13 @@ export default function ProgressPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 grid grid-cols-2 gap-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  {m.weight_kg && <div className="col-span-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg flex justify-between font-bold text-teal-700 dark:text-teal-400 border border-teal-100 dark:border-teal-900"><span>{txt.weight}</span><span>{m.weight_kg} kg</span></div>}
+                  {/* 🛡️ Affiche le poids ET la masse grasse sur la carte si elle existe */}
+                  {(m.weight_kg || m.body_fat_percentage) && (
+                    <div className="col-span-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg flex justify-between font-bold text-teal-700 dark:text-teal-400 border border-teal-100 dark:border-teal-900">
+                      <span>{txt.weight} / BF%</span>
+                      <span>{m.weight_kg ? `${m.weight_kg} kg` : '-'} {m.body_fat_percentage ? `(${m.body_fat_percentage}%)` : ''}</span>
+                    </div>
+                  )}
                   <div>{txt.arms}: <span className="font-bold text-zinc-900 dark:text-zinc-100">{m.arms_cm || '-'}</span></div>
                   <div>{txt.chest}: <span className="font-bold text-zinc-900 dark:text-zinc-100">{m.chest_cm || '-'}</span></div>
                   <div>{txt.waist}: <span className="font-bold text-zinc-900 dark:text-zinc-100">{m.waist_cm || '-'}</span></div>
@@ -428,7 +449,6 @@ export default function ProgressPage() {
         </div>
       )}
 
-      {/* MODALES ENLARGE / SUCCESS / WIZARD INCHANGÉES */}
       <Dialog open={enlargeModal.show} onOpenChange={(open) => !open && setEnlargeModal({ show: false, url: "" })}>
         <DialogContent className="max-w-3xl w-full bg-black/95 border-none p-0 flex justify-center items-center h-[100dvh] sm:h-auto overflow-hidden">
           <button onClick={() => setEnlargeModal({ show: false, url: "" })} className="absolute top-12 right-6 sm:top-4 sm:right-4 z-50 p-3 bg-black/50 text-white rounded-full hover:bg-black/80 backdrop-blur-md">

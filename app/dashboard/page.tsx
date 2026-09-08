@@ -77,10 +77,10 @@ const fetchDashboardData = async () => {
   const { data: logs } = await supabase.from("workout_logs").select("created_at, weight, reps, session_id").eq("user_id", user.id);
   const { data: gamification } = await supabase.from("user_gamification").select("*").eq("user_id", user.id).maybeSingle();
 
-  // 🧠 SMART WEIGH-IN REMINDER LOGIC
+  // 🧠 SMART WEIGH-IN REMINDER LOGIC & 🛡️ SINGLE SOURCE OF TRUTH (BF%)
   const { data: lastMeasurement } = await supabase
     .from("measurements")
-    .select("created_at")
+    .select("created_at, weight_kg, body_fat_percentage")
     .eq("user_id", user.id)
     .not("weight_kg", "is", null)
     .order("created_at", { ascending: false })
@@ -88,10 +88,15 @@ const fetchDashboardData = async () => {
     .single();
 
   let daysSinceLastWeighIn = 0;
+  let currentActualBodyFat = null;
+  let currentWeight = profile.weight_kg;
+
   if (lastMeasurement) {
     const lastDate = new Date(lastMeasurement.created_at);
     const today = new Date();
     daysSinceLastWeighIn = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
+    currentActualBodyFat = lastMeasurement.body_fat_percentage;
+    currentWeight = lastMeasurement.weight_kg;
   } else {
     daysSinceLastWeighIn = 999;
   }
@@ -128,7 +133,7 @@ const fetchDashboardData = async () => {
       if (todayLogs.length > 0) isTodayWorkoutCompleted = true;
     }
   }
-  return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [], daysSinceLastWeighIn };
+  return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [], daysSinceLastWeighIn, currentActualBodyFat, currentWeight };
 };
 
 export default function DashboardPage() {
@@ -162,6 +167,7 @@ export default function DashboardPage() {
   const [editLastName, setEditLastName] = useState("");
   const [editHeight, setEditHeight] = useState("");
   const [editWeight, setEditWeight] = useState("");
+  const [editBodyFat, setEditBodyFat] = useState(""); // 🛡️ NOUVEAU CHAMP BF%
   const [editGoal, setEditGoal] = useState("");
   const [editExperience, setEditExperience] = useState("");
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
@@ -174,7 +180,8 @@ export default function DashboardPage() {
       setEditFirstName(data.profile.first_name || "");
       setEditLastName(data.profile.last_name || "");
       setEditHeight(data.profile.height_cm?.toString() || "");
-      setEditWeight(data.profile.weight_kg?.toString() || "");
+      setEditWeight(data.currentWeight?.toString() || data.profile.weight_kg?.toString() || "");
+      setEditBodyFat(data.currentActualBodyFat ? data.currentActualBodyFat.toString() : "");
       setEditGoal(data.profile.current_goal);
       setEditExperience(data.profile.experience_level || "debutant");
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
@@ -189,11 +196,11 @@ export default function DashboardPage() {
         });
       });
     }
-  }, [data?.profile]);
+  }, [data]);
 
   const t = {
-    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Le Radar Corporel", imgSub: "L'Indice de Masse Grasse est une estimation de la quantité de gras sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a" },
-    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Radar", imgSub: "The Body Fat Index is an estimation of the amount of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story", reqCal: "Calibration Required", reqCalSub: "Last weigh-in" }
+    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Masse Grasse", imgSub: "Indice de masse grasse sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Précision Clinique)" },
+    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Fat", imgSub: "Percentage of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Clinical Precision)" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -269,6 +276,8 @@ export default function DashboardPage() {
     try {
       const newWeight = parseFloat(editWeight);
       const newHeight = parseFloat(editHeight);
+      const newBF = editBodyFat ? parseFloat(editBodyFat) : null;
+      
       await supabase.from("profiles").update({ 
         first_name: editFirstName,
         last_name: editLastName,
@@ -281,7 +290,15 @@ export default function DashboardPage() {
         avatar_url: editAvatar
       }).eq("id", data.profile.id);
       
-      if (newWeight !== data.profile.weight_kg) await supabase.from("measurements").insert([{ user_id: data.profile.id, weight_kg: newWeight }]);
+      // 🛡️ GESTION DU SINGLE SOURCE OF TRUTH (Création d'une nouvelle ligne si on change Poids ou Masse Grasse)
+      if (newWeight !== data.currentWeight || newBF !== data.currentActualBodyFat) {
+        await supabase.from("measurements").insert([{ 
+          user_id: data.profile.id, 
+          weight_kg: newWeight,
+          body_fat_percentage: newBF
+        }]);
+      }
+      
       await mutate();
       setIsEditModalOpen(false); setIsGoalModalOpen(false); setIsBioModalOpen(false);
     } catch (error) { alert("Erreur."); } finally { setActionLoading(false); }
@@ -373,20 +390,25 @@ export default function DashboardPage() {
     );
   }
 
-  const { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs, daysSinceLastWeighIn } = data;
+  const { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs, daysSinceLastWeighIn, currentActualBodyFat, currentWeight } = data;
   const age = calculateAge(profile.birth_date);
-  const bmi = calculateBMI(profile.weight_kg, profile.height_cm);
-  const bmr = calculateBMR(profile.weight_kg, profile.height_cm, age, profile.gender);
+  const bmi = calculateBMI(currentWeight, profile.height_cm);
+  
+  // 🧬 MOTEUR MATHÉMATIQUE (BMR dynamically switches to Katch-McArdle if BF is provided)
+  const bmr = calculateBMR(currentWeight, profile.height_cm, age, profile.gender, currentActualBodyFat);
   const tdee = calculateTDEE(bmr, profile.activity_level);
-  const img = calculateEstimatedBodyFat(bmi, age, profile.gender);
+  
+  const estimatedImg = calculateEstimatedBodyFat(bmi, age, profile.gender);
+  const displayedImg = currentActualBodyFat || estimatedImg; // Utilise la valeur réelle si elle existe
+  
   const idealWeight = calculateIdealWeight(profile.height_cm, profile.gender);
-  const waterTotal = calculateWaterIntake(profile.weight_kg, profile.activity_level);
+  const waterTotal = calculateWaterIntake(currentWeight, profile.activity_level);
   const waterPure = Number((waterTotal * 0.7).toFixed(1)); 
   
   const displayGoal = editGoal || profile.current_goal;
   const targetCals = calculateTargetCalories(tdee, displayGoal); 
-  const macros = calculateMacros(profile.weight_kg, targetCals, displayGoal, profile.training_frequency);
-  const micros = getMicronutrients(profile.gender, profile.training_frequency, profile.weight_kg);
+  const macros = calculateMacros(currentWeight, targetCals, displayGoal, profile.training_frequency);
+  const micros = getMicronutrients(profile.gender, profile.training_frequency, currentWeight);
   
   const streak = calculateStreak(logs);
   const currentWeek = getCurrentWeekStreak(logs, lang);
@@ -521,6 +543,8 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {renderSmartBanner()}
+
       <div 
         onClick={() => router.push("/profile")}
         className="cursor-pointer group relative bg-white/60 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 sm:p-6 shadow-sm hover:shadow-md hover:border-teal-500/50 transition-all overflow-hidden"
@@ -623,7 +647,10 @@ export default function DashboardPage() {
             <CardTitle className="text-sm font-bold text-zinc-600 dark:text-zinc-300 flex items-center">{txt.imgTitle}</CardTitle>
             <Activity className="h-5 w-5 text-indigo-500 group-hover:scale-110 transition-transform" />
           </CardHeader>
-          <CardContent><div className="text-3xl font-black text-zinc-900 dark:text-zinc-50">~{img}<span className="text-lg font-medium text-zinc-500">%</span></div><p className="text-xs text-zinc-500 mt-1 font-medium">{lang === 'FR' ? "Cliquez pour analyser ➔" : "Click to analyze ➔"}</p></CardContent>
+          <CardContent>
+            <div className="text-3xl font-black text-zinc-900 dark:text-zinc-50">~{displayedImg}<span className="text-lg font-medium text-zinc-500">%</span></div>
+            <p className="text-xs text-indigo-500 font-bold mt-1">{currentActualBodyFat ? "★ " + (lang === 'FR' ? "Valeur Réelle" : "Actual Value") : (lang === 'FR' ? "Valeur Estimée" : "Estimated Value")}</p>
+          </CardContent>
         </Card>
       </div>
 
@@ -676,93 +703,18 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* MODALES RESTE DU CODE INCHANGÉ (Quiz, Settings, etc.) */}
-      <Dialog open={showQuizShareModal} onOpenChange={setShowQuizShareModal}>
-        <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[600px] outline-none">
-          <div className="flex-1 overflow-y-auto flex flex-col items-center relative hide-scrollbar p-6">
-            <div className="absolute -left-[9999px]">
-              <div ref={quizCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-center text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
-                
-                <img src="/quiz-share-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent z-0"></div>
-                
-                <div className="relative z-10 text-center space-y-12 mt-32">
-                  <div className="flex justify-center mb-12"><div className="bg-indigo-500/10 p-12 rounded-full shadow-[0_0_120px_rgba(99,102,241,0.5)]"><Brain className="w-64 h-64 text-indigo-400 drop-shadow-[0_0_40px_rgba(99,102,241,0.8)]" /></div></div>
-                  <h2 className="text-[120px] font-black uppercase tracking-tighter leading-none text-white drop-shadow-2xl">{data?.profile?.first_name}</h2>
-                  <p className="text-[60px] font-bold text-indigo-300 uppercase tracking-widest">{lang === 'FR' ? "A atteint le rang" : "Has reached the rank"}</p>
-                  <div className="bg-zinc-950/80 backdrop-blur-xl border-4 border-indigo-500/50 rounded-full py-8 px-24 shadow-[0_0_80px_rgba(99,102,241,0.3)] mt-8">
-                    <span className="text-[80px] font-black text-indigo-400 uppercase tracking-widest">{quizMilestoneData.rank}</span>
-                  </div>
-                </div>
-                <div className="absolute bottom-24 relative z-10 flex items-center space-x-6 bg-zinc-950/90 px-16 py-8 rounded-full backdrop-blur-md border border-zinc-800">
-                  <Brain className="w-16 h-16 text-indigo-500" />
-                  <span className="text-5xl font-black tracking-widest text-zinc-100">VIVEX BRAIN GAIN</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="w-full max-w-[280px] aspect-[9/16] bg-zinc-950 rounded-2xl border border-zinc-800 relative flex flex-col items-center justify-between p-5 shadow-2xl overflow-hidden shrink-0 mt-8">
-              <img src="/quiz-share-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent z-0"></div>
-              
-              <div className="mt-8 bg-indigo-500/10 p-4 rounded-full shadow-[0_0_30px_rgba(99,102,241,0.5)] relative z-10"><Brain className="w-12 h-12 text-indigo-400" /></div>
-              <h3 className="text-3xl font-black text-white uppercase tracking-tighter leading-none mt-6 text-center z-10 drop-shadow-md">{data?.profile?.first_name}</h3>
-              <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest z-10">{lang === 'FR' ? "Nouveau Rang" : "New Rank"}</p>
-              
-              <div className="w-full mt-auto mb-8 relative z-10">
-                <div className="bg-zinc-950/80 backdrop-blur-sm rounded-xl p-6 text-center border-2 border-indigo-500/50 flex flex-col shadow-[0_0_30px_rgba(99,102,241,0.2)]">
-                  <span className="text-xl font-black text-indigo-400 uppercase tracking-widest text-balance">{quizMilestoneData.rank}</span>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2 opacity-80 relative z-10 mb-2"><Brain className="w-4 h-4 text-indigo-500" /><span className="text-xs font-black tracking-widest text-zinc-300">VIVEX</span></div>
-            </div>
-          </div>
-          <div className="p-4 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800 w-full shrink-0 z-50">
-            <Button onClick={shareQuizMilestone} disabled={isSharing} className="w-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-black text-lg h-12 shadow-lg shadow-indigo-500/20 transition-transform active:scale-95">
-              {isSharing ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Share2 className="w-5 h-5 mr-2" /> {txt.shareInsta}</>}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isStreakModalOpen} onOpenChange={setIsStreakModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="text-2xl font-black text-orange-500 flex items-center justify-center"><Flame className="mr-2 w-6 h-6" /> {txt.streakTitle}</DialogTitle><DialogDescription className="text-center pt-2">{txt.streakSub}</DialogDescription></DialogHeader>
-          <div className="py-6"><div className="flex justify-between items-center px-2">{currentWeek.map((day, idx) => (<div key={idx} className="flex flex-col items-center gap-2"><div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${day.completed ? 'bg-orange-100 border-orange-500 dark:bg-orange-900/40 text-orange-500 shadow-sm' : day.isFuture ? 'border-dashed border-zinc-200 dark:border-zinc-800 bg-transparent' : 'border-solid border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900'}`}><Flame className={`w-5 h-5 ${day.completed ? 'fill-orange-500' : 'fill-transparent text-zinc-300 dark:text-zinc-700'}`} /></div><span className={`text-[10px] font-bold uppercase ${day.isToday ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-600'}`}>{day.dayName}</span></div>))}</div></div>
-          <DialogFooter><Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold" onClick={() => setIsStreakModalOpen(false)}>{txt.understood}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="text-2xl font-black text-blue-500 flex items-center"><Droplets className="mr-2" /> {txt.waterTitle}</DialogTitle></DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-              <div><p className="text-xs font-bold text-blue-400 uppercase tracking-widest">{txt.waterTotal}</p><p className="text-2xl font-black text-blue-600 dark:text-blue-400">{waterTotal} L</p></div><ArrowLeftRight className="w-5 h-5 text-blue-300" /><div className="text-right"><p className="text-xs font-bold text-teal-500 uppercase tracking-widest">{txt.waterPure}</p><p className="text-2xl font-black text-teal-600 dark:text-teal-400">{waterPure} L</p></div>
-            </div>
-            <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400 space-y-3 leading-relaxed"><p>{txt.water1}</p><p>{txt.water2}</p><p>{txt.water3}</p></div>
-          </div>
-          <DialogFooter><Button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold" onClick={() => setIsWaterModalOpen(false)}>{txt.understood}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      <Dialog open={mealModal?.show || false} onOpenChange={(open) => !open && setMealModal(null)}>
-        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[85vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{txt.mealTitle} {mealModal?.target}g</DialogTitle><DialogDescription>{txt.mealSub}</DialogDescription></DialogHeader>
-          <div className="space-y-6 pt-4">
-            {mealModal && generateMealIdeas(mealModal.type, mealModal.target, lang).map((idea: any, i: number) => (
-              <div key={i} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm"><h4 className="font-bold text-lg mb-3 flex items-center dark:text-zinc-100"><span className="text-2xl mr-2">{idea.icon}</span> {idea.title}</h4><div className="space-y-3">{idea.meals.map((m: any, j: number) => (<div key={j} className="flex justify-between items-start border-b border-zinc-200 dark:border-zinc-800 pb-2 last:border-0 last:pb-0"><div><span className="block text-xs font-bold text-zinc-400 uppercase tracking-widest">{m.time}</span><span className="font-medium text-sm dark:text-zinc-300">{m.amount} {m.food}</span></div><span className={`font-black text-sm mt-4 ${mealModal.type === 'protein' ? 'text-blue-500' : mealModal.type === 'carbs' ? 'text-green-500' : 'text-orange-500'}`}>+{m[mealModal.type === 'protein' ? 'prot' : mealModal.type === 'carbs' ? 'carbs' : 'fat']}g</span></div>))}</div></div>
-            ))}
-          </div>
-          <DialogFooter><Button className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold" onClick={() => setMealModal(null)}>{txt.understood}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isCalModalOpen} onOpenChange={setIsCalModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader><DialogTitle className="text-2xl font-black text-orange-500 flex items-center"><Flame className="mr-2" /> {txt.calTitle}</DialogTitle><DialogDescription>{txt.calSub}</DialogDescription></DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl"><h4 className="font-bold text-orange-700 dark:text-orange-400 flex justify-between"><span>{txt.calBmr}</span> <span>{bmr} kcal</span></h4><p className="text-xs font-medium text-orange-600/80 dark:text-orange-400/80 mt-1">{txt.calBmrSub}</p></div><div className="flex justify-center"><ArrowLeftRight className="w-5 h-5 text-zinc-300 dark:text-zinc-700 rotate-90" /></div><div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl"><h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex justify-between"><span>{txt.calMove}</span> <span>+{tdee - bmr} kcal</span></h4><p className="text-xs font-medium text-zinc-500 mt-1">{txt.calMoveSub}</p></div><div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center"><span className="font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-widest text-sm">{txt.calObj}</span><span className="text-2xl font-black text-orange-500">{targetCals} kcal</span></div>
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl">
+              <h4 className="font-bold text-orange-700 dark:text-orange-400 flex justify-between"><span>{txt.calBmr}</span> <span>{bmr} kcal</span></h4>
+              <p className="text-[10px] font-bold text-orange-600/80 dark:text-orange-400/80 mt-1 uppercase tracking-widest">{currentActualBodyFat ? txt.clinicBmr : "Mifflin-St Jeor (Estimation)"}</p>
+              <p className="text-xs font-medium text-orange-600/80 dark:text-orange-400/80 mt-1">{txt.calBmrSub}</p>
+            </div>
+            <div className="flex justify-center"><ArrowLeftRight className="w-5 h-5 text-zinc-300 dark:text-zinc-700 rotate-90" /></div>
+            <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl"><h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex justify-between"><span>{txt.calMove}</span> <span>+{tdee - bmr} kcal</span></h4><p className="text-xs font-medium text-zinc-500 mt-1">{txt.calMoveSub}</p></div>
+            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center"><span className="font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-widest text-sm">{txt.calObj}</span><span className="text-2xl font-black text-orange-500">{targetCals} kcal</span></div>
           </div>
           <DialogFooter><Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold" onClick={() => setIsCalModalOpen(false)}>{txt.understood}</Button></DialogFooter>
         </DialogContent>
@@ -772,12 +724,72 @@ export default function DashboardPage() {
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader><DialogTitle className="text-2xl font-black text-indigo-500 flex items-center"><Activity className="mr-2" /> {txt.imgTitle}</DialogTitle></DialogHeader>
           <div className="py-6 text-center space-y-4">
-            <div className="text-6xl font-black text-zinc-900 dark:text-zinc-100">~{img}%</div><p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{txt.imgSub}</p><div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 mt-4"><h4 className="font-bold text-indigo-700 dark:text-indigo-400 mb-2">{txt.imgWhere}</h4>{profile.gender === 'homme' ? (<ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200"><li><strong>&lt; 10% :</strong> {lang === 'FR' ? 'Athlète sec (Abdos ultra-visibles)' : 'Shredded Athlete (Visible abs)'}</li><li><strong>10 - 15% :</strong> {lang === 'FR' ? 'Fitness (Abdos visibles)' : 'Fitness (Slightly visible abs)'}</li><li><strong>15 - 20% :</strong> {lang === 'FR' ? 'Forme normale (Ventre plat)' : 'Normal Shape (Flat belly)'}</li><li><strong>&gt; 20% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li></ul>) : (<ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200"><li><strong>&lt; 20% :</strong> {lang === 'FR' ? 'Athlète sèche (Abdos visibles)' : 'Shredded Athlete (Visible abs)'}</li><li><strong>20 - 25% :</strong> {lang === 'FR' ? 'Fitness (Silhouette tonique)' : 'Fitness (Toned silhouette)'}</li><li><strong>25 - 30% :</strong> {lang === 'FR' ? 'Forme normale' : 'Normal Shape'}</li><li><strong>&gt; 30% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li></ul>)}</div>
+            <div className="text-6xl font-black text-zinc-900 dark:text-zinc-100">~{displayedImg}%</div>
+            <p className="text-sm font-bold text-indigo-500">{currentActualBodyFat ? "★ " + (lang === 'FR' ? "Valeur Réelle (Mesurée)" : "Actual Value (Measured)") : (lang === 'FR' ? "Valeur Estimée" : "Estimated Value")}</p>
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{txt.imgSub}</p>
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 mt-4"><h4 className="font-bold text-indigo-700 dark:text-indigo-400 mb-2">{txt.imgWhere}</h4>{profile.gender === 'homme' ? (<ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200"><li><strong>&lt; 10% :</strong> {lang === 'FR' ? 'Athlète sec (Abdos ultra-visibles)' : 'Shredded Athlete (Visible abs)'}</li><li><strong>10 - 15% :</strong> {lang === 'FR' ? 'Fitness (Abdos visibles)' : 'Fitness (Slightly visible abs)'}</li><li><strong>15 - 20% :</strong> {lang === 'FR' ? 'Forme normale (Ventre plat)' : 'Normal Shape (Flat belly)'}</li><li><strong>&gt; 20% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li></ul>) : (<ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200"><li><strong>&lt; 20% :</strong> {lang === 'FR' ? 'Athlète sèche (Abdos visibles)' : 'Shredded Athlete (Visible abs)'}</li><li><strong>20 - 25% :</strong> {lang === 'FR' ? 'Fitness (Silhouette tonique)' : 'Fitness (Toned silhouette)'}</li><li><strong>25 - 30% :</strong> {lang === 'FR' ? 'Forme normale' : 'Normal Shape'}</li><li><strong>&gt; 30% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li></ul>)}</div>
           </div>
           <DialogFooter><Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold" onClick={() => setIsImgModalOpen(false)}>{txt.understood}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isBioModalOpen} onOpenChange={setIsBioModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader><DialogTitle className="dark:text-zinc-100">{txt.updateBio}</DialogTitle><DialogDescription className="pt-2">{txt.bioMsg}</DialogDescription></DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label className="dark:text-zinc-300">Poids (kg)</Label>
+              <Input type="number" step="0.1" value={editWeight} onChange={(e) => { setEditWeight(e.target.value); }} className="text-xl font-bold dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 h-14" />
+            </div>
+            {/* 🛡️ CHAMP MASSE GRASSE (OPTIONNEL) */}
+            <div className="space-y-2">
+              <Label className="dark:text-zinc-300 text-teal-600">{txt.bfLabel}</Label>
+              <Input type="number" step="0.1" placeholder={txt.bfPlaceholder} value={editBodyFat} onChange={(e) => { setEditBodyFat(e.target.value); }} className="text-xl font-bold dark:bg-zinc-900 border-teal-500/30 focus-visible:ring-teal-500 dark:text-zinc-100 h-14" />
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{lang === 'FR' ? "Active la formule de Katch-McArdle si renseigné." : "Activates Katch-McArdle formula if provided."}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setIsBioModalOpen(false); setEditWeight(data.currentWeight.toString()); setEditBodyFat(data.currentActualBodyFat ? data.currentActualBodyFat.toString() : ""); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
+            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{actionLoading ? "..." : txt.save}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader><DialogTitle className="dark:text-zinc-100 flex items-center"><User className="w-5 h-5 mr-2" /> {txt.adjust}</DialogTitle></DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Identité</h4><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="dark:text-zinc-300">Prénom</Label><Input type="text" value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div><div className="space-y-2"><Label className="dark:text-zinc-300">Nom</Label><Input type="text" value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div></div></div>
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Avatar</h4><div className="grid grid-cols-8 gap-2">{AVATAR_LIST.map((av) => (<button key={av.id} type="button" onClick={() => setEditAvatar(av.id)} className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${editAvatar === av.id ? 'ring-2 ring-teal-500 scale-110 bg-teal-50 dark:bg-teal-900/30' : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-70 hover:opacity-100'}`} title={av.label}>{av.id === 'default' ? <User className="w-5 h-5 text-zinc-500 dark:text-zinc-400" /> : av.id}</button>))}</div></div>
+            
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Biométrie & Objectif</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2"><Label className="dark:text-zinc-300">Poids (kg)</Label><Input type="number" step="0.1" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div>
+                {/* 🛡️ NOUVEAU CHAMP BF DANS LA MODALE GLOBALE AUSSI */}
+                <div className="space-y-2"><Label className="dark:text-zinc-300 text-teal-600">BF (%) Optionnel</Label><Input type="number" step="0.1" value={editBodyFat} onChange={(e) => setEditBodyFat(e.target.value)} className="dark:bg-zinc-900 border-teal-500/30 focus-visible:ring-teal-500 dark:text-zinc-100 font-bold" /></div>
+                <div className="space-y-2"><Label className="dark:text-zinc-300">Taille (cm)</Label><Input type="number" step="1" value={editHeight} onChange={(e) => setEditHeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div>
+                <div className="space-y-2 col-span-3 sm:col-span-1"><Label className="dark:text-zinc-300">Objectif</Label><Select value={editGoal} onValueChange={(val) => { setEditGoal(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="perte_poids">Perte de gras</SelectItem><SelectItem value="recomposition">Recomposition</SelectItem><SelectItem value="performance">Performance</SelectItem><SelectItem value="prise_masse">Prise de masse</SelectItem></SelectContent></Select></div>
+              </div>
+            </div>
+
+            <div className="space-y-2"><Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2 text-yellow-500" /> Niveau d'Expérience</Label><Select value={editExperience} onValueChange={(val) => { setEditExperience(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder="Sélectionnez un niveau" /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem><SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem><SelectItem value="avance">Avancé (+3 ans)</SelectItem></SelectContent></Select></div>
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100"><Calendar className="h-4 w-4 mr-2"/> Sports Annexes (Fatigue)</h4><div className="space-y-3">{Object.keys(DAYS).map((dayKey) => (<div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 gap-2 text-sm"><span className="font-bold w-24 text-zinc-700 dark:text-zinc-300">{DAYS[dayKey as keyof typeof DAYS]}</span><div className="flex flex-wrap gap-3">{EXTRA_SPORTS.map((sport) => {const isChecked = (editSchedule[dayKey] as string[] || []).includes(sport.id);return (<div key={sport.id} className="flex items-center space-x-1"><Checkbox id={`edit-${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => {if (typeof c === 'boolean') handleSportToggle(dayKey, sport.id, c);}} className="dark:border-zinc-700 dark:data-[state=checked]:bg-teal-500" /><Label htmlFor={`edit-${dayKey}-${sport.id}`} className="text-xs cursor-pointer dark:text-zinc-400">{sport.label}</Label></div>);})}</div></div>))}</div></div>
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><Brain className="w-4 h-4 mr-2 text-indigo-500" /> Daily Brain Gain</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Afficher les quiz sur l'accueil</p></div><button type="button" onClick={() => setEditDisableQuiz(!editDisableQuiz)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!editDisableQuiz ? 'bg-teal-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!editDisableQuiz ? 'translate-x-5' : 'translate-x-0'}`} /></button></div></div>
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between mb-4"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><BellRing className="w-4 h-4 mr-2 text-orange-500" /> Notifications</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Recevoir des rappels d'entraînement</p></div><button type="button" onClick={togglePushNotifications} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isPushEnabled ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPushEnabled ? 'translate-x-5' : 'translate-x-0'}`} /></button></div>{isPushEnabled && (<Button variant="outline" size="sm" onClick={testPushNotification} className="w-full text-xs font-bold border-zinc-700 text-zinc-400 hover:text-white">Envoyer une notification de test</Button>)}</div>
+          </div>
+          <DialogFooter className="border-t border-zinc-100 dark:border-zinc-800 pt-4"><Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 font-bold">{txt.cancel}</Button><Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 text-white hover:bg-teal-600 font-bold">{actionLoading ? "..." : txt.save}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* RESTE DES MODALES (Delete, Repas, Quiz) INCHANGÉES... */}
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent className="sm:max-w-[425px] border-red-200 bg-red-50 dark:border-red-900 dark:bg-zinc-950">
+          <DialogHeader><DialogTitle className="text-red-600 dark:text-red-500 flex items-center"><AlertTriangle className="mr-2 h-5 w-5"/> Purge</DialogTitle></DialogHeader>
+          <div className="grid gap-4 py-4"><div className="space-y-2"><Label className="text-red-700 dark:text-red-400">{txt.deleteMsg}</Label><Input value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className="border-red-300 dark:border-red-900 dark:bg-zinc-900 dark:text-zinc-100" /></div></div>
+          <DialogFooter><Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} className="dark:border-zinc-800 dark:text-zinc-300 font-bold">{txt.cancel}</Button><Button variant="destructive" onClick={handleDeleteProfile} disabled={(deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE") || actionLoading} className="dark:bg-red-600 dark:hover:bg-red-700 font-bold">{txt.confirm}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
       <Dialog open={microModal.show} onOpenChange={(open) => !open && setMicroModal({ show: false, micro: null })}>
         <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           {microModal.micro && (
@@ -799,65 +811,6 @@ export default function DashboardPage() {
               <DialogFooter className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4"><Button className="w-full bg-teal-500 text-white hover:bg-teal-600 font-bold" onClick={() => setMicroModal({ show: false, micro: null })}>{txt.understood}</Button></DialogFooter>
             </>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isGoalModalOpen} onOpenChange={setIsGoalModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="dark:text-zinc-100">{txt.changeGoal}</DialogTitle><DialogDescription className="pt-2">{txt.changeGoalMsg}</DialogDescription></DialogHeader>
-          <div className="py-4">
-            <Select value={editGoal} onValueChange={(val) => { setEditGoal(val); }}>
-              <SelectTrigger className="w-full dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue /></SelectTrigger>
-              <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800">
-                <SelectItem value="perte_poids">Perte de masse grasse (Déficit)</SelectItem>
-                <SelectItem value="recomposition">Recomposition corporelle (Maintien)</SelectItem>
-                <SelectItem value="performance">Performance martiale (Léger surplus)</SelectItem>
-                <SelectItem value="prise_masse">Prise de masse musculaire (Surplus)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsGoalModalOpen(false); setEditGoal(profile.current_goal); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
-            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{actionLoading ? "..." : txt.save}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isBioModalOpen} onOpenChange={setIsBioModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="dark:text-zinc-100">{txt.updateBio}</DialogTitle><DialogDescription className="pt-2">{txt.bioMsg}</DialogDescription></DialogHeader>
-          <div className="py-4 space-y-2">
-            <Label className="dark:text-zinc-300">Poids (kg)</Label>
-            <Input type="number" step="0.1" value={editWeight} onChange={(e) => { setEditWeight(e.target.value); }} className="text-xl font-bold dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 h-14" />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsBioModalOpen(false); setEditWeight(profile.weight_kg.toString()); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
-            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{actionLoading ? "..." : txt.save}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader><DialogTitle className="dark:text-zinc-100 flex items-center"><User className="w-5 h-5 mr-2" /> {txt.adjust}</DialogTitle></DialogHeader>
-          <div className="grid gap-6 py-4">
-            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Identité</h4><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="dark:text-zinc-300">Prénom</Label><Input type="text" value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div><div className="space-y-2"><Label className="dark:text-zinc-300">Nom</Label><Input type="text" value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div></div></div>
-            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Avatar</h4><div className="grid grid-cols-8 gap-2">{AVATAR_LIST.map((av) => (<button key={av.id} type="button" onClick={() => setEditAvatar(av.id)} className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${editAvatar === av.id ? 'ring-2 ring-teal-500 scale-110 bg-teal-50 dark:bg-teal-900/30' : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-70 hover:opacity-100'}`} title={av.label}>{av.id === 'default' ? <User className="w-5 h-5 text-zinc-500 dark:text-zinc-400" /> : av.id}</button>))}</div></div>
-            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Biométrie & Objectif</h4><div className="grid grid-cols-3 gap-4"><div className="space-y-2"><Label className="dark:text-zinc-300">Poids (kg)</Label><Input type="number" step="0.1" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div><div className="space-y-2"><Label className="dark:text-zinc-300">Taille (cm)</Label><Input type="number" step="1" value={editHeight} onChange={(e) => setEditHeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div><div className="space-y-2 col-span-3 sm:col-span-1"><Label className="dark:text-zinc-300">Objectif</Label><Select value={editGoal} onValueChange={(val) => { setEditGoal(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="perte_poids">Perte de gras</SelectItem><SelectItem value="recomposition">Recomposition</SelectItem><SelectItem value="performance">Performance</SelectItem><SelectItem value="prise_masse">Prise de masse</SelectItem></SelectContent></Select></div></div></div>
-            <div className="space-y-2"><Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2 text-yellow-500" /> Niveau d'Expérience</Label><Select value={editExperience} onValueChange={(val) => { setEditExperience(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder="Sélectionnez un niveau" /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem><SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem><SelectItem value="avance">Avancé (+3 ans)</SelectItem></SelectContent></Select><p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest">Ajuste le volume généré par l'IA.</p></div>
-            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100"><Calendar className="h-4 w-4 mr-2"/> Sports Annexes (Fatigue)</h4><div className="space-y-3">{Object.keys(DAYS).map((dayKey) => (<div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 gap-2 text-sm"><span className="font-bold w-24 text-zinc-700 dark:text-zinc-300">{DAYS[dayKey as keyof typeof DAYS]}</span><div className="flex flex-wrap gap-3">{EXTRA_SPORTS.map((sport) => {const isChecked = (editSchedule[dayKey] as string[] || []).includes(sport.id);return (<div key={sport.id} className="flex items-center space-x-1"><Checkbox id={`edit-${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => {if (typeof c === 'boolean') handleSportToggle(dayKey, sport.id, c);}} className="dark:border-zinc-700 dark:data-[state=checked]:bg-teal-500" /><Label htmlFor={`edit-${dayKey}-${sport.id}`} className="text-xs cursor-pointer dark:text-zinc-400">{sport.label}</Label></div>);})}</div></div>))}</div></div>
-            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><Brain className="w-4 h-4 mr-2 text-indigo-500" /> Daily Brain Gain</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Afficher les quiz sur l'accueil</p></div><button type="button" onClick={() => setEditDisableQuiz(!editDisableQuiz)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!editDisableQuiz ? 'bg-teal-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!editDisableQuiz ? 'translate-x-5' : 'translate-x-0'}`} /></button></div></div>
-            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between mb-4"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><BellRing className="w-4 h-4 mr-2 text-orange-500" /> Notifications</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Recevoir des rappels d'entraînement</p></div><button type="button" onClick={togglePushNotifications} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isPushEnabled ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPushEnabled ? 'translate-x-5' : 'translate-x-0'}`} /></button></div>{isPushEnabled && (<Button variant="outline" size="sm" onClick={testPushNotification} className="w-full text-xs font-bold border-zinc-700 text-zinc-400 hover:text-white">Envoyer une notification de test</Button>)}</div>
-          </div>
-          <DialogFooter className="border-t border-zinc-100 dark:border-zinc-800 pt-4"><Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 font-bold">{txt.cancel}</Button><Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 text-white hover:bg-teal-600 font-bold">{actionLoading ? "..." : txt.save}</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent className="sm:max-w-[425px] border-red-200 bg-red-50 dark:border-red-900 dark:bg-zinc-950">
-          <DialogHeader><DialogTitle className="text-red-600 dark:text-red-500 flex items-center"><AlertTriangle className="mr-2 h-5 w-5"/> Purge</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-4"><div className="space-y-2"><Label className="text-red-700 dark:text-red-400">{txt.deleteMsg}</Label><Input value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className="border-red-300 dark:border-red-900 dark:bg-zinc-900 dark:text-zinc-100" /></div></div>
-          <DialogFooter><Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} className="dark:border-zinc-800 dark:text-zinc-300 font-bold">{txt.cancel}</Button><Button variant="destructive" onClick={handleDeleteProfile} disabled={(deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE") || actionLoading} className="dark:bg-red-600 dark:hover:bg-red-700 font-bold">{txt.confirm}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

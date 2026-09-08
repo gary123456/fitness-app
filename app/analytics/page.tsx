@@ -7,10 +7,11 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ReferenceLine } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, TrendingDown, Dumbbell, Target, Ruler, Radar as RadarIcon, CalendarDays, Sparkles, Database, Brain, Download, ShieldAlert, HeartPulse } from "lucide-react";
+import { Activity, TrendingDown, Dumbbell, Target, Ruler, Radar as RadarIcon, CalendarDays, Database, Brain, Download, ShieldAlert, HeartPulse } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { calculateAge, calculateBMI, calculateEstimatedBodyFat } from "@/lib/fitness";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?: string, customEnd?: string) => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,7 +23,7 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const userHeight = profile?.height_cm || 175;
   const sleepQuality = profile?.sleep_quality || 'moyen';
 
-  // ⏱️ 1. GESTION DU FILTRE TEMPOREL DYNAMIQUE (Pour les graphiques)
+  // ⏱️ GESTION DU FILTRE TEMPOREL DYNAMIQUE
   let startDate = new Date();
   let endDate = new Date();
   let isAllTime = false;
@@ -59,8 +60,7 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     queryMeas, queryLogs, supabase.from("exercise_library").select("id, name")
   ]);
 
-  // 🧠 2. CALCUL DE L'ACWR (Acute-to-Chronic Workload Ratio) INDÉPENDANT DU FILTRE
-  const todayDate = new Date();
+  // 🧠 CALCUL DE L'ACWR (Acute-to-Chronic Workload Ratio) INDÉPENDANT DU FILTRE
   const d28 = new Date(); d28.setDate(d28.getDate() - 28);
   const d7 = new Date(); d7.setDate(d7.getDate() - 7);
   
@@ -76,7 +76,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const avg4Weeks = vol28 / 4;
   const acwrScore = avg4Weeks > 0 ? Number((vol7 / avg4Weeks).toFixed(2)) : 0;
 
-  // 📊 3. TRAITEMENT DES DONNÉES DES GRAPHIQUES
   let formattedWeight: any[] = [];
   let formattedMeasurements: any[] = [];
 
@@ -86,7 +85,7 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       const img = calculateEstimatedBodyFat(bmi, userAge, userGender);
       return { 
         date: new Date(m.created_at).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }), 
-        poids: m.weight_kg, img: Number(img)
+        poids: m.weight_kg, img: m.body_fat_percentage ? Number(m.body_fat_percentage) : Number(img)
       };
     });
     
@@ -209,10 +208,9 @@ export default function AnalyticsPage() {
     if (error) router.push("/login");
   }, [error, router]);
 
-  // DICTIONNAIRE DE TRADUCTION SÉCURISÉ
   const t = {
-    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Volume de travail par groupe (Tonnage)", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses (y compris l'estimation de la masse grasse et les recommandations métaboliques) générées par cette application sont fournies à titre strictement informatif et sportif. Elles ne constituent en aucun cas un diagnostic médical, un avis médical ou un traitement. Consultez toujours un médecin ou un professionnel de santé qualifié avant de modifier votre régime alimentaire, votre programme d'entraînement ou de prendre des décisions basées sur ces données." },
-    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Work volume by group (Tonnage)", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", disclaimer: "MEDICAL DISCLAIMER: The data and analysis (including estimated body fat and metabolic recommendations) generated by this application are provided strictly for informational and athletic purposes. They do not constitute medical diagnosis, advice, or treatment. Always consult a physician or qualified healthcare provider before modifying your diet, training program, or making decisions based on this data." }
+    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Volume de travail par groupe (Tonnage)", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses générées par cette application sont fournies à titre strictement informatif. Elles ne constituent en aucun cas un diagnostic médical. Consultez toujours un médecin avant de modifier votre régime ou programme." },
+    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Work volume by group (Tonnage)", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", disclaimer: "MEDICAL DISCLAIMER: The data and analysis generated by this application are provided strictly for informational purposes. They do not constitute medical diagnosis. Always consult a physician before modifying your diet or training program." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -262,7 +260,6 @@ export default function AnalyticsPage() {
     return insight;
   };
 
-  // 🖨️ HACK PDF ABSOLU : Nom personnalisé + Masquage PWA UI
   const handlePrintPDF = () => {
     if (!data?.profile) return;
     const originalTitle = document.title;
@@ -316,11 +313,11 @@ export default function AnalyticsPage() {
 
   return (
     <>
-      {/* 🖨️ CSS PRINT ABSOLU : Force le BLANC, textes NOIRS, et supprime les éléments inutiles */}
+      {/* 🖨️ CSS PRINT ABSOLU : Force le BLANC pur, les textes NOIRS, et masque radicalement toute navigation */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           /* Force le Reset complet des couleurs */
-          * {
+          html, body, main, div, span, p, h1, h2, h3, h4, h5, h6, text {
             background-color: transparent !important;
             color: #000 !important;
             box-shadow: none !important;
@@ -330,25 +327,27 @@ export default function AnalyticsPage() {
           }
           
           /* Fond blanc absolu pour la page */
-          body::before { content: ""; background: white !important; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: -1; }
+          body::before { content: none !important; }
           
-          /* Masquage agressif des Navbars (header, nav, pwa elements) */
-          nav, header, footer, aside, .navbar, [role="navigation"], .print-hidden { display: none !important; }
-          
-          /* Cartes avec bordures nettes */
-          .print-break-avoid { 
-            page-break-inside: avoid; 
-            border: 2px solid #000 !important; 
-            background: white !important;
-            margin-bottom: 24px !important;
-            border-radius: 8px !important;
+          /* Masquage Agressif des Navbars et Boutons */
+          nav, header, footer, aside, [role="navigation"], button, .print-hidden, [class*="sticky top-0"], [class*="fixed bottom-0"], .backdrop-blur-md { 
+            display: none !important; 
           }
           
-          /* Correction Recharts (SVG) */
-          .recharts-text, .recharts-legend-item-text { fill: #000 !important; font-weight: bold !important; }
-          .recharts-cartesian-grid line, .recharts-polar-grid line, .recharts-polar-angle-axis line { stroke: #444 !important; opacity: 1 !important; }
+          /* Rendu propre des Cartes sans styles superflus */
+          .print-break-avoid { 
+            page-break-inside: avoid; 
+            border: 1px solid #000 !important; 
+            background: #fff !important;
+            margin-bottom: 20px !important;
+            border-radius: 4px !important;
+          }
           
-          /* Format du papier */
+          /* Correction Recharts (SVG) pour un rendu net */
+          .recharts-wrapper * { stroke-width: 2px !important; }
+          .recharts-text, .recharts-legend-item-text { fill: #000 !important; font-weight: bold !important; }
+          .recharts-cartesian-grid line, .recharts-polar-grid line, .recharts-polar-angle-axis line { stroke: #ccc !important; stroke-width: 1px !important; opacity: 1 !important; }
+          
           @page { size: A4 portrait; margin: 15mm; }
         }
       `}} />
@@ -356,15 +355,19 @@ export default function AnalyticsPage() {
       <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full relative pb-24">
         
         {/* 🖨️ EN-TÊTE DU RAPPORT (Invisible à l'écran, Visible uniquement en PDF) */}
-        <div className="hidden print:block mb-8 border-b-4 border-black pb-6">
+        <div className="hidden print:block mb-8 border-b-2 border-black pb-6">
           <div className="flex justify-between items-end mb-6">
-            <h1 className="text-3xl font-black uppercase tracking-tight text-black">Rapport Analytique Santé & Sport</h1>
+            <div className="flex items-center space-x-4">
+              {/* Le Logo GSC est conservé ici pour le PDF */}
+              <img src="/Logo_GSC_NoBG.png" alt="Vivex Logo" className="h-10 w-auto grayscale" />
+              <h1 className="text-2xl font-black uppercase tracking-tight text-black">Rapport Analytique Santé & Sport</h1>
+            </div>
             <div className="text-right text-sm font-bold text-black">{new Date().toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US')}</div>
           </div>
           <div className="grid grid-cols-3 gap-6 p-4 rounded-xl border-2 border-black text-sm">
-            <div><span className="uppercase text-[10px] font-black tracking-widest block mb-1">Patient / Athlète</span><span className="font-black text-xl">{data.profile?.first_name || '-'} {data.profile?.last_name || '-'}</span></div>
-            <div><span className="uppercase text-[10px] font-black tracking-widest block mb-1">Sexe & Âge</span><span className="font-bold text-lg">{data.userGender.toUpperCase()} • {data.userAge} ans</span></div>
-            <div><span className="uppercase text-[10px] font-black tracking-widest block mb-1">Biométrie Actuelle</span><span className="font-bold text-lg">{data.userHeight} cm • {currentWeight} kg</span></div>
+            <div><span className="uppercase text-[10px] font-black tracking-widest text-black block mb-1">Patient / Athlète</span><span className="font-black text-xl">{data.profile?.first_name || '-'} {data.profile?.last_name || '-'}</span></div>
+            <div><span className="uppercase text-[10px] font-black tracking-widest text-black block mb-1">Sexe & Âge</span><span className="font-bold text-lg">{data.userGender.toUpperCase()} • {data.userAge} ans</span></div>
+            <div><span className="uppercase text-[10px] font-black tracking-widest text-black block mb-1">Biométrie Actuelle</span><span className="font-bold text-lg">{data.userHeight} cm • {currentWeight} kg</span></div>
           </div>
         </div>
 
@@ -415,7 +418,7 @@ export default function AnalyticsPage() {
             </div>
 
             {/* BOUTON D'EXPORT PDF */}
-            <Button onClick={handlePrintPDF} variant="outline" className="h-12 w-full sm:w-auto border-teal-500 text-teal-600 dark:text-teal-400 hover:bg-teal-500 hover:text-white font-bold transition-all shadow-sm rounded-xl">
+            <Button onClick={handlePrintPDF} variant="outline" className="h-12 w-full sm:w-auto border-teal-500 text-teal-600 dark:text-teal-400 hover:bg-teal-500 hover:text-white font-bold transition-all shadow-sm rounded-xl print-hidden">
               <Download className="w-4 h-4 mr-2" /> {txt.export}
             </Button>
           </div>
@@ -428,7 +431,7 @@ export default function AnalyticsPage() {
             <CardTitle className="text-sm font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-widest">{txt.aiTitle}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300 leading-relaxed border-l-2 border-indigo-500 pl-4 mt-2 print:border-black print:text-black">
+            <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300 leading-relaxed border-l-2 border-indigo-500 pl-4 mt-2">
               {generateAIInsight()}
             </p>
           </CardContent>
@@ -436,11 +439,10 @@ export default function AnalyticsPage() {
 
         {/* MÉTRIQUES CLÉS (1RMs + ACWR) */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 print-break-avoid">
-          {/* NOUVEAU : ACWR */}
           <Card className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
             <CardHeader className="p-4 pb-2">
               <CardTitle className="flex justify-between items-center text-[10px] sm:text-xs font-black text-zinc-500 uppercase tracking-widest">
-                <span>{txt.acwr}</span> <HeartPulse className={`w-4 h-4 ${acwrColor}`} />
+                <span>{txt.acwr}</span> <HeartPulse className={`w-4 h-4 ${acwrColor} print-hidden`} />
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-0">
@@ -475,7 +477,6 @@ export default function AnalyticsPage() {
                       <YAxis yAxisId="right" hide={hiddenRecomp.img} domain={['auto', 'auto']} stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} orientation="right" />
                       <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', backdropFilter: 'blur(10px)', border: '1px solid #3f3f46', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} />
                       <Legend onClick={handleRecompLegendClick} formatter={renderRecompLegendText} wrapperStyle={{ cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', paddingTop: '10px' }} />
-                      {/* L'animation est désactivée (isAnimationActive={false}) pour garantir l'affichage sur le PDF */}
                       <Area isAnimationActive={false} hide={hiddenRecomp.poids} yAxisId="left" type="monotone" name={`${txt.weight} (kg)`} dataKey="poids" stroke="#3b82f6" strokeWidth={4} fill="url(#colorWeight)" activeDot={{ r: 6 } as any} />
                       <Line isAnimationActive={false} hide={hiddenRecomp.img} yAxisId="right" type="monotone" name={`${txt.img} (%)`} dataKey="img" stroke="#10b981" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 3, fill: '#10b981' } as any} />
                     </AreaChart>
@@ -547,7 +548,7 @@ export default function AnalyticsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="hidden print:block font-bold text-indigo-600 uppercase tracking-widest">{data.exerciseList.find(e => e.id === selectedExercise)?.name}</div>
+              <div className="hidden print:block font-bold text-black uppercase tracking-widest">{data.exerciseList.find(e => e.id === selectedExercise)?.name}</div>
             </CardHeader>
             <CardContent>
               {!selectedExercise || !data.exercisesData[selectedExercise] || data.exercisesData[selectedExercise].length < 1 ? (

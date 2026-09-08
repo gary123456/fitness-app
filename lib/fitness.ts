@@ -19,7 +19,15 @@ export function calculateEstimatedBodyFat(bmi: number, age: number, gender: stri
   return Number(Math.max(2, bodyFat).toFixed(1)); 
 }
 
-export function calculateBMR(weightKg: number, heightCm: number, age: number, gender: string): number {
+// 🧬 ALGORITHME HYBRIDE : Katch-McArdle (Clinique) ou Mifflin-St Jeor (Estimation)
+export function calculateBMR(weightKg: number, heightCm: number, age: number, gender: string, actualBodyFatPct?: number | null): number {
+  // Si l'utilisateur a fourni son taux de masse grasse, on utilise la méthode clinique Katch-McArdle
+  if (actualBodyFatPct && actualBodyFatPct > 0 && actualBodyFatPct < 100) {
+    const leanBodyMass = weightKg * (1 - (actualBodyFatPct / 100));
+    return Math.round(370 + (21.6 * leanBodyMass));
+  }
+  
+  // Sinon, on utilise la méthode d'estimation classique Mifflin-St Jeor
   const base = (10 * weightKg) + (6.25 * heightCm) - (5 * age);
   if (gender === 'homme') return Math.round(base + 5);
   if (gender === 'femme') return Math.round(base - 161);
@@ -152,7 +160,6 @@ export function calculateStreak(logs: any[]): number {
   return streak;
 }
 
-// CORRECTION DU NOM : getCurrentWeekStreak
 export function getCurrentWeekStreak(logs: any[], lang: string) {
   const days = [];
   const today = new Date();
