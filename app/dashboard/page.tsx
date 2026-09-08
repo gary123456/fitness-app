@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2, BellRing, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile } from "lucide-react";
+import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2, BellRing, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Target } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -75,12 +75,11 @@ const fetchDashboardData = async () => {
   
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   
-  // 🛡️ SCALING OPTIMIZATION: On récupère les métriques globales depuis le RPC (Tonnage d'hier et ACWR)
+  // 🛡️ SCALING OPTIMIZATION
   const { data: dashMetrics } = await supabase.rpc('get_dashboard_metrics', { p_user_id: user.id });
   const acwrScore = dashMetrics?.acwr || 1;
   const yesterdayVol = dashMetrics?.yesterday || 0;
 
-  // On télécharge uniquement les 30 derniers jours de logs pour l'UI (La série de flammes et le tonnage visuel)
   const d30 = new Date(); d30.setDate(d30.getDate() - 30);
   const { data: logs } = await supabase.from("workout_logs")
     .select("created_at, weight, reps, session_id")
@@ -904,6 +903,41 @@ export default function DashboardPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setIsBioModalOpen(false); setEditWeight(data.currentWeight.toString()); setEditBodyFat(data.currentActualBodyFat ? data.currentActualBodyFat.toString() : ""); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
             <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 hover:bg-teal-600 text-white font-bold">{actionLoading ? "..." : txt.save}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 📘 MODALE OBJECTIF ACTUEL (MANQUANTE) */}
+      <Dialog open={isGoalModalOpen} onOpenChange={setIsGoalModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="dark:text-zinc-100 flex items-center">
+              <Target className="mr-2 h-5 w-5 text-indigo-500" />
+              {txt.changeGoal}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {txt.changeGoalMsg}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label className="dark:text-zinc-300">{txt.goal}</Label>
+              <Select value={editGoal} onValueChange={(val) => setEditGoal(val)}>
+                <SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 h-14 font-black text-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800 font-bold">
+                  <SelectItem value="perte_poids">{lang === 'FR' ? "Perte de masse grasse" : "Fat Loss"}</SelectItem>
+                  <SelectItem value="recomposition">{lang === 'FR' ? "Recomposition Corporelle" : "Body Recomp"}</SelectItem>
+                  <SelectItem value="performance">{lang === 'FR' ? "Performance & Force" : "Performance"}</SelectItem>
+                  <SelectItem value="prise_masse">{lang === 'FR' ? "Prise de masse musculaire" : "Muscle Building"}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setIsGoalModalOpen(false); setEditGoal(data.profile.current_goal); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
+            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold">{actionLoading ? "..." : txt.save}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
