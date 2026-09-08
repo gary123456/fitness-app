@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2 } from "lucide-react";
+import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2, BellRing, Scale } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,7 +25,6 @@ const EXTRA_SPORTS = [
   { id: "randonnee", label: "Randonnée / Marche" }, { id: "padel_tennis", label: "Padel / Tennis" } 
 ];
 
-// 🎨 GALERIE D'AVATARS
 const AVATAR_LIST = [
   { id: "default", label: "Initial" },
   { id: "🧑", label: "Gars 1" }, { id: "👦🏽", label: "Gars 2" }, { id: "👨🏿‍🦲", label: "Gars 3" }, { id: "👱‍♂️", label: "Gars 4" }, { id: "🧔🏾‍♂️", label: "Gars 5" },
@@ -33,6 +32,15 @@ const AVATAR_LIST = [
   { id: "🦊", label: "Renard" }, { id: "🐯", label: "Tigre" }, { id: "🐺", label: "Loup" }, { id: "🦍", label: "Gorille" }, 
   { id: "🐉", label: "Dragon" }, { id: "👽", label: "Alien" }, { id: "🤖", label: "Robot" }, { id: "👻", label: "Fantôme" }, { id: "🥷", label: "Ninja" }
 ];
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
 
 const getMicroDetails = (name: string, lang: string) => {
   if (name.includes("Magnésium")) return { benefits: lang==="FR"?"Détend le système nerveux (SNC), améliore le sommeil profond et prévient les crampes.":"Relaxes the nervous system (CNS), improves deep sleep and prevents cramps.", timing: lang==="FR"?"Le soir, 30 à 60 minutes avant le coucher.":"Evening, 30-60 minutes before bed.", form: "Bisglycinate (Meilleure absorption, doux pour l'estomac).", food: lang==="FR"?"Épinards, graines de courge, chocolat noir, amandes.":"Spinach, pumpkin seeds, dark chocolate, almonds." };
@@ -47,7 +55,6 @@ const MacroRing = ({ pct, color, label, value, onClick }: any) => {
   const radius = 32;
   const circum = 2 * Math.PI * radius;
   const offset = circum - (Math.min(pct, 100) / 100) * circum;
-  
   return (
     <div onClick={onClick} className="flex flex-col items-center justify-center relative cursor-pointer hover:scale-105 transition-transform group">
       <svg width="80" height="80" className="transform -rotate-90">
@@ -70,6 +77,25 @@ const fetchDashboardData = async () => {
   const { data: logs } = await supabase.from("workout_logs").select("created_at, weight, reps, session_id").eq("user_id", user.id);
   const { data: gamification } = await supabase.from("user_gamification").select("*").eq("user_id", user.id).maybeSingle();
 
+  // 🧠 SMART WEIGH-IN REMINDER LOGIC
+  const { data: lastMeasurement } = await supabase
+    .from("measurements")
+    .select("created_at")
+    .eq("user_id", user.id)
+    .not("weight_kg", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  let daysSinceLastWeighIn = 0;
+  if (lastMeasurement) {
+    const lastDate = new Date(lastMeasurement.created_at);
+    const today = new Date();
+    daysSinceLastWeighIn = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 3600 * 24));
+  } else {
+    daysSinceLastWeighIn = 999;
+  }
+
   const todayStr = new Date().toISOString().split('T')[0];
   let dailyQuiz = null;
   const disableQuiz = profile?.disable_quiz || false;
@@ -79,10 +105,7 @@ const fetchDashboardData = async () => {
     const targetDiff = userLevel < 3 ? 'easy' : userLevel < 7 ? 'medium' : 'hard';
     const answeredQuizzes = gamification?.answered_quizzes || [];
     
-    const { data: questions } = await supabase
-      .from("quiz_questions")
-      .select("*")
-      .eq("difficulty", targetDiff);
+    const { data: questions } = await supabase.from("quiz_questions").select("*").eq("difficulty", targetDiff);
       
     if (questions && questions.length > 0) {
       const unanswered = questions.filter(q => !answeredQuizzes.includes(q.id));
@@ -105,13 +128,13 @@ const fetchDashboardData = async () => {
       if (todayLogs.length > 0) isTodayWorkoutCompleted = true;
     }
   }
-  return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [] };
+  return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [], daysSinceLastWeighIn };
 };
 
 export default function DashboardPage() {
   const router = useRouter();
   const { lang } = useLanguage();
-  const { data, isLoading, mutate } = useSWR('dashboardData', fetchDashboardData);
+  const { data, isLoading, mutate } = useSWR('dashboardData', fetchDashboardData, { revalidateOnFocus: true });
   const quizCardRef = useRef<HTMLDivElement>(null);
   
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -144,6 +167,7 @@ export default function DashboardPage() {
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
   const [editDisableQuiz, setEditDisableQuiz] = useState(false);
   const [editAvatar, setEditAvatar] = useState("default");
+  const [isPushEnabled, setIsPushEnabled] = useState(false);
 
   useEffect(() => {
     if (data?.profile) {
@@ -157,15 +181,87 @@ export default function DashboardPage() {
       setEditDisableQuiz(data.profile.disable_quiz || false);
       setEditAvatar(data.profile.avatar_url || "default");
     }
+    
+    if (typeof window !== "undefined" && 'serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.pushManager.getSubscription().then(sub => {
+          if (sub) setIsPushEnabled(true);
+        });
+      });
+    }
   }, [data?.profile]);
 
-  type TranslationDict = Record<string, string>;
-  const t: Record<string, TranslationDict> = {
-    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Le Radar Corporel", imgSub: "L'Indice de Masse Grasse est une estimation de la quantité de gras sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story" },
-    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Radar", imgSub: "The Body Fat Index is an estimation of the amount of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story" }
+  const t = {
+    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Le Radar Corporel", imgSub: "L'Indice de Masse Grasse est une estimation de la quantité de gras sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a" },
+    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Radar", imgSub: "The Body Fat Index is an estimation of the amount of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story", reqCal: "Calibration Required", reqCalSub: "Last weigh-in" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
+
+  const togglePushNotifications = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !data?.profile?.id) {
+      alert("Push non supporté sur ce navigateur/appareil.");
+      return;
+    }
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+
+      if (isPushEnabled) {
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          await subscription.unsubscribe();
+          await supabase.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+        }
+        setIsPushEnabled(false);
+      } else {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          alert("Permission refusée. Vérifiez les paramètres de votre appareil.");
+          return;
+        }
+
+        const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (!vapidPublicKey) throw new Error("VAPID Key manquante");
+
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        });
+
+        const subJson = subscription.toJSON();
+        
+        await supabase.from('push_subscriptions').insert([{
+          user_id: data.profile.id,
+          endpoint: subJson.endpoint,
+          auth_key: subJson.keys?.auth,
+          p256dh_key: subJson.keys?.p256dh
+        }]);
+
+        setIsPushEnabled(true);
+      }
+    } catch (err) {
+      console.error('Erreur Push Toggle', err);
+      alert("Erreur de configuration Push.");
+    }
+  };
+
+  const testPushNotification = async () => {
+    if (!data?.profile?.id) return;
+    try {
+      await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: data.profile.id,
+          title: "🚀 Test Réussi !",
+          body: "L'écosystème Vivex est bien connecté à votre appareil."
+        })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleUpdateProfile = async () => {
     if (!data?.profile) return;
@@ -267,9 +363,17 @@ export default function DashboardPage() {
     }
   };
 
-  if (isLoading || !data?.profile) return <div className="flex min-h-[80vh] items-center justify-center"><div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (isLoading || !data?.profile) {
+    return (
+      <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24 animate-pulse">
+        <div className="flex justify-between"><div className="h-10 w-64 bg-zinc-200 dark:bg-zinc-800 rounded-lg"></div><div className="w-16 h-16 bg-zinc-200 dark:bg-zinc-800 rounded-full"></div></div>
+        <div className="h-24 bg-zinc-200 dark:bg-zinc-800 rounded-2xl"></div>
+        <div className="grid gap-4 grid-cols-3"><div className="h-32 bg-zinc-200 dark:bg-zinc-800 rounded-xl"></div><div className="h-32 bg-zinc-200 dark:bg-zinc-800 rounded-xl"></div><div className="h-32 bg-zinc-200 dark:bg-zinc-800 rounded-xl"></div></div>
+      </div>
+    );
+  }
 
-  const { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs } = data;
+  const { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs, daysSinceLastWeighIn } = data;
   const age = calculateAge(profile.birth_date);
   const bmi = calculateBMI(profile.weight_kg, profile.height_cm);
   const bmr = calculateBMR(profile.weight_kg, profile.height_cm, age, profile.gender);
@@ -402,6 +506,20 @@ export default function DashboardPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* ⚖️ SMART WEIGH-IN REMINDER BANNER */}
+      {daysSinceLastWeighIn >= 7 && (
+        <div onClick={() => router.push("/progress")} className="cursor-pointer bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 border border-purple-500/30 rounded-2xl p-4 flex items-center justify-between hover:bg-purple-500/20 transition-all shadow-md animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center space-x-4">
+            <div className="bg-purple-500/20 p-3 rounded-xl shadow-inner"><Scale className="w-6 h-6 text-purple-400" /></div>
+            <div>
+              <h4 className="text-sm font-black text-purple-500 dark:text-purple-400 uppercase tracking-widest">{txt.reqCal}</h4>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 font-medium mt-0.5">{txt.reqCalSub} <span className="font-bold">{daysSinceLastWeighIn} jours</span>. {lang === 'FR' ? "Mettez à jour pour ajuster l'algorithme." : "Update to adjust the algorithm."}</p>
+            </div>
+          </div>
+          <ChevronRight className="w-5 h-5 text-purple-400 shrink-0" />
+        </div>
+      )}
 
       <div 
         onClick={() => router.push("/profile")}
@@ -558,14 +676,13 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* 🛡️ MODALE DE PARTAGE QUIZ (AVEC VOTRE IMAGE EN BACKGROUND) */}
+      {/* MODALES RESTE DU CODE INCHANGÉ (Quiz, Settings, etc.) */}
       <Dialog open={showQuizShareModal} onOpenChange={setShowQuizShareModal}>
         <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[600px] outline-none">
           <div className="flex-1 overflow-y-auto flex flex-col items-center relative hide-scrollbar p-6">
             <div className="absolute -left-[9999px]">
               <div ref={quizCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-center text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
                 
-                {/* INJECTION DE VOTRE IMAGE CANVA */}
                 <img src="/quiz-share-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" />
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent z-0"></div>
                 
@@ -585,8 +702,6 @@ export default function DashboardPage() {
             </div>
 
             <div className="w-full max-w-[280px] aspect-[9/16] bg-zinc-950 rounded-2xl border border-zinc-800 relative flex flex-col items-center justify-between p-5 shadow-2xl overflow-hidden shrink-0 mt-8">
-              
-              {/* APERÇU MODALE - AVEC VOTRE IMAGE CANVA */}
               <img src="/quiz-share-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover z-0" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent z-0"></div>
               
@@ -612,54 +727,20 @@ export default function DashboardPage() {
 
       <Dialog open={isStreakModalOpen} onOpenChange={setIsStreakModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-orange-500 flex items-center justify-center">
-              <Flame className="mr-2 w-6 h-6" /> {txt.streakTitle}
-            </DialogTitle>
-            <DialogDescription className="text-center pt-2">
-              {txt.streakSub}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-6">
-            <div className="flex justify-between items-center px-2">
-              {currentWeek.map((day, idx) => (
-                <div key={idx} className="flex flex-col items-center gap-2">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${day.completed ? 'bg-orange-100 border-orange-500 dark:bg-orange-900/40 text-orange-500 shadow-sm' : day.isFuture ? 'border-dashed border-zinc-200 dark:border-zinc-800 bg-transparent' : 'border-solid border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900'}`}>
-                    <Flame className={`w-5 h-5 ${day.completed ? 'fill-orange-500' : 'fill-transparent text-zinc-300 dark:text-zinc-700'}`} />
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase ${day.isToday ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-600'}`}>{day.dayName}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <DialogHeader><DialogTitle className="text-2xl font-black text-orange-500 flex items-center justify-center"><Flame className="mr-2 w-6 h-6" /> {txt.streakTitle}</DialogTitle><DialogDescription className="text-center pt-2">{txt.streakSub}</DialogDescription></DialogHeader>
+          <div className="py-6"><div className="flex justify-between items-center px-2">{currentWeek.map((day, idx) => (<div key={idx} className="flex flex-col items-center gap-2"><div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${day.completed ? 'bg-orange-100 border-orange-500 dark:bg-orange-900/40 text-orange-500 shadow-sm' : day.isFuture ? 'border-dashed border-zinc-200 dark:border-zinc-800 bg-transparent' : 'border-solid border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900'}`}><Flame className={`w-5 h-5 ${day.completed ? 'fill-orange-500' : 'fill-transparent text-zinc-300 dark:text-zinc-700'}`} /></div><span className={`text-[10px] font-bold uppercase ${day.isToday ? 'text-teal-600 dark:text-teal-400' : 'text-zinc-400 dark:text-zinc-600'}`}>{day.dayName}</span></div>))}</div></div>
           <DialogFooter><Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold" onClick={() => setIsStreakModalOpen(false)}>{txt.understood}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-blue-500 flex items-center">
-              <Droplets className="mr-2" /> {txt.waterTitle}
-            </DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-2xl font-black text-blue-500 flex items-center"><Droplets className="mr-2" /> {txt.waterTitle}</DialogTitle></DialogHeader>
           <div className="py-4 space-y-4">
             <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800">
-              <div>
-                <p className="text-xs font-bold text-blue-400 uppercase tracking-widest">{txt.waterTotal}</p>
-                <p className="text-2xl font-black text-blue-600 dark:text-blue-400">{waterTotal} L</p>
-              </div>
-              <ArrowLeftRight className="w-5 h-5 text-blue-300" />
-              <div className="text-right">
-                <p className="text-xs font-bold text-teal-500 uppercase tracking-widest">{txt.waterPure}</p>
-                <p className="text-2xl font-black text-teal-600 dark:text-teal-400">{waterPure} L</p>
-              </div>
+              <div><p className="text-xs font-bold text-blue-400 uppercase tracking-widest">{txt.waterTotal}</p><p className="text-2xl font-black text-blue-600 dark:text-blue-400">{waterTotal} L</p></div><ArrowLeftRight className="w-5 h-5 text-blue-300" /><div className="text-right"><p className="text-xs font-bold text-teal-500 uppercase tracking-widest">{txt.waterPure}</p><p className="text-2xl font-black text-teal-600 dark:text-teal-400">{waterPure} L</p></div>
             </div>
-            <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400 space-y-3 leading-relaxed">
-              <p>{txt.water1}</p>
-              <p>{txt.water2}</p>
-              <p>{txt.water3}</p>
-            </div>
+            <div className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-sm font-medium text-zinc-600 dark:text-zinc-400 space-y-3 leading-relaxed"><p>{txt.water1}</p><p>{txt.water2}</p><p>{txt.water3}</p></div>
           </div>
           <DialogFooter><Button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold" onClick={() => setIsWaterModalOpen(false)}>{txt.understood}</Button></DialogFooter>
         </DialogContent>
@@ -667,32 +748,10 @@ export default function DashboardPage() {
       
       <Dialog open={mealModal?.show || false} onOpenChange={(open) => !open && setMealModal(null)}>
         <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-zinc-900 dark:text-zinc-100">
-              {txt.mealTitle} {mealModal?.target}g
-            </DialogTitle>
-            <DialogDescription>
-              {txt.mealSub}
-            </DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-2xl font-black text-zinc-900 dark:text-zinc-100">{txt.mealTitle} {mealModal?.target}g</DialogTitle><DialogDescription>{txt.mealSub}</DialogDescription></DialogHeader>
           <div className="space-y-6 pt-4">
             {mealModal && generateMealIdeas(mealModal.type, mealModal.target, lang).map((idea: any, i: number) => (
-              <div key={i} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
-                <h4 className="font-bold text-lg mb-3 flex items-center dark:text-zinc-100"><span className="text-2xl mr-2">{idea.icon}</span> {idea.title}</h4>
-                <div className="space-y-3">
-                  {idea.meals.map((m: any, j: number) => (
-                    <div key={j} className="flex justify-between items-start border-b border-zinc-200 dark:border-zinc-800 pb-2 last:border-0 last:pb-0">
-                      <div>
-                        <span className="block text-xs font-bold text-zinc-400 uppercase tracking-widest">{m.time}</span>
-                        <span className="font-medium text-sm dark:text-zinc-300">{m.amount} {m.food}</span>
-                      </div>
-                      <span className={`font-black text-sm mt-4 ${mealModal.type === 'protein' ? 'text-blue-500' : mealModal.type === 'carbs' ? 'text-green-500' : 'text-orange-500'}`}>
-                        +{m[mealModal.type === 'protein' ? 'prot' : mealModal.type === 'carbs' ? 'carbs' : 'fat']}g
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <div key={i} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm"><h4 className="font-bold text-lg mb-3 flex items-center dark:text-zinc-100"><span className="text-2xl mr-2">{idea.icon}</span> {idea.title}</h4><div className="space-y-3">{idea.meals.map((m: any, j: number) => (<div key={j} className="flex justify-between items-start border-b border-zinc-200 dark:border-zinc-800 pb-2 last:border-0 last:pb-0"><div><span className="block text-xs font-bold text-zinc-400 uppercase tracking-widest">{m.time}</span><span className="font-medium text-sm dark:text-zinc-300">{m.amount} {m.food}</span></div><span className={`font-black text-sm mt-4 ${mealModal.type === 'protein' ? 'text-blue-500' : mealModal.type === 'carbs' ? 'text-green-500' : 'text-orange-500'}`}>+{m[mealModal.type === 'protein' ? 'prot' : mealModal.type === 'carbs' ? 'carbs' : 'fat']}g</span></div>))}</div></div>
             ))}
           </div>
           <DialogFooter><Button className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold" onClick={() => setMealModal(null)}>{txt.understood}</Button></DialogFooter>
@@ -701,24 +760,9 @@ export default function DashboardPage() {
 
       <Dialog open={isCalModalOpen} onOpenChange={setIsCalModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-orange-500 flex items-center"><Flame className="mr-2" /> {txt.calTitle}</DialogTitle>
-            <DialogDescription>{txt.calSub}</DialogDescription>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-2xl font-black text-orange-500 flex items-center"><Flame className="mr-2" /> {txt.calTitle}</DialogTitle><DialogDescription>{txt.calSub}</DialogDescription></DialogHeader>
           <div className="py-4 space-y-4">
-            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl">
-              <h4 className="font-bold text-orange-700 dark:text-orange-400 flex justify-between"><span>{txt.calBmr}</span> <span>{bmr} kcal</span></h4>
-              <p className="text-xs font-medium text-orange-600/80 dark:text-orange-400/80 mt-1">{txt.calBmrSub}</p>
-            </div>
-            <div className="flex justify-center"><ArrowLeftRight className="w-5 h-5 text-zinc-300 dark:text-zinc-700 rotate-90" /></div>
-            <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-              <h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex justify-between"><span>{txt.calMove}</span> <span>+{tdee - bmr} kcal</span></h4>
-              <p className="text-xs font-medium text-zinc-500 mt-1">{txt.calMoveSub}</p>
-            </div>
-            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center">
-              <span className="font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-widest text-sm">{txt.calObj}</span>
-              <span className="text-2xl font-black text-orange-500">{targetCals} kcal</span>
-            </div>
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl"><h4 className="font-bold text-orange-700 dark:text-orange-400 flex justify-between"><span>{txt.calBmr}</span> <span>{bmr} kcal</span></h4><p className="text-xs font-medium text-orange-600/80 dark:text-orange-400/80 mt-1">{txt.calBmrSub}</p></div><div className="flex justify-center"><ArrowLeftRight className="w-5 h-5 text-zinc-300 dark:text-zinc-700 rotate-90" /></div><div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl"><h4 className="font-bold text-zinc-800 dark:text-zinc-200 flex justify-between"><span>{txt.calMove}</span> <span>+{tdee - bmr} kcal</span></h4><p className="text-xs font-medium text-zinc-500 mt-1">{txt.calMoveSub}</p></div><div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center"><span className="font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-widest text-sm">{txt.calObj}</span><span className="text-2xl font-black text-orange-500">{targetCals} kcal</span></div>
           </div>
           <DialogFooter><Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold" onClick={() => setIsCalModalOpen(false)}>{txt.understood}</Button></DialogFooter>
         </DialogContent>
@@ -726,32 +770,9 @@ export default function DashboardPage() {
 
       <Dialog open={isImgModalOpen} onOpenChange={setIsImgModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-black text-indigo-500 flex items-center"><Activity className="mr-2" /> {txt.imgTitle}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-2xl font-black text-indigo-500 flex items-center"><Activity className="mr-2" /> {txt.imgTitle}</DialogTitle></DialogHeader>
           <div className="py-6 text-center space-y-4">
-            <div className="text-6xl font-black text-zinc-900 dark:text-zinc-100">~{img}%</div>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              {txt.imgSub}
-            </p>
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 mt-4">
-              <h4 className="font-bold text-indigo-700 dark:text-indigo-400 mb-2">{txt.imgWhere}</h4>
-              {profile.gender === 'homme' ? (
-                <ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200">
-                  <li><strong>&lt; 10% :</strong> {lang === 'FR' ? 'Athlète sec (Abdos ultra-visibles)' : 'Shredded Athlete (Visible abs)'}</li>
-                  <li><strong>10 - 15% :</strong> {lang === 'FR' ? 'Fitness (Abdos visibles)' : 'Fitness (Slightly visible abs)'}</li>
-                  <li><strong>15 - 20% :</strong> {lang === 'FR' ? 'Forme normale (Ventre plat)' : 'Normal Shape (Flat belly)'}</li>
-                  <li><strong>&gt; 20% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li>
-                </ul>
-              ) : (
-                <ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200">
-                  <li><strong>&lt; 20% :</strong> {lang === 'FR' ? 'Athlète sèche (Abdos visibles)' : 'Shredded Athlete (Visible abs)'}</li>
-                  <li><strong>20 - 25% :</strong> {lang === 'FR' ? 'Fitness (Silhouette tonique)' : 'Fitness (Toned silhouette)'}</li>
-                  <li><strong>25 - 30% :</strong> {lang === 'FR' ? 'Forme normale' : 'Normal Shape'}</li>
-                  <li><strong>&gt; 30% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li>
-                </ul>
-              )}
-            </div>
+            <div className="text-6xl font-black text-zinc-900 dark:text-zinc-100">~{img}%</div><p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{txt.imgSub}</p><div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 mt-4"><h4 className="font-bold text-indigo-700 dark:text-indigo-400 mb-2">{txt.imgWhere}</h4>{profile.gender === 'homme' ? (<ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200"><li><strong>&lt; 10% :</strong> {lang === 'FR' ? 'Athlète sec (Abdos ultra-visibles)' : 'Shredded Athlete (Visible abs)'}</li><li><strong>10 - 15% :</strong> {lang === 'FR' ? 'Fitness (Abdos visibles)' : 'Fitness (Slightly visible abs)'}</li><li><strong>15 - 20% :</strong> {lang === 'FR' ? 'Forme normale (Ventre plat)' : 'Normal Shape (Flat belly)'}</li><li><strong>&gt; 20% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li></ul>) : (<ul className="text-xs text-left space-y-2 text-indigo-900 dark:text-indigo-200"><li><strong>&lt; 20% :</strong> {lang === 'FR' ? 'Athlète sèche (Abdos visibles)' : 'Shredded Athlete (Visible abs)'}</li><li><strong>20 - 25% :</strong> {lang === 'FR' ? 'Fitness (Silhouette tonique)' : 'Fitness (Toned silhouette)'}</li><li><strong>25 - 30% :</strong> {lang === 'FR' ? 'Forme normale' : 'Normal Shape'}</li><li><strong>&gt; 30% :</strong> {lang === 'FR' ? 'Embonpoint' : 'Overweight'}</li></ul>)}</div>
           </div>
           <DialogFooter><Button className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold" onClick={() => setIsImgModalOpen(false)}>{txt.understood}</Button></DialogFooter>
         </DialogContent>
@@ -820,144 +841,23 @@ export default function DashboardPage() {
         <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader><DialogTitle className="dark:text-zinc-100 flex items-center"><User className="w-5 h-5 mr-2" /> {txt.adjust}</DialogTitle></DialogHeader>
           <div className="grid gap-6 py-4">
-            
-            {/* GROUP 1: Identité */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Identité</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="dark:text-zinc-300">Prénom</Label>
-                  <Input type="text" value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="dark:text-zinc-300">Nom</Label>
-                  <Input type="text" value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
-                </div>
-              </div>
-            </div>
-
-            {/* GROUP 2: Avatar (OFFLINE FRIENDLY) */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Avatar</h4>
-              <div className="grid grid-cols-8 gap-2">
-                {AVATAR_LIST.map((av) => (
-                  <button
-                    key={av.id}
-                    type="button"
-                    onClick={() => setEditAvatar(av.id)}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${editAvatar === av.id ? 'ring-2 ring-teal-500 scale-110 bg-teal-50 dark:bg-teal-900/30' : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-70 hover:opacity-100'}`}
-                    title={av.label}
-                  >
-                    {av.id === 'default' ? <User className="w-5 h-5 text-zinc-500 dark:text-zinc-400" /> : av.id}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* GROUP 3: Corps & Objectifs */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Biométrie & Objectif</h4>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label className="dark:text-zinc-300">Poids (kg)</Label>
-                  <Input type="number" step="0.1" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="dark:text-zinc-300">Taille (cm)</Label>
-                  <Input type="number" step="1" value={editHeight} onChange={(e) => setEditHeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" />
-                </div>
-                <div className="space-y-2 col-span-3 sm:col-span-1">
-                  <Label className="dark:text-zinc-300">Objectif</Label>
-                  <Select value={editGoal} onValueChange={(val) => { setEditGoal(val); }}>
-                    <SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue /></SelectTrigger>
-                    <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800">
-                      <SelectItem value="perte_poids">Perte de gras</SelectItem>
-                      <SelectItem value="recomposition">Recomposition</SelectItem>
-                      <SelectItem value="performance">Performance</SelectItem>
-                      <SelectItem value="prise_masse">Prise de masse</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-            
-            {/* GROUP 4: Expérience */}
-            <div className="space-y-2">
-              <Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2 text-yellow-500" /> Niveau d'Expérience</Label>
-              <Select value={editExperience} onValueChange={(val) => { setEditExperience(val); }}>
-                <SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder="Sélectionnez un niveau" /></SelectTrigger>
-                <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800">
-                  <SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem>
-                  <SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem>
-                  <SelectItem value="avance">Avancé (+3 ans)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest">Ajuste le volume généré par l'IA.</p>
-            </div>
-
-            {/* GROUP 5: Sports */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100"><Calendar className="h-4 w-4 mr-2"/> Sports Annexes (Fatigue)</h4>
-              <div className="space-y-3">
-                {Object.keys(DAYS).map((dayKey) => (
-                  <div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 gap-2 text-sm">
-                    <span className="font-bold w-24 text-zinc-700 dark:text-zinc-300">{DAYS[dayKey as keyof typeof DAYS]}</span>
-                    <div className="flex flex-wrap gap-3">
-                      {EXTRA_SPORTS.map((sport) => {
-                        const isChecked = (editSchedule[dayKey] as string[] || []).includes(sport.id);
-                        return (
-                          <div key={sport.id} className="flex items-center space-x-1">
-                            <Checkbox id={`edit-${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => {
-                              if (typeof c === 'boolean') handleSportToggle(dayKey, sport.id, c);
-                            }} className="dark:border-zinc-700 dark:data-[state=checked]:bg-teal-500" />
-                            <Label htmlFor={`edit-${dayKey}-${sport.id}`} className="text-xs cursor-pointer dark:text-zinc-400">{sport.label}</Label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* BASCULE QUIZ */}
-            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label className="text-base font-bold dark:text-zinc-100 flex items-center"><Brain className="w-4 h-4 mr-2 text-indigo-500" /> Daily Brain Gain</Label>
-                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Afficher les quiz sur l'accueil</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditDisableQuiz(!editDisableQuiz)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!editDisableQuiz ? 'bg-teal-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}
-                >
-                  <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!editDisableQuiz ? 'translate-x-5' : 'translate-x-0'}`} />
-                </button>
-              </div>
-            </div>
-
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Identité</h4><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label className="dark:text-zinc-300">Prénom</Label><Input type="text" value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div><div className="space-y-2"><Label className="dark:text-zinc-300">Nom</Label><Input type="text" value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div></div></div>
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Avatar</h4><div className="grid grid-cols-8 gap-2">{AVATAR_LIST.map((av) => (<button key={av.id} type="button" onClick={() => setEditAvatar(av.id)} className={`w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${editAvatar === av.id ? 'ring-2 ring-teal-500 scale-110 bg-teal-50 dark:bg-teal-900/30' : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-70 hover:opacity-100'}`} title={av.label}>{av.id === 'default' ? <User className="w-5 h-5 text-zinc-500 dark:text-zinc-400" /> : av.id}</button>))}</div></div>
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Biométrie & Objectif</h4><div className="grid grid-cols-3 gap-4"><div className="space-y-2"><Label className="dark:text-zinc-300">Poids (kg)</Label><Input type="number" step="0.1" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div><div className="space-y-2"><Label className="dark:text-zinc-300">Taille (cm)</Label><Input type="number" step="1" value={editHeight} onChange={(e) => setEditHeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div><div className="space-y-2 col-span-3 sm:col-span-1"><Label className="dark:text-zinc-300">Objectif</Label><Select value={editGoal} onValueChange={(val) => { setEditGoal(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="perte_poids">Perte de gras</SelectItem><SelectItem value="recomposition">Recomposition</SelectItem><SelectItem value="performance">Performance</SelectItem><SelectItem value="prise_masse">Prise de masse</SelectItem></SelectContent></Select></div></div></div>
+            <div className="space-y-2"><Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2 text-yellow-500" /> Niveau d'Expérience</Label><Select value={editExperience} onValueChange={(val) => { setEditExperience(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder="Sélectionnez un niveau" /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem><SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem><SelectItem value="avance">Avancé (+3 ans)</SelectItem></SelectContent></Select><p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest">Ajuste le volume généré par l'IA.</p></div>
+            <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100"><Calendar className="h-4 w-4 mr-2"/> Sports Annexes (Fatigue)</h4><div className="space-y-3">{Object.keys(DAYS).map((dayKey) => (<div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 gap-2 text-sm"><span className="font-bold w-24 text-zinc-700 dark:text-zinc-300">{DAYS[dayKey as keyof typeof DAYS]}</span><div className="flex flex-wrap gap-3">{EXTRA_SPORTS.map((sport) => {const isChecked = (editSchedule[dayKey] as string[] || []).includes(sport.id);return (<div key={sport.id} className="flex items-center space-x-1"><Checkbox id={`edit-${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => {if (typeof c === 'boolean') handleSportToggle(dayKey, sport.id, c);}} className="dark:border-zinc-700 dark:data-[state=checked]:bg-teal-500" /><Label htmlFor={`edit-${dayKey}-${sport.id}`} className="text-xs cursor-pointer dark:text-zinc-400">{sport.label}</Label></div>);})}</div></div>))}</div></div>
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><Brain className="w-4 h-4 mr-2 text-indigo-500" /> Daily Brain Gain</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Afficher les quiz sur l'accueil</p></div><button type="button" onClick={() => setEditDisableQuiz(!editDisableQuiz)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!editDisableQuiz ? 'bg-teal-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!editDisableQuiz ? 'translate-x-5' : 'translate-x-0'}`} /></button></div></div>
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between mb-4"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><BellRing className="w-4 h-4 mr-2 text-orange-500" /> Notifications</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Recevoir des rappels d'entraînement</p></div><button type="button" onClick={togglePushNotifications} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isPushEnabled ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPushEnabled ? 'translate-x-5' : 'translate-x-0'}`} /></button></div>{isPushEnabled && (<Button variant="outline" size="sm" onClick={testPushNotification} className="w-full text-xs font-bold border-zinc-700 text-zinc-400 hover:text-white">Envoyer une notification de test</Button>)}</div>
           </div>
-          <DialogFooter className="border-t border-zinc-100 dark:border-zinc-800 pt-4">
-            <Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 font-bold">{txt.cancel}</Button>
-            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 text-white hover:bg-teal-600 font-bold">{actionLoading ? "..." : txt.save}</Button>
-          </DialogFooter>
+          <DialogFooter className="border-t border-zinc-100 dark:border-zinc-800 pt-4"><Button variant="outline" onClick={() => setIsEditModalOpen(false)} className="dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 font-bold">{txt.cancel}</Button><Button onClick={handleUpdateProfile} disabled={actionLoading} className="bg-teal-500 text-white hover:bg-teal-600 font-bold">{actionLoading ? "..." : txt.save}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <DialogContent className="sm:max-w-[425px] border-red-200 bg-red-50 dark:border-red-900 dark:bg-zinc-950">
           <DialogHeader><DialogTitle className="text-red-600 dark:text-red-500 flex items-center"><AlertTriangle className="mr-2 h-5 w-5"/> Purge</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-red-700 dark:text-red-400">{txt.deleteMsg}</Label>
-              <Input value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className="border-red-300 dark:border-red-900 dark:bg-zinc-900 dark:text-zinc-100" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} className="dark:border-zinc-800 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
-            <Button variant="destructive" onClick={handleDeleteProfile} disabled={(deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE") || actionLoading} className="dark:bg-red-600 dark:hover:bg-red-700 font-bold">{txt.confirm}</Button>
-          </DialogFooter>
+          <div className="grid gap-4 py-4"><div className="space-y-2"><Label className="text-red-700 dark:text-red-400">{txt.deleteMsg}</Label><Input value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} className="border-red-300 dark:border-red-900 dark:bg-zinc-900 dark:text-zinc-100" /></div></div>
+          <DialogFooter><Button variant="outline" onClick={() => setIsDeleteModalOpen(false)} className="dark:border-zinc-800 dark:text-zinc-300 font-bold">{txt.cancel}</Button><Button variant="destructive" onClick={handleDeleteProfile} disabled={(deleteConfirmText !== "SUPPRIMER" && deleteConfirmText !== "DELETE") || actionLoading} className="dark:bg-red-600 dark:hover:bg-red-700 font-bold">{txt.confirm}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
