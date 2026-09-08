@@ -5,8 +5,8 @@ import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Flame, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Flame, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
 import { awardWorkoutXP } from "@/lib/gamification-engine";
@@ -119,7 +119,7 @@ export default function ActiveWorkoutSession() {
   const [isWorkoutUnlocked, setIsWorkoutUnlocked] = useState(false);
   const [warmupChecks, setWarmupChecks] = useState<boolean[]>([]);
   const [sessionStartTime] = useState(Date.now());
-  const [sessionStats, setSessionStats] = useState({ duration: 0, tonnage: 0, bestSet: "", xpEarned: 0, leveledUp: false, isReplay: false });
+  const [sessionStats, setSessionStats] = useState({ duration: 0, tonnage: 0, bestSet: "", xpEarned: 0, leveledUp: false, isReplay: false, isOffline: false });
   const [isSharing, setIsSharing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -159,8 +159,8 @@ export default function ActiveWorkoutSession() {
   }, [showBreathingModal, breatheTime]);
 
   const t: Record<string, any> = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui." },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", replayTitle: "XP Already Claimed", replaySub: "For this session today." }
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées au retour du réseau." },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when connection is restored." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -214,6 +214,7 @@ export default function ActiveWorkoutSession() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  // 🛡️ OFFLINE-FIRST FINISH WORKOUT
   const finishWorkout = async () => {
     if (isSaving) return;
     const hasCompletedSets = Object.values(completedSets).some(val => val === true);
@@ -222,18 +223,6 @@ export default function ActiveWorkoutSession() {
     setIsSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !data?.sessionData) { setIsSaving(false); return; }
-
-    // 🛡️ SYSTÈME ANTI-TRICHE : Vérifier si des logs existent déjà pour cette session aujourd'hui
-    const todayStr = new Date().toISOString().split('T')[0];
-    const { data: existingLogs } = await supabase
-      .from('workout_logs')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('session_id', data.sessionData.id)
-      .gte('created_at', todayStr + 'T00:00:00.000Z')
-      .limit(1);
-    
-    const isReplay = Boolean(existingLogs && existingLogs.length > 0);
 
     const logsToInsert = [];
     let calcTonnage = 0;
@@ -268,23 +257,47 @@ export default function ActiveWorkoutSession() {
       }
     }
 
-    const { error } = await supabase.from('workout_logs').insert(logsToInsert);
-    if (error) { setErrorModal({ show: true, title: txt.sqlErr, message: error.message }); setIsSaving(false); return; }
-
     const durMins = Math.max(1, Math.floor((Date.now() - sessionStartTime) / 60000));
     let bestSetStr = maxWeight > 0 ? `${maxWeight}kg × ${maxRepsForWeight}` : (lang === 'FR' ? "Poids du corps" : "Bodyweight");
     if (bestExName) bestSetStr += ` (${bestExName})`;
 
-    // Appel au moteur Gamification avec le flag Anti-Triche
-    const gamification = await awardWorkoutXP(user.id, calcTonnage, isReplay);
+    let isOfflineSaved = false;
+    let xpEarned = 0;
+    let leveledUp = false;
+    let isReplay = false;
+
+    // Tentative d'insertion avec Fallback Hors-Ligne
+    try {
+      if (!navigator.onLine) throw new Error("OFFLINE");
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const { data: existingLogs } = await supabase.from('workout_logs').select('id').eq('user_id', user.id).eq('session_id', data.sessionData.id).gte('created_at', todayStr + 'T00:00:00.000Z').limit(1);
+      isReplay = Boolean(existingLogs && existingLogs.length > 0);
+
+      const { error } = await supabase.from('workout_logs').insert(logsToInsert);
+      if (error) throw error;
+
+      const gamification = await awardWorkoutXP(user.id, calcTonnage, isReplay);
+      xpEarned = gamification.xpEarned || 0;
+      leveledUp = gamification.leveledUp || false;
+
+    } catch (err: any) {
+      console.warn("Réseau indisponible. Sauvegarde locale activée.", err);
+      // Cache local pour les Service Workers
+      const offlineQueue = JSON.parse(localStorage.getItem('vivex_offline_queue') || '[]');
+      offlineQueue.push(...logsToInsert);
+      localStorage.setItem('vivex_offline_queue', JSON.stringify(offlineQueue));
+      isOfflineSaved = true;
+    }
 
     setSessionStats({ 
       duration: durMins, 
       tonnage: calcTonnage, 
       bestSet: bestSetStr,
-      xpEarned: gamification.xpEarned || 0,
-      leveledUp: gamification.leveledUp || false,
-      isReplay: gamification.isReplay || false
+      xpEarned,
+      leveledUp,
+      isReplay,
+      isOffline: isOfflineSaved
     });
     
     setRestTimer(null);
@@ -498,8 +511,14 @@ export default function ActiveWorkoutSession() {
               </div>
             </div>
             
-            {/* 🛡️ WIDGET ANTI-TRICHE */}
-            {sessionStats.isReplay ? (
+            {/* 🛡️ WIDGET OFFLINE / ANTI-TRICHE */}
+            {sessionStats.isOffline ? (
+              <div className="w-full max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 shadow-sm flex flex-col items-center text-center animate-in slide-in-from-top-8">
+                <WifiOff className="w-8 h-8 text-zinc-500 mb-2" />
+                <h4 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">{txt.offlineTitle}</h4>
+                <p className="text-xs text-zinc-500 mt-1">{txt.offlineSub}</p>
+              </div>
+            ) : sessionStats.isReplay ? (
               <div className="w-full max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 shadow-sm flex flex-col items-center text-center animate-in slide-in-from-top-8">
                 <ShieldCheck className="w-8 h-8 text-zinc-500 mb-2" />
                 <h4 className="text-sm font-bold text-zinc-300 uppercase tracking-widest">{txt.replayTitle}</h4>

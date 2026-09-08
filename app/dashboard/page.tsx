@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2, BellRing, Scale } from "lucide-react";
+import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2, BellRing, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -74,10 +74,15 @@ const fetchDashboardData = async () => {
   if (!user) throw new Error("No user");
   
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  const { data: logs } = await supabase.from("workout_logs").select("created_at, weight, reps, session_id").eq("user_id", user.id);
+  
+  const d90 = new Date(); d90.setDate(d90.getDate() - 90);
+  const { data: logs } = await supabase.from("workout_logs")
+    .select("created_at, weight, reps, session_id")
+    .eq("user_id", user.id)
+    .gte("created_at", d90.toISOString());
+
   const { data: gamification } = await supabase.from("user_gamification").select("*").eq("user_id", user.id).maybeSingle();
 
-  // 🧠 SMART WEIGH-IN REMINDER LOGIC & 🛡️ SINGLE SOURCE OF TRUTH (BF%)
   const { data: lastMeasurement } = await supabase
     .from("measurements")
     .select("created_at, weight_kg, body_fat_percentage")
@@ -101,7 +106,35 @@ const fetchDashboardData = async () => {
     daysSinceLastWeighIn = 999;
   }
 
+  const d28 = new Date(); d28.setDate(d28.getDate() - 28);
+  const d7 = new Date(); d7.setDate(d7.getDate() - 7);
+  const d1 = new Date(); d1.setDate(d1.getDate() - 1);
+  const yStr = d1.toISOString().split('T')[0];
   const todayStr = new Date().toISOString().split('T')[0];
+
+  let vol7 = 0; let vol28 = 0; let yesterdayVol = 0;
+  (logs || []).filter(l => new Date(l.created_at) >= d28).forEach(l => {
+    const v = (l.weight || 0) * (l.reps || 0);
+    vol28 += v;
+    if (new Date(l.created_at) >= d7) vol7 += v;
+    if (l.created_at.startsWith(yStr)) yesterdayVol += v;
+  });
+  
+  const avg4Weeks = vol28 / 4;
+  const acwrScore = avg4Weeks > 0 ? Number((vol7 / avg4Weeks).toFixed(2)) : 1;
+
+  const validSleepQuality = profile?.last_sleep_check === todayStr ? profile.sleep_quality : 'moyen';
+
+  let rScore = 100;
+  if (validSleepQuality === 'mauvais') rScore -= 25;
+  else if (validSleepQuality === 'moyen') rScore -= 10;
+  
+  if (acwrScore > 1.5) rScore -= 20;
+  else if (acwrScore > 1.3) rScore -= 10;
+  else if (acwrScore < 0.8) rScore -= 5;
+  if (yesterdayVol > 0) rScore -= 10; 
+  rScore = Math.max(10, Math.min(100, rScore));
+
   let dailyQuiz = null;
   const disableQuiz = profile?.disable_quiz || false;
 
@@ -133,7 +166,7 @@ const fetchDashboardData = async () => {
       if (todayLogs.length > 0) isTodayWorkoutCompleted = true;
     }
   }
-  return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [], daysSinceLastWeighIn, currentActualBodyFat, currentWeight };
+  return { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs: logs || [], daysSinceLastWeighIn, currentActualBodyFat, currentWeight, rScore };
 };
 
 export default function DashboardPage() {
@@ -151,8 +184,11 @@ export default function DashboardPage() {
   const [isImgModalOpen, setIsImgModalOpen] = useState(false);
   const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
   const [isWaterModalOpen, setIsWaterModalOpen] = useState(false);
+  const [isReadinessModalOpen, setIsReadinessModalOpen] = useState(false);
   const [microModal, setMicroModal] = useState({ show: false, micro: null as any });
   const [mealModal, setMealModal] = useState<{show: boolean, type: 'protein'|'carbs'|'fat', target: number} | null>(null);
+
+  const [showSleepPrompt, setShowSleepPrompt] = useState(false);
 
   const [quizState, setQuizState] = useState<'playing' | 'success' | 'fail'>('playing');
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -167,7 +203,7 @@ export default function DashboardPage() {
   const [editLastName, setEditLastName] = useState("");
   const [editHeight, setEditHeight] = useState("");
   const [editWeight, setEditWeight] = useState("");
-  const [editBodyFat, setEditBodyFat] = useState(""); // 🛡️ NOUVEAU CHAMP BF%
+  const [editBodyFat, setEditBodyFat] = useState("");
   const [editGoal, setEditGoal] = useState("");
   const [editExperience, setEditExperience] = useState("");
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
@@ -187,32 +223,70 @@ export default function DashboardPage() {
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
       setEditDisableQuiz(data.profile.disable_quiz || false);
       setEditAvatar(data.profile.avatar_url || "default");
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (data.profile.last_sleep_check !== todayStr) {
+        setShowSleepPrompt(true);
+      }
     }
     
     if (typeof window !== "undefined" && 'serviceWorker' in navigator && 'PushManager' in window) {
-      navigator.serviceWorker.ready.then(reg => {
-        reg.pushManager.getSubscription().then(sub => {
-          if (sub) setIsPushEnabled(true);
-        });
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg) {
+          reg.pushManager.getSubscription().then(sub => {
+            if (sub) setIsPushEnabled(true);
+          });
+        }
       });
     }
   }, [data]);
 
   const t = {
-    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Masse Grasse", imgSub: "Indice de masse grasse sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Atteindre vos", mealSub: "Voici des exemples de journée type pour atteindre exactement ce quota, calculés pour vous.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Précision Clinique)" },
-    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Fat", imgSub: "Percentage of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Reach your", mealSub: "Here are typical daily meal examples to hit exactly this quota, calculated for you.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Clinical Precision)" }
+    FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Masse Grasse", imgSub: "Indice de masse grasse sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Stratégie Repas :", mealSub: "Exemples calibrés pour vos macros. Cliquez sur un protocole pour l'ouvrir.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Précision Clinique)", readinessTitle: "Readiness Score (SNC)", 
+          readinessDesc: "Ce score sur 100 évalue la fatigue de votre Système Nerveux Central (SNC).\n\nIl croise 3 variables :\n• Ratio de fatigue (ACWR).\n• Tonnage de la veille.\n• Qualité du sommeil.\n\n🟢 85-100 : Récupération optimale. C'est le moment de battre des records (PR).\n🟡 60-84 : Fatigue modérée. Entraînement normal, privilégiez la technique.\n🔴 < 60 : Risque de blessure élevé. Baissez le volume de 20% ou prenez un jour de repos actif.",
+          sleepPrompt: "Comment avez-vous dormi cette nuit ?", sleepExc: "Excellent", sleepAvg: "Moyen", sleepBad: "Mauvais",
+          sleepLegendExc: "8h+ ininterrompu", sleepLegendAvg: "6-7h, réveils", sleepLegendBad: "< 6h, insomnie", sleepContext: "L'algorithme a besoin de votre ressenti." },
+    EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Fat", imgSub: "Percentage of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Meal Strategy:", mealSub: "Calibrated examples for your macros. Click a protocol to expand.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Clinical Precision)", readinessTitle: "Readiness Score (CNS)", 
+          readinessDesc: "This score out of 100 evaluates the fatigue of your Central Nervous System (CNS).\n\nIt crosses 3 variables:\n• Fatigue ratio (ACWR).\n• Yesterday's tonnage.\n• Sleep quality.\n\n🟢 85-100: Optimal recovery. Time to hit PRs.\n🟡 60-84: Moderate fatigue. Normal training, focus on technique.\n🔴 < 60: High injury risk. Drop volume by 20% or take an active rest day.",
+          sleepPrompt: "How did you sleep last night?", sleepExc: "Excellent", sleepAvg: "Average", sleepBad: "Poor",
+          sleepLegendExc: "8h+ uninterrupted", sleepLegendAvg: "6-7h, minor waking", sleepLegendBad: "< 6h, restless", sleepContext: "The algorithm needs your input." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
+  const handleSleepCheckin = async (quality: 'excellent' | 'moyen' | 'mauvais') => {
+    if (!data?.profile) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    
+    // 🛡️ MAJ PROFIL ET HISTORISATION DANS DAILY_METRICS
+    await supabase.from("profiles").update({ 
+      sleep_quality: quality, 
+      last_sleep_check: todayStr 
+    }).eq("id", data.profile.id);
+
+    await supabase.from("daily_metrics").upsert({
+      user_id: data.profile.id,
+      date: todayStr,
+      sleep_quality: quality,
+      readiness_score: data.rScore 
+    }, { onConflict: 'user_id, date' });
+    
+    setShowSleepPrompt(false);
+    mutate(); 
+  };
+
   const togglePushNotifications = async () => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !data?.profile?.id) {
-      alert("Push non supporté sur ce navigateur/appareil.");
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert(lang === 'FR' ? "Votre navigateur ne supporte pas le Push." : "Push not supported.");
       return;
     }
 
     try {
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        alert(lang === 'FR' ? "Le Service Worker n'est pas installé. L'application doit d'abord être installée ou 'next-pwa' configuré." : "Service Worker not installed.");
+        return;
+      }
 
       if (isPushEnabled) {
         const subscription = await registration.pushManager.getSubscription();
@@ -224,12 +298,15 @@ export default function DashboardPage() {
       } else {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-          alert("Permission refusée. Vérifiez les paramètres de votre appareil.");
+          alert(lang === 'FR' ? "Permission refusée par le système." : "Permission denied.");
           return;
         }
 
         const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-        if (!vapidPublicKey) throw new Error("VAPID Key manquante");
+        if (!vapidPublicKey) {
+          alert(lang === 'FR' ? "Clé VAPID manquante dans le fichier .env" : "Missing VAPID key in .env.");
+          return;
+        }
 
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
@@ -239,7 +316,7 @@ export default function DashboardPage() {
         const subJson = subscription.toJSON();
         
         await supabase.from('push_subscriptions').insert([{
-          user_id: data.profile.id,
+          user_id: data!.profile.id,
           endpoint: subJson.endpoint,
           auth_key: subJson.keys?.auth,
           p256dh_key: subJson.keys?.p256dh
@@ -247,9 +324,9 @@ export default function DashboardPage() {
 
         setIsPushEnabled(true);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erreur Push Toggle', err);
-      alert("Erreur de configuration Push.");
+      alert(lang === 'FR' ? `Erreur technique : ${err.message}` : `Error: ${err.message}`);
     }
   };
 
@@ -290,7 +367,6 @@ export default function DashboardPage() {
         avatar_url: editAvatar
       }).eq("id", data.profile.id);
       
-      // 🛡️ GESTION DU SINGLE SOURCE OF TRUTH (Création d'une nouvelle ligne si on change Poids ou Masse Grasse)
       if (newWeight !== data.currentWeight || newBF !== data.currentActualBodyFat) {
         await supabase.from("measurements").insert([{ 
           user_id: data.profile.id, 
@@ -390,16 +466,15 @@ export default function DashboardPage() {
     );
   }
 
-  const { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs, daysSinceLastWeighIn, currentActualBodyFat, currentWeight } = data;
+  const { profile, gamification, dailyQuiz, todayWorkoutId, isTodayWorkoutCompleted, logs, daysSinceLastWeighIn, currentActualBodyFat, currentWeight, rScore } = data;
   const age = calculateAge(profile.birth_date);
   const bmi = calculateBMI(currentWeight, profile.height_cm);
   
-  // 🧬 MOTEUR MATHÉMATIQUE (BMR dynamically switches to Katch-McArdle if BF is provided)
   const bmr = calculateBMR(currentWeight, profile.height_cm, age, profile.gender, currentActualBodyFat);
   const tdee = calculateTDEE(bmr, profile.activity_level);
   
   const estimatedImg = calculateEstimatedBodyFat(bmi, age, profile.gender);
-  const displayedImg = currentActualBodyFat || estimatedImg; // Utilise la valeur réelle si elle existe
+  const displayedImg = currentActualBodyFat || estimatedImg; 
   
   const idealWeight = calculateIdealWeight(profile.height_cm, profile.gender);
   const waterTotal = calculateWaterIntake(currentWeight, profile.activity_level);
@@ -420,15 +495,17 @@ export default function DashboardPage() {
   const nextLevelXP = currentLevel * 1000;
   const xpProgress = Math.min((currentXp / nextLevelXP) * 100, 100);
 
-  let bmiColor = "text-teal-500"; let bmiLabel = txt.weight;
-  if (bmi < 18.5) { bmiColor = "text-blue-500"; bmiLabel = txt.under; }
-  else if (bmi >= 25 && bmi < 30) { bmiColor = "text-orange-500"; bmiLabel = txt.over; }
-  else if (bmi >= 30) { bmiColor = "text-red-600 font-bold"; bmiLabel = txt.obese; }
-
   const formatGoal = (goal: string, l: string) => {
     if (l === "EN") return { perte_poids: "Fat Loss", recomposition: "Body Recomp", performance: "Performance", prise_masse: "Muscle Building" }[goal] || goal;
     return { perte_poids: "Perte de masse grasse", recomposition: "Recomposition Corporelle", performance: "Performance & Force", prise_masse: "Prise de masse musculaire" }[goal] || goal;
   };
+
+  const getReadinessUI = () => {
+    if (rScore >= 85) return { color: "text-green-500", bg: "bg-green-500", border: "border-green-500/30", text: lang === 'FR' ? "Récupération optimale, prêt pour un record." : "Optimal recovery, ready for a PR.", icon: <Battery className="w-8 h-8 text-green-500" /> };
+    if (rScore >= 60) return { color: "text-teal-500", bg: "bg-teal-500", border: "border-teal-500/30", text: lang === 'FR' ? "Feu vert. Maintenez la surcharge progressive." : "Green light. Maintain progressive overload.", icon: <BatteryCharging className="w-8 h-8 text-teal-500" /> };
+    return { color: "text-red-500", bg: "bg-red-500", border: "border-red-500/30", text: lang === 'FR' ? "SNC Épuisé, baissez le volume de 20% aujourd'hui." : "CNS Exhausted, drop volume by 20% today.", icon: <BatteryWarning className="w-8 h-8 text-red-500" /> };
+  };
+  const rUI = getReadinessUI();
 
   const renderSmartBanner = () => {
     const todayName = DAYS[["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()] as keyof typeof DAYS];
@@ -529,7 +606,62 @@ export default function DashboardPage() {
         </DropdownMenu>
       </div>
 
-      {/* ⚖️ SMART WEIGH-IN REMINDER BANNER */}
+      {/* 🛡️ DAILY CHECK-IN (SOMMEIL) - "SILICON VALLEY" REDESIGN */}
+      {showSleepPrompt && (
+        <div className="relative overflow-hidden rounded-3xl border border-indigo-500/20 bg-white dark:bg-zinc-950 shadow-2xl animate-in slide-in-from-top-8 duration-700">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-yellow-500 to-red-500"></div>
+          <div className="p-6 sm:p-8">
+            <div className="flex items-center space-x-4 mb-6">
+              <div className="bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-2xl"><Moon className="w-8 h-8 text-indigo-500 dark:text-indigo-400" /></div>
+              <div>
+                <h3 className="text-xl sm:text-2xl font-black text-zinc-900 dark:text-zinc-100 tracking-tight">{txt.sleepPrompt}</h3>
+                <p className="text-sm font-medium text-zinc-500 mt-1">{txt.sleepContext}</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <button onClick={() => handleSleepCheckin('excellent')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-green-500 dark:hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-all duration-300 active:scale-95 overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-b from-green-500/0 to-green-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <Smile className="w-10 h-10 text-zinc-400 group-hover:text-green-500 mb-3 transition-colors duration-300 group-hover:scale-110" />
+                <span className="font-black text-zinc-700 dark:text-zinc-200 group-hover:text-green-700 dark:group-hover:text-green-400 text-lg mb-1">{txt.sleepExc}</span>
+                <span className="text-xs font-bold text-zinc-400 group-hover:text-green-600/70 dark:group-hover:text-green-400/70 text-center px-2">{txt.sleepLegendExc}</span>
+              </button>
+
+              <button onClick={() => handleSleepCheckin('moyen')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-yellow-500 dark:hover:border-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-all duration-300 active:scale-95 overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-b from-yellow-500/0 to-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <Meh className="w-10 h-10 text-zinc-400 group-hover:text-yellow-500 mb-3 transition-colors duration-300 group-hover:scale-110" />
+                <span className="font-black text-zinc-700 dark:text-zinc-200 group-hover:text-yellow-700 dark:group-hover:text-yellow-400 text-lg mb-1">{txt.sleepAvg}</span>
+                <span className="text-xs font-bold text-zinc-400 group-hover:text-yellow-600/70 dark:group-hover:text-yellow-400/70 text-center px-2">{txt.sleepLegendAvg}</span>
+              </button>
+
+              <button onClick={() => handleSleepCheckin('mauvais')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-red-500 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-300 active:scale-95 overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-b from-red-500/0 to-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <Frown className="w-10 h-10 text-zinc-400 group-hover:text-red-500 mb-3 transition-colors duration-300 group-hover:scale-110" />
+                <span className="font-black text-zinc-700 dark:text-zinc-200 group-hover:text-red-700 dark:group-hover:text-red-400 text-lg mb-1">{txt.sleepBad}</span>
+                <span className="text-xs font-bold text-zinc-400 group-hover:text-red-600/70 dark:group-hover:text-red-400/70 text-center px-2">{txt.sleepLegendBad}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🧬 PHASE 6 : READINESS SCORE */}
+      <div className={`p-6 rounded-2xl border ${rUI.border} bg-white dark:bg-zinc-950 shadow-sm flex items-center justify-between relative`}>
+        <button onClick={() => setIsReadinessModalOpen(true)} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
+          <Info className="w-4 h-4" />
+        </button>
+        <div className="flex items-center space-x-4">
+          <div className={`p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border ${rUI.border}`}>{rUI.icon}</div>
+          <div>
+            <h4 className="text-sm font-black text-zinc-400 uppercase tracking-widest mb-1 flex items-center">
+              Readiness Score
+            </h4>
+            <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200 pr-6">{rUI.text}</p>
+          </div>
+        </div>
+        <div className={`text-4xl font-black ${rUI.color}`}>{rScore}</div>
+      </div>
+
       {daysSinceLastWeighIn >= 7 && (
         <div onClick={() => router.push("/progress")} className="cursor-pointer bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 border border-purple-500/30 rounded-2xl p-4 flex items-center justify-between hover:bg-purple-500/20 transition-all shadow-md animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center space-x-4">
@@ -672,7 +804,7 @@ export default function DashboardPage() {
             </div>
             
             <div className="flex items-center justify-center p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg text-sm text-zinc-500 dark:text-zinc-400 font-medium">
-              💡 {lang === 'FR' ? "Cliquez sur un anneau pour voir un exemple de menu." : "Click on a ring to see meal examples."}
+              💡 {lang === 'FR' ? "Cliquez sur un anneau pour voir vos protocoles de repas." : "Click on a ring to see your meal protocols."}
             </div>
 
             <div onClick={() => setIsWaterModalOpen(true)} className="pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 cursor-pointer group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 p-2 -mx-2 rounded-lg transition-colors">
@@ -741,7 +873,6 @@ export default function DashboardPage() {
               <Label className="dark:text-zinc-300">Poids (kg)</Label>
               <Input type="number" step="0.1" value={editWeight} onChange={(e) => { setEditWeight(e.target.value); }} className="text-xl font-bold dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 h-14" />
             </div>
-            {/* 🛡️ CHAMP MASSE GRASSE (OPTIONNEL) */}
             <div className="space-y-2">
               <Label className="dark:text-zinc-300 text-teal-600">{txt.bfLabel}</Label>
               <Input type="number" step="0.1" placeholder={txt.bfPlaceholder} value={editBodyFat} onChange={(e) => { setEditBodyFat(e.target.value); }} className="text-xl font-bold dark:bg-zinc-900 border-teal-500/30 focus-visible:ring-teal-500 dark:text-zinc-100 h-14" />
@@ -765,7 +896,6 @@ export default function DashboardPage() {
             <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">Biométrie & Objectif</h4>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2"><Label className="dark:text-zinc-300">Poids (kg)</Label><Input type="number" step="0.1" value={editWeight} onChange={(e) => setEditWeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div>
-                {/* 🛡️ NOUVEAU CHAMP BF DANS LA MODALE GLOBALE AUSSI */}
                 <div className="space-y-2"><Label className="dark:text-zinc-300 text-teal-600">BF (%) Optionnel</Label><Input type="number" step="0.1" value={editBodyFat} onChange={(e) => setEditBodyFat(e.target.value)} className="dark:bg-zinc-900 border-teal-500/30 focus-visible:ring-teal-500 dark:text-zinc-100 font-bold" /></div>
                 <div className="space-y-2"><Label className="dark:text-zinc-300">Taille (cm)</Label><Input type="number" step="1" value={editHeight} onChange={(e) => setEditHeight(e.target.value)} className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100 font-bold" /></div>
                 <div className="space-y-2 col-span-3 sm:col-span-1"><Label className="dark:text-zinc-300">Objectif</Label><Select value={editGoal} onValueChange={(val) => { setEditGoal(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="perte_poids">Perte de gras</SelectItem><SelectItem value="recomposition">Recomposition</SelectItem><SelectItem value="performance">Performance</SelectItem><SelectItem value="prise_masse">Prise de masse</SelectItem></SelectContent></Select></div>
@@ -781,7 +911,6 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* RESTE DES MODALES (Delete, Repas, Quiz) INCHANGÉES... */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <DialogContent className="sm:max-w-[425px] border-red-200 bg-red-50 dark:border-red-900 dark:bg-zinc-950">
           <DialogHeader><DialogTitle className="text-red-600 dark:text-red-500 flex items-center"><AlertTriangle className="mr-2 h-5 w-5"/> Purge</DialogTitle></DialogHeader>
@@ -811,6 +940,63 @@ export default function DashboardPage() {
               <DialogFooter className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-4"><Button className="w-full bg-teal-500 text-white hover:bg-teal-600 font-bold" onClick={() => setMicroModal({ show: false, micro: null })}>{txt.understood}</Button></DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 📘 MODALE REPAS (GÉNÉRATEUR PRO) */}
+      <Dialog open={mealModal?.show || false} onOpenChange={(open) => !open && setMealModal(null)}>
+        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-zinc-900 dark:text-zinc-100 flex items-center"><Utensils className="mr-2" /> {txt.mealTitle}</DialogTitle>
+            <DialogDescription>{txt.mealSub}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 pt-4">
+            {mealModal && generateMealIdeas(mealModal.type, mealModal.target, lang).map((idea: any, i: number) => (
+              <div key={i} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                <h4 className="font-bold text-lg mb-3 flex items-center dark:text-zinc-100">
+                  <span className="text-2xl mr-2">{idea.icon}</span> {idea.title}
+                </h4>
+                <div className="space-y-3">
+                  {idea.meals.map((m: any, j: number) => (
+                    <div key={j} className="flex justify-between items-start border-b border-zinc-200 dark:border-zinc-800 pb-2 last:border-0 last:pb-0">
+                      <div>
+                        <span className="block text-xs font-bold text-zinc-400 uppercase tracking-widest">{m.time}</span>
+                        <span className="font-medium text-sm dark:text-zinc-300">{m.amount} {m.food}</span>
+                      </div>
+                      <span className={`font-black text-sm mt-4 ${mealModal.type === 'protein' ? 'text-blue-500' : mealModal.type === 'carbs' ? 'text-green-500' : 'text-orange-500'}`}>
+                        +{m[mealModal.type === 'protein' ? 'prot' : mealModal.type === 'carbs' ? 'carbs' : 'fat']}g
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter className="sticky bottom-0 bg-white dark:bg-zinc-950 pt-2"><Button className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold" onClick={() => setMealModal(null)}>{txt.understood}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* 📘 MODALE READINESS SCORE INFO */}
+      <Dialog open={isReadinessModalOpen} onOpenChange={setIsReadinessModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-zinc-900 dark:text-zinc-100 flex items-center">
+              <Activity className="w-5 h-5 mr-2 text-teal-500" /> 
+              {lang === 'FR' ? "Readiness Score (SNC)" : "Readiness Score (CNS)"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 leading-relaxed whitespace-pre-wrap">
+              {lang === 'FR' 
+                ? "Ce score sur 100 évalue la fatigue de votre Système Nerveux Central (SNC).\n\nIl est calculé en temps réel en croisant 3 variables :\n• Votre ratio de fatigue (ACWR).\n• Le tonnage de votre séance d'hier.\n• La qualité de votre sommeil.\n\nUtilisez-le pour savoir si vous devez pousser vos limites aujourd'hui ou lever le pied pour éviter la blessure." 
+                : "This score out of 100 evaluates the fatigue of your Central Nervous System (CNS).\n\nIt is calculated in real-time by cross-referencing 3 variables:\n• Your fatigue ratio (ACWR).\n• The tonnage of yesterday's session.\n• Your sleep quality.\n\nUse it to know if you should push your limits today or ease off to prevent injury."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsReadinessModalOpen(false)} className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold">
+              {txt.understood}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

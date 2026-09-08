@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
-import { ThemeProvider } from "@/components/ThemeProvider"; // <-- IMPORT DU THEME
-import { SWRConfig } from "swr"; // <-- AJOUT
+import { ThemeProvider } from "@/components/ThemeProvider"; 
+import { SWRConfig } from "swr"; 
+import { OfflineSync } from "@/components/OfflineSync"; // 🛡️ INJECTION DU MODULE HORS-LIGNE
 
 export const viewport: Viewport = {
   themeColor: "#14b8a6",
@@ -36,10 +37,10 @@ export default function RootLayout({
     <html lang="fr" translate="no" suppressHydrationWarning>
       <body className="min-h-screen flex flex-col antialiased bg-zinc-50 dark:bg-zinc-950 pb-20 md:pb-0">
         
-        {/* ENVELOPPE DE THÈME POUR LE MODE SOMBRE */}
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <SWRConfig value={{ revalidateOnFocus: false }}> {/* <-- AJOUT */}
+          <SWRConfig value={{ revalidateOnFocus: false }}> 
           
+          <OfflineSync /> {/* 🛡️ ACTIVATION SILENCIEUSE ICI */}
           <Navbar />
 
           <main className="flex-1 flex flex-col">
@@ -64,7 +65,7 @@ export default function RootLayout({
             </div>
           </footer>
 
-          </SWRConfig> {/* <-- FIN AJOUT */}
+          </SWRConfig> 
         </ThemeProvider>
       </body>
     </html>

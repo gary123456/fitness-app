@@ -184,28 +184,44 @@ export function getCurrentWeekStreak(logs: any[], lang: string) {
 }
 
 export function generateMealIdeas(macro: 'protein' | 'carbs' | 'fat', targetGrams: number, lang: string) {
-  const ratio = targetGrams / 100;
+  const r = targetGrams / 100;
 
   if (macro === 'protein') {
     return [
       {
-        title: lang === 'FR' ? "L'Omnivore (Viande & Œufs)" : "The Omnivore",
-        icon: "🥩",
+        title: lang === 'FR' ? "Protocole 3 Repas (Classique)" : "3 Meals Protocol (Classic)", icon: "🍽️",
         meals: [
-          { time: lang === 'FR' ? "Petit-Déjeuner" : "Breakfast", amount: Math.round(3 * ratio), food: lang === 'FR' ? "Œufs entiers" : "Whole eggs", prot: Math.round(18 * ratio) },
-          { time: lang === 'FR' ? "Déjeuner" : "Lunch", amount: Math.round(150 * ratio), food: lang === 'FR' ? "g de Poulet" : "g Chicken", prot: Math.round(45 * ratio) },
-          { time: lang === 'FR' ? "Collation" : "Snack", amount: Math.round(30 * ratio), food: lang === 'FR' ? "g de Whey" : "g Whey Isolate", prot: Math.round(25 * ratio) },
-          { time: lang === 'FR' ? "Dîner" : "Dinner", amount: Math.round(100 * ratio), food: lang === 'FR' ? "g de Saumon" : "g Salmon", prot: Math.round(12 * ratio) }
+          { time: lang === 'FR' ? "Matin" : "Morning", amount: Math.round(3 * r), food: lang === 'FR' ? "Œufs entiers" : "Whole eggs", prot: Math.round(18 * r) },
+          { time: lang === 'FR' ? "Midi" : "Noon", amount: Math.round(200 * r), food: lang === 'FR' ? "g de Poulet/Dinde" : "g Chicken/Turkey", prot: Math.round(45 * r) },
+          { time: lang === 'FR' ? "Soir" : "Evening", amount: Math.round(150 * r), food: lang === 'FR' ? "g de Saumon/Bœuf" : "g Salmon/Beef", prot: Math.round(37 * r) }
         ]
       },
       {
-        title: lang === 'FR' ? "Le Végétarien (Plantes & Laitiers)" : "The Vegetarian",
-        icon: "🌱",
+        title: lang === 'FR' ? "Protocole 4 Repas (Sportif)" : "4 Meals Protocol (Athlete)", icon: "⏱️",
         meals: [
-          { time: lang === 'FR' ? "Petit-Déjeuner" : "Breakfast", amount: Math.round(250 * ratio), food: lang === 'FR' ? "g de Fromage Blanc 0%" : "g Greek Yogurt", prot: Math.round(20 * ratio) },
-          { time: lang === 'FR' ? "Déjeuner" : "Lunch", amount: Math.round(150 * ratio), food: lang === 'FR' ? "g de Tofu ferme" : "g Firm Tofu", prot: Math.round(25 * ratio) },
-          { time: lang === 'FR' ? "Collation" : "Snack", amount: Math.round(40 * ratio), food: lang === 'FR' ? "g d'Amandes" : "g Almonds", prot: Math.round(10 * ratio) },
-          { time: lang === 'FR' ? "Dîner" : "Dinner", amount: Math.round(150 * ratio), food: lang === 'FR' ? "g de Lentilles corail" : "g Red Lentils", prot: Math.round(45 * ratio) }
+          { time: lang === 'FR' ? "Matin" : "Morning", amount: Math.round(3 * r), food: lang === 'FR' ? "Œufs entiers" : "Whole eggs", prot: Math.round(18 * r) },
+          { time: lang === 'FR' ? "Midi" : "Noon", amount: Math.round(150 * r), food: lang === 'FR' ? "g de Poulet" : "g Chicken", prot: Math.round(35 * r) },
+          { time: "Post-Workout", amount: Math.round(30 * r), food: lang === 'FR' ? "g de Whey Isolate" : "g Whey Isolate", prot: Math.round(25 * r) },
+          { time: lang === 'FR' ? "Soir" : "Evening", amount: Math.round(100 * r), food: lang === 'FR' ? "g de Poisson blanc" : "g White fish", prot: Math.round(22 * r) }
+        ]
+      },
+      {
+        title: lang === 'FR' ? "Protocole 5 Repas (Pro)" : "5 Meals Protocol (Pro)", icon: "🔥",
+        meals: [
+          { time: lang === 'FR' ? "Matin" : "Morning", amount: Math.round(2 * r), food: lang === 'FR' ? "Œufs" : "Eggs", prot: Math.round(12 * r) },
+          { time: lang === 'FR' ? "Collation Matin" : "Morning Snack", amount: Math.round(150 * r), food: lang === 'FR' ? "g Fromage Blanc 0%" : "g Greek Yogurt", prot: Math.round(12 * r) },
+          { time: lang === 'FR' ? "Midi" : "Noon", amount: Math.round(150 * r), food: lang === 'FR' ? "g de Poulet" : "g Chicken", prot: Math.round(35 * r) },
+          { time: lang === 'FR' ? "Collation Soir" : "Evening Snack", amount: Math.round(30 * r), food: "Whey Protein", prot: Math.round(25 * r) },
+          { time: lang === 'FR' ? "Soir" : "Evening", amount: Math.round(80 * r), food: lang === 'FR' ? "g de Viande hachée 5%" : "g Lean Beef", prot: Math.round(16 * r) }
+        ]
+      },
+      {
+        title: lang === 'FR' ? "Option Végétarienne" : "Vegetarian Option", icon: "🌱",
+        meals: [
+          { time: lang === 'FR' ? "Matin" : "Morning", amount: Math.round(250 * r), food: lang === 'FR' ? "g Fromage Blanc / Skyr" : "g Skyr", prot: Math.round(25 * r) },
+          { time: lang === 'FR' ? "Midi" : "Noon", amount: Math.round(150 * r), food: lang === 'FR' ? "g de Tofu Ferme" : "g Firm Tofu", prot: Math.round(25 * r) },
+          { time: "Collation", amount: Math.round(40 * r), food: lang === 'FR' ? "g d'Amandes & Noix" : "g Mixed Nuts", prot: Math.round(10 * r) },
+          { time: lang === 'FR' ? "Soir" : "Evening", amount: Math.round(100 * r), food: lang === 'FR' ? "g de Lentilles/Pois chiches" : "g Lentils/Chickpeas", prot: Math.round(40 * r) }
         ]
       }
     ];
@@ -214,13 +230,20 @@ export function generateMealIdeas(macro: 'protein' | 'carbs' | 'fat', targetGram
   if (macro === 'carbs') {
     return [
       {
-        title: lang === 'FR' ? "Performance (Glucides purs)" : "Performance",
-        icon: "🍚",
+        title: lang === 'FR' ? "Énergie Lissée (3 Repas)" : "Smooth Energy (3 Meals)", icon: "🍚",
         meals: [
-          { time: lang === 'FR' ? "Petit-Déjeuner" : "Breakfast", amount: Math.round(80 * ratio), food: lang === 'FR' ? "g de Flocons d'avoine" : "g Oats", carbs: Math.round(45 * ratio) },
-          { time: lang === 'FR' ? "Déjeuner" : "Lunch", amount: Math.round(100 * ratio), food: lang === 'FR' ? "g de Riz Basmati" : "g Basmati Rice", carbs: Math.round(75 * ratio) },
-          { time: lang === 'FR' ? "Autour du sport" : "Around Workout", amount: Math.round(1 * ratio), food: lang === 'FR' ? "Grosse Banane" : "Large Banana", carbs: Math.round(25 * ratio) },
-          { time: lang === 'FR' ? "Dîner" : "Dinner", amount: Math.round(300 * ratio), food: lang === 'FR' ? "g de Patate douce" : "g Sweet Potato", carbs: Math.round(60 * ratio) }
+          { time: lang === 'FR' ? "Matin" : "Morning", amount: Math.round(80 * r), food: lang === 'FR' ? "g Flocons d'avoine" : "g Oats", carbs: Math.round(45 * r) },
+          { time: lang === 'FR' ? "Midi" : "Noon", amount: Math.round(100 * r), food: lang === 'FR' ? "g Riz Basmati (cru)" : "g Basmati Rice", carbs: Math.round(75 * r) },
+          { time: lang === 'FR' ? "Soir" : "Evening", amount: Math.round(300 * r), food: lang === 'FR' ? "g Patate douce" : "g Sweet Potato", carbs: Math.round(60 * r) }
+        ]
+      },
+      {
+        title: lang === 'FR' ? "Autour de l'entraînement (4 Repas)" : "Peri-Workout (4 Meals)", icon: "⚡",
+        meals: [
+          { time: lang === 'FR' ? "Matin" : "Morning", amount: Math.round(50 * r), food: lang === 'FR' ? "g Crème de riz" : "g Cream of Rice", carbs: Math.round(40 * r) },
+          { time: "Pré-Workout", amount: Math.round(1 * r), food: lang === 'FR' ? "Banane" : "Banana", carbs: Math.round(25 * r) },
+          { time: "Post-Workout", amount: Math.round(100 * r), food: lang === 'FR' ? "g Pâtes complètes" : "g Whole Pasta", carbs: Math.round(70 * r) },
+          { time: lang === 'FR' ? "Soir" : "Evening", amount: Math.round(200 * r), food: lang === 'FR' ? "g Légumes racines" : "g Root Veggies", carbs: Math.round(45 * r) }
         ]
       }
     ];
@@ -229,13 +252,12 @@ export function generateMealIdeas(macro: 'protein' | 'carbs' | 'fat', targetGram
   if (macro === 'fat') {
     return [
       {
-        title: lang === 'FR' ? "Hormones & Cerveau" : "Hormones & Brain",
-        icon: "🥑",
+        title: lang === 'FR' ? "Hormones & Cerveau" : "Hormones & Brain", icon: "🥑",
         meals: [
-          { time: lang === 'FR' ? "Petit-Déjeuner" : "Breakfast", amount: Math.round(3 * ratio), food: lang === 'FR' ? "Jaunes d'œufs" : "Egg yolks", fat: Math.round(15 * ratio) },
-          { time: lang === 'FR' ? "Déjeuner" : "Lunch", amount: Math.round(1 * ratio), food: lang === 'FR' ? "C.à.s d'Huile d'Olive" : "Tbsp Olive Oil", fat: Math.round(15 * ratio) },
-          { time: lang === 'FR' ? "Collation" : "Snack", amount: Math.round(40 * ratio), food: lang === 'FR' ? "g de Noix/Beurre cacahuète" : "g Nuts/Peanut butter", fat: Math.round(20 * ratio) },
-          { time: lang === 'FR' ? "Dîner" : "Dinner", amount: Math.round(100 * ratio), food: lang === 'FR' ? "g d'Avocat" : "g Avocado", fat: Math.round(15 * ratio) }
+          { time: lang === 'FR' ? "Matin" : "Morning", amount: Math.round(3 * r), food: lang === 'FR' ? "Jaunes d'œufs" : "Egg yolks", fat: Math.round(15 * r) },
+          { time: lang === 'FR' ? "Midi" : "Noon", amount: Math.round(1 * r), food: lang === 'FR' ? "C.à.s Huile d'Olive" : "Tbsp Olive Oil", fat: Math.round(15 * r) },
+          { time: "Collation", amount: Math.round(30 * r), food: lang === 'FR' ? "g Beurre d'arachide" : "g Peanut Butter", fat: Math.round(15 * r) },
+          { time: lang === 'FR' ? "Soir" : "Evening", amount: Math.round(100 * r), food: lang === 'FR' ? "g d'Avocat" : "g Avocado", fat: Math.round(15 * r) }
         ]
       }
     ];

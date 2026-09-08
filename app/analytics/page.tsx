@@ -7,12 +7,11 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ReferenceLine } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, TrendingDown, Dumbbell, Target, Ruler, Radar as RadarIcon, CalendarDays, Database, Brain, Download, ShieldAlert, HeartPulse, Info } from "lucide-react";
+import { Activity, TrendingDown, Dumbbell, Target, Ruler, Radar as RadarIcon, CalendarDays, Database, Brain, Download, ShieldAlert, HeartPulse, Info, Battery } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { calculateAge, calculateBMI, calculateEstimatedBodyFat } from "@/lib/fitness";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?: string, customEnd?: string) => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -26,7 +25,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
 
   let startDate = new Date();
   let endDate = new Date();
-  let isAllTime = false;
 
   if (timeframe === '7d') startDate.setDate(startDate.getDate() - 7);
   else if (timeframe === '30d') startDate.setDate(startDate.getDate() - 30);
@@ -41,39 +39,28 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       endDate.setHours(23, 59, 59, 999);
     }
   } else {
-    isAllTime = true;
+    startDate.setFullYear(startDate.getFullYear() - 5); // Fallback "All Time"
   }
 
-  let queryMeas = supabase.from("measurements").select("*").eq("user_id", user.id).order("created_at", { ascending: true });
-  let queryLogs = supabase.from("workout_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: true });
+  const startDateStr = startDate.toISOString().split('T')[0];
+  const endDateStr = endDate.toISOString().split('T')[0];
 
-  if (!isAllTime) {
-    queryMeas = queryMeas.gte("created_at", startDate.toISOString());
-    queryLogs = queryLogs.gte("created_at", startDate.toISOString());
-    if (timeframe === 'custom' && customEnd) {
-      queryMeas = queryMeas.lte("created_at", endDate.toISOString());
-      queryLogs = queryLogs.lte("created_at", endDate.toISOString());
-    }
-  }
-
-  const [{ data: measurements }, { data: logs }, { data: library }] = await Promise.all([
-    queryMeas, queryLogs, supabase.from("exercise_library").select("id, name")
+  // 🛡️ SCALING : Déportation massive de la charge vers le serveur (RPC)
+  const [
+    { data: measurements }, 
+    { data: library }, 
+    { data: rpcData },
+    { data: dashMetrics },
+    { data: sleepLogs }
+  ] = await Promise.all([
+    supabase.from("measurements").select("created_at, weight_kg, body_fat_percentage, arms_cm, chest_cm, waist_cm, thighs_cm").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: true }),
+    supabase.from("exercise_library").select("id, name"),
+    supabase.rpc('get_analytics_payload', { p_user_id: user.id, p_start_date: startDateStr, p_end_date: endDateStr }),
+    supabase.rpc('get_dashboard_metrics', { p_user_id: user.id }),
+    supabase.from('daily_metrics').select('date, readiness_score').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true })
   ]);
 
-  const d28 = new Date(); d28.setDate(d28.getDate() - 28);
-  const d7 = new Date(); d7.setDate(d7.getDate() - 7);
-  
-  const { data: acwrLogs } = await supabase.from('workout_logs').select('created_at, weight, reps').eq("user_id", user.id).gte('created_at', d28.toISOString());
-  let vol7 = 0; let vol28 = 0;
-  if (acwrLogs) {
-    acwrLogs.forEach(l => {
-      const v = (l.weight || 0) * (l.reps || 0);
-      vol28 += v;
-      if (new Date(l.created_at) >= d7) vol7 += v;
-    });
-  }
-  const avg4Weeks = vol28 / 4;
-  const acwrScore = avg4Weeks > 0 ? Number((vol7 / avg4Weeks).toFixed(2)) : 0;
+  const acwrScore = dashMetrics?.acwr || 0;
 
   let formattedWeight: any[] = [];
   let formattedMeasurements: any[] = [];
@@ -95,6 +82,12 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     })).filter(m => m.arms || m.chest || m.waist || m.thighs);
   }
 
+  // Historique du Sommeil et du Readiness Score
+  const readinessHistory = (sleepLogs || []).map((log: any) => ({
+    date: new Date(log.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }),
+    score: log.readiness_score
+  }));
+
   const volByDate: Record<string, number> = {};
   const exData: Record<string, any[]> = {};
   const exSet = new Set<string>();
@@ -102,60 +95,45 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   let availableList: {id: string, name: string}[] = [];
   const muscleDistribution: Record<string, number> = { Chest: 0, Back: 0, Legs: 0, Arms: 0, Shoulders: 0, Core: 0 };
 
-  if (logs && library) {
-    const libMap: Record<string, string> = {};
-    library.forEach(ex => libMap[ex.id] = ex.name);
+  const libMap: Record<string, string> = {};
+  if (library) library.forEach((ex: any) => libMap[ex.id] = ex.name);
 
-    logs.forEach(log => {
-      const dateStr = new Date(log.created_at).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
-      const weight = log.weight || 0;
-      const reps = log.reps || 0;
-      const volume = weight * reps;
-      
-      volByDate[dateStr] = (volByDate[dateStr] || 0) + volume;
-      const e1RM = (reps > 0 && reps <= 12) ? weight * (36 / (37 - reps)) : weight;
-      const exName = libMap[log.exercise_id];
+  // 🛡️ TRAITEMENT RAPIDE DU PAYLOAD SERVEUR (RPC)
+  if (rpcData) {
+    rpcData.volume_by_date?.forEach((v: any) => {
+      const d = new Date(v.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
+      volByDate[d] = v.volume;
+    });
 
+    rpcData.max_1rm?.forEach((r: any) => {
+      const d = new Date(r.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
+      if (!exData[r.exercise_id]) exData[r.exercise_id] = [];
+      exData[r.exercise_id].push({ date: d, e1RM: Number(r.e1rm).toFixed(1), weight: r.weight, reps: r.reps });
+      exSet.add(r.exercise_id);
+
+      const exName = libMap[r.exercise_id];
       if (exName) {
-        exSet.add(log.exercise_id);
-        if (!exData[log.exercise_id]) exData[log.exercise_id] = [];
-        
-        const existingDay = exData[log.exercise_id].find((d: any) => d.date === dateStr);
-        if (!existingDay || e1RM > existingDay.e1RM) {
-          if (existingDay) {
-            existingDay.e1RM = Number(e1RM.toFixed(1));
-            existingDay.weight = weight;
-            existingDay.reps = reps;
-          } else {
-            exData[log.exercise_id].push({ date: dateStr, e1RM: Number(e1RM.toFixed(1)), weight, reps });
-          }
-        }
-
         const nameLower = exName.toLowerCase();
-        if (nameLower.includes("squat") || nameLower.includes("leg") || nameLower.includes("presse") || nameLower.includes("fente")) {
-          muscleDistribution.Legs += volume;
-          if (nameLower.includes("squat barre")) best1RMs["Squat"] = Math.max(best1RMs["Squat"], e1RM);
-        }
-        else if (nameLower.includes("couché") || nameLower.includes("pec") || nameLower.includes("bench") || nameLower.includes("écarté")) {
-          muscleDistribution.Chest += volume;
-          if (nameLower.includes("couché barre") || nameLower.includes("bench press")) best1RMs["Bench"] = Math.max(best1RMs["Bench"], e1RM);
-        }
-        else if (nameLower.includes("traction") || nameLower.includes("row") || nameLower.includes("tirage") || nameLower.includes("dos") || nameLower.includes("terre") || nameLower.includes("deadlift")) {
-          muscleDistribution.Back += volume;
-          if (nameLower.includes("terre classique") || nameLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], e1RM);
-        }
-        else if (nameLower.includes("curl") || nameLower.includes("triceps") || nameLower.includes("biceps") || nameLower.includes("bras")) {
-          muscleDistribution.Arms += volume;
-        }
-        else if (nameLower.includes("militaire") || nameLower.includes("élévation") || nameLower.includes("épaule") || nameLower.includes("shoulder")) {
-          muscleDistribution.Shoulders += volume;
-        }
-        else if (nameLower.includes("crunch") || nameLower.includes("gainage") || nameLower.includes("abs")) {
-          muscleDistribution.Core += volume;
-        }
+        if (nameLower.includes("squat barre")) best1RMs["Squat"] = Math.max(best1RMs["Squat"], r.e1rm);
+        else if (nameLower.includes("couché barre") || nameLower.includes("bench press")) best1RMs["Bench"] = Math.max(best1RMs["Bench"], r.e1rm);
+        else if (nameLower.includes("terre classique") || nameLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], r.e1rm);
       }
     });
-    availableList = Array.from(exSet).map(id => ({ id, name: libMap[id] }));
+
+    rpcData.muscle_distribution?.forEach((m: any) => {
+      const exName = libMap[m.exercise_id];
+      if (exName) {
+        const nameLower = exName.toLowerCase();
+        if (nameLower.includes("squat") || nameLower.includes("leg") || nameLower.includes("presse") || nameLower.includes("fente")) muscleDistribution.Legs += m.tonnage;
+        else if (nameLower.includes("couché") || nameLower.includes("pec") || nameLower.includes("bench") || nameLower.includes("écarté")) muscleDistribution.Chest += m.tonnage;
+        else if (nameLower.includes("traction") || nameLower.includes("row") || nameLower.includes("tirage") || nameLower.includes("dos") || nameLower.includes("terre") || nameLower.includes("deadlift")) muscleDistribution.Back += m.tonnage;
+        else if (nameLower.includes("curl") || nameLower.includes("triceps") || nameLower.includes("biceps") || nameLower.includes("bras")) muscleDistribution.Arms += m.tonnage;
+        else if (nameLower.includes("militaire") || nameLower.includes("élévation") || nameLower.includes("épaule") || nameLower.includes("shoulder")) muscleDistribution.Shoulders += m.tonnage;
+        else if (nameLower.includes("crunch") || nameLower.includes("gainage") || nameLower.includes("abs")) muscleDistribution.Core += m.tonnage;
+      }
+    });
+
+    availableList = Array.from(exSet).map(id => ({ id, name: libMap[id] || "Exercice" }));
     availableList.sort((a, b) => a.name.localeCompare(b.name));
   }
   
@@ -169,11 +147,10 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   ];
 
   return { 
-    profile, 
-    userAge, userHeight, userGender,
+    profile, userAge, userHeight, userGender,
     formattedWeight, formattedMeasurements, formattedVolume: Object.keys(volByDate).map(date => ({ date, volume: volByDate[date] })), 
     exercisesData: exData, max1RMs: { "Squat": Number(best1RMs["Squat"].toFixed(1)), "Bench": Number(best1RMs["Bench"].toFixed(1)), "Deadlift": Number(best1RMs["Deadlift"].toFixed(1)) }, 
-    exerciseList: availableList, radarData, sleepQuality, acwrScore
+    exerciseList: availableList, radarData, sleepQuality, acwrScore, readinessHistory
   };
 };
 
@@ -210,46 +187,18 @@ export default function AnalyticsPage() {
   }, [error, router]);
 
   const t = {
-    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Volume de travail par groupe (Tonnage)", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses générées par cette application sont fournies à titre strictement informatif. Elles ne constituent en aucun cas un diagnostic médical. Consultez toujours un médecin avant de modifier votre régime ou programme." },
-    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Work volume by group (Tonnage)", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", disclaimer: "MEDICAL DISCLAIMER: The data and analysis generated by this application are provided strictly for informational purposes. They do not constitute medical diagnosis. Always consult a physician before modifying your diet or training program." }
+    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Volume de travail par groupe (Tonnage)", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", readinessTrend: "Tendance SNC (Sommeil & Fatigue)", readinessTrendSub: "Évolution de votre capacité de récupération.", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses générées par cette application sont fournies à titre strictement informatif. Elles ne constituent en aucun cas un diagnostic médical. Consultez toujours un médecin avant de modifier votre régime ou programme." },
+    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Work volume by group (Tonnage)", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", readinessTrend: "CNS Trend (Sleep & Fatigue)", readinessTrendSub: "Evolution of your recovery capacity.", disclaimer: "MEDICAL DISCLAIMER: The data and analysis generated by this application are provided strictly for informational purposes. They do not constitute medical diagnosis. Always consult a physician before modifying your diet or training program." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
-  // Fonction utilitaire pour alimenter la Modale d'Information
   const getInfoData = (type: string) => {
     switch (type) {
-      case 'acwr':
-        return {
-          show: true,
-          title: lang === 'FR' ? "Comprendre l'ACWR" : "Understanding ACWR",
-          desc: lang === 'FR' 
-            ? "L'ACWR (Acute-to-Chronic Workload Ratio) compare la fatigue immédiate (charge des 7 derniers jours) à la fatigue chronique (moyenne des 28 derniers jours).\n\n• < 0.8 (Désentraînement) : Vous perdez vos acquis.\n• 0.8 à 1.3 (Sweet Spot) : Zone idéale pour progresser sans se blesser.\n• > 1.5 (Zone de Danger) : Le risque de blessure est décuplé. Le volume d'entraînement doit être réduit."
-            : "The ACWR compares your acute fatigue (last 7 days) to your chronic fatigue (average of last 28 days).\n\n• < 0.8 (Undertraining): You are losing fitness.\n• 0.8 to 1.3 (Sweet Spot): Ideal zone to progress without injury.\n• > 1.5 (Danger Zone): High injury risk. Reduce training volume."
-        };
-      case '1rm':
-        return {
-          show: true,
-          title: lang === 'FR' ? "Progression Force (1RM)" : "Strength Progression (1RM)",
-          desc: lang === 'FR'
-            ? "Le 1RM (1 Répétition Maximale) affiché ici est une estimation calculée avec la formule scientifique d'Epley, basée sur les charges et répétitions validées lors de vos séances.\n\nIl représente le poids théorique maximal que vous pourriez soulever une seule fois. C'est l'indicateur principal de votre gain de force."
-            : "The 1RM displayed here is an estimation calculated using Epley's formula based on the weights and reps logged in your sessions.\n\nIt represents the theoretical maximum weight you could lift for a single repetition. It's the primary indicator of your strength gain."
-        };
-      case 'tonnage':
-        return {
-          show: true,
-          title: lang === 'FR' ? "Tonnage Global" : "Global Tonnage",
-          desc: lang === 'FR'
-            ? "Le Tonnage est le volume total de travail mécanique (Poids × Séries × Répétitions) déplacé au cours d'une séance.\n\nLa ligne en pointillé indique votre moyenne sur la période sélectionnée. Dépasser cette ligne indique que vous appliquez une surcharge progressive efficace."
-            : "Tonnage is the total volume of mechanical work (Weight × Sets × Reps) moved during a session.\n\nThe dotted line indicates your average over the selected period. Exceeding this line indicates effective progressive overload."
-        };
-      case 'radar':
-        return {
-          show: true,
-          title: lang === 'FR' ? "Répartition Musculaire" : "Muscle Distribution",
-          desc: lang === 'FR'
-            ? "Ce radar illustre la répartition de votre volume d'entraînement (tonnage cumulé) par groupe musculaire majeur.\n\nIl permet d'identifier visuellement d'éventuels déséquilibres structuraux (par exemple: trop de pecs, pas assez de dos) risquant de créer des blessures ou des asymétries."
-            : "This radar illustrates the distribution of your training volume (accumulated tonnage) per major muscle group.\n\nIt visually helps identify structural imbalances (e.g., too much chest, not enough back) that could lead to injuries or asymmetries."
-        };
+      case 'acwr': return { show: true, title: lang === 'FR' ? "Comprendre l'ACWR" : "Understanding ACWR", desc: lang === 'FR' ? "L'ACWR (Acute-to-Chronic Workload Ratio) compare la fatigue immédiate (charge des 7 derniers jours) à la fatigue chronique (moyenne des 28 derniers jours).\n\n• < 0.8 (Désentraînement) : Vous perdez vos acquis.\n• 0.8 à 1.3 (Sweet Spot) : Zone idéale pour progresser sans se blesser.\n• > 1.5 (Zone de Danger) : Le risque de blessure est décuplé. Le volume d'entraînement doit être réduit." : "The ACWR compares your acute fatigue (last 7 days) to your chronic fatigue (average of last 28 days).\n\n• < 0.8 (Undertraining): You are losing fitness.\n• 0.8 to 1.3 (Sweet Spot): Ideal zone to progress without injury.\n• > 1.5 (Danger Zone): High injury risk. Reduce training volume." };
+      case '1rm': return { show: true, title: lang === 'FR' ? "Progression Force (1RM)" : "Strength Progression (1RM)", desc: lang === 'FR' ? "Le 1RM (1 Répétition Maximale) affiché ici est une estimation calculée avec la formule scientifique d'Epley, basée sur les charges et répétitions validées lors de vos séances.\n\nIl représente le poids théorique maximal que vous pourriez soulever une seule fois." : "The 1RM displayed here is an estimation calculated using Epley's formula based on the weights and reps logged in your sessions.\n\nIt represents the theoretical maximum weight you could lift for a single repetition." };
+      case 'tonnage': return { show: true, title: lang === 'FR' ? "Tonnage Global" : "Global Tonnage", desc: lang === 'FR' ? "Le Tonnage est le volume total de travail mécanique (Poids × Séries × Répétitions) déplacé au cours d'une séance.\n\nLa ligne en pointillé indique votre moyenne sur la période sélectionnée. Dépasser cette ligne indique que vous appliquez une surcharge progressive efficace." : "Tonnage is the total volume of mechanical work (Weight × Sets × Reps) moved during a session.\n\nThe dotted line indicates your average over the selected period. Exceeding this line indicates effective progressive overload." };
+      case 'radar': return { show: true, title: lang === 'FR' ? "Répartition Musculaire" : "Muscle Distribution", desc: lang === 'FR' ? "Ce radar illustre la répartition de votre volume d'entraînement (tonnage cumulé) par groupe musculaire majeur.\n\nIl permet d'identifier visuellement d'éventuels déséquilibres structuraux (par exemple: trop de pecs, pas assez de dos) risquant de créer des blessures ou des asymétries." : "This radar illustrates the distribution of your training volume (accumulated tonnage) per major muscle group.\n\nIt visually helps identify structural imbalances (e.g., too much chest, not enough back) that could lead to injuries or asymmetries." };
+      case 'readiness': return { show: true, title: lang === 'FR' ? "Tendance SNC" : "CNS Trend", desc: lang === 'FR' ? "L'évolution de votre Readiness Score au fil des jours. Ce graphique reflète l'impact direct de la qualité de vos nuits de sommeil et de l'accumulation de votre charge d'entraînement sur votre physiologie." : "The evolution of your Readiness Score over time. This chart reflects the direct impact of your sleep quality and accumulated training load on your physiology." };
       default: return { show: false, title: "", desc: "" };
     }
   };
@@ -345,7 +294,6 @@ export default function AnalyticsPage() {
   
   const currentWeight = data.formattedWeight.length > 0 ? data.formattedWeight[data.formattedWeight.length - 1].poids : '-';
 
-  // Logique UI pour l'ACWR
   let acwrColor = "text-teal-500"; let acwrLabel = txt.sweetSpot;
   if (data.acwrScore < 0.8) { acwrColor = "text-blue-500"; acwrLabel = txt.underZone; }
   else if (data.acwrScore > 1.5) { acwrColor = "text-red-500"; acwrLabel = txt.dangerZone; }
@@ -363,22 +311,12 @@ export default function AnalyticsPage() {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          
           body::before { content: none !important; }
           nav, header, footer, aside, [role="navigation"], button, .print-hidden, [class*="sticky top-0"], [class*="fixed bottom-0"], .backdrop-blur-md { display: none !important; }
-          
-          .print-break-avoid { 
-            page-break-inside: avoid; 
-            border: 1px solid #000 !important; 
-            background: #fff !important;
-            margin-bottom: 20px !important;
-            border-radius: 4px !important;
-          }
-          
+          .print-break-avoid { page-break-inside: avoid; border: 1px solid #000 !important; background: #fff !important; margin-bottom: 20px !important; border-radius: 4px !important; }
           .recharts-wrapper * { stroke-width: 2px !important; }
           .recharts-text, .recharts-legend-item-text { fill: #000 !important; font-weight: bold !important; }
           .recharts-cartesian-grid line, .recharts-polar-grid line, .recharts-polar-angle-axis line { stroke: #ccc !important; stroke-width: 1px !important; opacity: 1 !important; }
-          
           @page { size: A4 portrait; margin: 15mm; }
         }
       `}} />
@@ -409,7 +347,6 @@ export default function AnalyticsPage() {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
-            
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
               {timeframe === 'custom' && (
                 <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-xl shadow-inner border border-zinc-200 dark:border-zinc-700 animate-in fade-in slide-in-from-right-4">
@@ -461,7 +398,6 @@ export default function AnalyticsPage() {
 
         {/* MÉTRIQUES CLÉS (1RMs + ACWR) */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 print-break-avoid">
-          {/* ACWR AVEC BOUTON INFO */}
           <Card className="shadow-sm border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 relative">
             <button onClick={() => setInfoModal(getInfoData('acwr'))} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden">
               <Info className="w-4 h-4" />
@@ -614,7 +550,41 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
 
-          {/* GRAPHIQUE 5 : MENSURATIONS */}
+          {/* NOUVEAU GRAPHIQUE 5 : TENDANCE DU SOMMEIL (READINESS) */}
+          <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 md:col-span-2 print-break-avoid relative">
+            <button onClick={() => setInfoModal(getInfoData('readiness'))} className="absolute top-4 right-4 z-20 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden"><Info className="w-4 h-4" /></button>
+            <CardHeader>
+              <CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black">
+                <Battery className="h-5 w-5 text-green-500 mr-2 print-hidden" /> {txt.readinessTrend}
+              </CardTitle>
+              <CardDescription className="font-medium text-zinc-500">{txt.readinessTrendSub}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {data.readinessHistory.length < 2 ? <EmptyState /> : (
+                <div className="h-[300px] w-full mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data.readinessHistory}>
+                      <defs>
+                        <linearGradient id="colorReadiness" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.15} vertical={false} />
+                      <XAxis dataKey="date" stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                      <YAxis domain={[0, 100]} stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #10b981', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} />
+                      <Area isAnimationActive={false} type="monotone" dataKey="score" name="SNC Score" stroke="#10b981" strokeWidth={4} fill="url(#colorReadiness)" activeDot={{ r: 6 } as any} />
+                      <ReferenceLine y={60} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'insideBottomLeft', value: 'Risque', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} />
+                      <ReferenceLine y={85} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Zone PR', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* GRAPHIQUE 6 : MENSURATIONS */}
           <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 md:col-span-2 print-break-avoid">
             <CardHeader><CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black"><Ruler className="h-5 w-5 text-purple-500 mr-2 print-hidden" /> {txt.measTitle}</CardTitle><CardDescription className="font-medium text-zinc-500">{txt.measSub}</CardDescription></CardHeader>
             <CardContent>
