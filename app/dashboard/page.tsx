@@ -75,6 +75,7 @@ const fetchDashboardData = async () => {
   
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   
+  // 🛡️ SCALING OPTIMIZATION: Limitation stricte de l'historique à 90 jours
   const d90 = new Date(); d90.setDate(d90.getDate() - 90);
   const { data: logs } = await supabase.from("workout_logs")
     .select("created_at, weight, reps, session_id")
@@ -849,6 +850,37 @@ export default function DashboardPage() {
             <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center"><span className="font-black text-zinc-900 dark:text-zinc-100 uppercase tracking-widest text-sm">{txt.calObj}</span><span className="text-2xl font-black text-orange-500">{targetCals} kcal</span></div>
           </div>
           <DialogFooter><Button className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold" onClick={() => setIsCalModalOpen(false)}>{txt.understood}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 📘 MODALE EAU AJOUTÉE ICI */}
+      <Dialog open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-blue-500 flex items-center">
+              <Droplets className="mr-2 h-6 w-6" /> {txt.waterTitle}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="flex justify-between items-center p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+              <span className="font-bold text-blue-700 dark:text-blue-400">{txt.waterTotal}</span>
+              <span className="text-2xl font-black text-blue-600 dark:text-blue-500">{waterTotal} L</span>
+            </div>
+            <div className="flex justify-between items-center p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900 rounded-xl">
+              <span className="font-bold text-blue-600/80 dark:text-blue-400/80">{txt.waterPure}</span>
+              <span className="text-xl font-black text-blue-500/80 dark:text-blue-400/80">{waterPure} L</span>
+            </div>
+            <div className="space-y-3 mt-4 text-sm font-medium text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              <p>{txt.water1}</p>
+              <p>{txt.water2}</p>
+              <p>{txt.water3}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold" onClick={() => setIsWaterModalOpen(false)}>
+              {txt.understood}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
