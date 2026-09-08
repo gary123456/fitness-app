@@ -4,11 +4,43 @@ import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button"; // 🛡️ L'IMPORT MANQUANT ÉTAIT ICI
-import { Dumbbell, Scale, Calculator, ArrowRightLeft, Target, Wrench, Timer, Play, Pause, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dumbbell, Scale, Calculator, ArrowRightLeft, Target, Wrench, Timer, Play, Pause, RotateCcw, Volume2, VolumeX, Plus, Minus, Activity, X, Apple } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
-const PLATES = [25, 20, 15, 10, 5, 2.5, 1.25];
+// --- CONSTANTES ---
+const PLATES = [
+  { weight: 25, color: "bg-red-500", h: "h-24", w: "w-6" },
+  { weight: 20, color: "bg-blue-500", h: "h-24", w: "w-5" },
+  { weight: 15, color: "bg-yellow-400", h: "h-20", w: "w-4" },
+  { weight: 10, color: "bg-green-500", h: "h-16", w: "w-4" },
+  { weight: 5, color: "bg-white text-black", h: "h-12", w: "w-3" },
+  { weight: 2.5, color: "bg-zinc-800", h: "h-10", w: "w-2" },
+  { weight: 1.25, color: "bg-zinc-700", h: "h-8", w: "w-2" }
+];
+
+// --- MOTEUR AUDIO (Web Audio API) ---
+// Crée un son pur qui force la lecture même si le téléphone est en silencieux sur certains OS
+const playTone = (frequency: number, duration: number, type: OscillatorType = "sine") => {
+  if (typeof window === "undefined") return;
+  const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioContext) return;
+  
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+  gain.gain.setValueAtTime(1, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  
+  osc.start();
+  osc.stop(ctx.currentTime + duration);
+};
 
 export default function ToolsPage() {
   const { lang } = useLanguage();
@@ -32,31 +64,48 @@ export default function ToolsPage() {
   const [liftWeight, setLiftWeight] = useState<string>("");
   const [liftReps, setLiftReps] = useState<string>("");
 
-  // States - Timer Pro
-  const [timerTime, setTimerTime] = useState<number>(60);
-  const [timerIsRunning, setTimerIsRunning] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // States - Timer Classique
+  const [timerMode, setTimerMode] = useState<"classic" | "hiit">("hiit");
+  const [classicTime, setClassicTime] = useState<number>(60);
+  const [customMin, setCustomMin] = useState<string>("1");
+  const [customSec, setCustomSec] = useState<string>("0");
+  const [classicIsRunning, setClassicIsRunning] = useState(false);
+  const classicRef = useRef<NodeJS.Timeout | null>(null);
+
+  // States - HIIT Pro Timer
+  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [hiitConfig, setHiitConfig] = useState({
+    prepare: 10, work: 20, rest: 10, cycles: 8, sets: 1, restBetweenSets: 60, coolDown: 0
+  });
+  const [hiitState, setHiitState] = useState({
+    isRunning: false,
+    phase: "PREPARE" as "PREPARE" | "WORK" | "REST" | "SET_REST" | "COOL_DOWN" | "DONE",
+    timeLeft: hiitConfig.prepare,
+    currentCycle: 1,
+    currentSet: 1
+  });
+  const hiitRef = useRef<NodeJS.Timeout | null>(null);
 
   const t = {
-    FR: { title: "Boîte à Outils", sub: "L'arsenal de la Silicon Valley pour votre entraînement.", plateCalc: "Calculateur Disques", converter: "Convertisseurs", predictor: "Prédicteur 1RM", timer: "Chrono Pro", targetWeight: "Poids Cible (kg)", barWeight: "Poids de la Barre (kg)", eachSide: "Par côté :", totalSide: "Total par côté :", noPlates: "Entrez un poids cible supérieur à la barre.", kgToLb: "Kg vers Lbs", lbToKg: "Lbs vers Kg", weightLifted: "Poids soulevé (kg)", repsDone: "Reps réalisées", est1RM: "1RM Estimé", formula: "Basé sur la formule d'Epley", nutConv: "Nutrition (Solides & Liquides)", start: "Démarrer", pause: "Pause", reset: "Réinitialiser" },
-    EN: { title: "Toolbox", sub: "The Silicon Valley arsenal for your training.", plateCalc: "Plate Calculator", converter: "Converters", predictor: "1RM Predictor", timer: "Pro Timer", targetWeight: "Target Weight (kg)", barWeight: "Bar Weight (kg)", eachSide: "Per side:", totalSide: "Total per side:", noPlates: "Enter a target weight greater than the bar.", kgToLb: "Kg to Lbs", lbToKg: "Lbs to Kg", weightLifted: "Weight lifted (kg)", repsDone: "Reps performed", est1RM: "Estimated 1RM", formula: "Based on Epley's formula", nutConv: "Nutrition (Solids & Liquids)", start: "Start", pause: "Pause", reset: "Reset" }
+    FR: { title: "Boîte à Outils", sub: "L'arsenal de la Silicon Valley pour votre entraînement.", plateCalc: "Calculateur Disques", converter: "Convertisseurs", predictor: "Prédicteur 1RM", timer: "Chrono Pro", targetWeight: "Poids Cible (kg)", barWeight: "Poids de la Barre (kg)", eachSide: "Par côté :", totalSide: "Total par côté :", noPlates: "Entrez un poids cible supérieur à la barre.", kgToLb: "Kg vers Lbs", lbToKg: "Lbs vers Kg", weightLifted: "Poids soulevé (kg)", repsDone: "Reps réalisées", est1RM: "1RM Estimé", formula: "Basé sur la formule d'Epley", nutConv: "Nutrition (Solides & Liquides)", start: "Démarrer", pause: "Pause", reset: "Réinitialiser", classic: "Classique", prepare: "Préparation", work: "Travail", rest: "Repos", cycles: "Cycles", sets: "Séries", restBetween: "Repos (Séries)", coolDown: "Retour au calme", done: "Terminé !", soundOn: "Son Activé", soundOff: "Son Désactivé" },
+    EN: { title: "Toolbox", sub: "The Silicon Valley arsenal for your training.", plateCalc: "Plate Calculator", converter: "Converters", predictor: "1RM Predictor", timer: "Pro Timer", targetWeight: "Target Weight (kg)", barWeight: "Bar Weight (kg)", eachSide: "Per side:", totalSide: "Total per side:", noPlates: "Enter a target weight greater than the bar.", kgToLb: "Kg to Lbs", lbToKg: "Lbs to Kg", weightLifted: "Weight lifted (kg)", repsDone: "Reps performed", est1RM: "Estimated 1RM", formula: "Based on Epley's formula", nutConv: "Nutrition (Solids & Liquids)", start: "Start", pause: "Pause", reset: "Reset", classic: "Classic", prepare: "Prepare", work: "Work", rest: "Rest", cycles: "Cycles", sets: "Sets", restBetween: "Rest (Sets)", coolDown: "Cool Down", done: "Workout Done!", soundOn: "Sound On", soundOff: "Sound Off" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
-  // Calcul Logique Plate Calculator
+  // --- LOGIQUE PLATE CALCULATOR ---
   const calculatePlates = () => {
     const target = parseFloat(targetWeight);
     const bar = parseFloat(barWeight);
     if (!target || !bar || target <= bar) return [];
 
     let weightPerSide = (target - bar) / 2;
-    const platesNeeded: {weight: number, count: number}[] = [];
+    const platesNeeded: {weight: number, count: number, visual: any}[] = [];
 
     for (const plate of PLATES) {
-      if (weightPerSide >= plate) {
-        const count = Math.floor(weightPerSide / plate);
-        platesNeeded.push({ weight: plate, count });
-        weightPerSide -= (plate * count);
+      if (weightPerSide >= plate.weight) {
+        const count = Math.floor(weightPerSide / plate.weight);
+        platesNeeded.push({ weight: plate.weight, count, visual: plate });
+        weightPerSide -= (plate.weight * count);
         weightPerSide = Math.round(weightPerSide * 100) / 100;
       }
     }
@@ -64,17 +113,15 @@ export default function ToolsPage() {
   };
   const requiredPlates = calculatePlates();
 
-  // Convertisseurs Sport
+  // --- LOGIQUE CONVERTISSEURS ---
   const handleKgChange = (val: string) => { setConvKg(val); setConvLb(val ? (parseFloat(val) * 2.20462).toFixed(2) : ""); };
   const handleLbChange = (val: string) => { setConvLb(val); setConvKg(val ? (parseFloat(val) / 2.20462).toFixed(2) : ""); };
-
-  // Convertisseurs Nutrition
   const handleOzChange = (val: string) => { setConvOz(val); setConvGramsOz(val ? (parseFloat(val) * 28.3495).toFixed(0) : ""); };
   const handleGramsOzChange = (val: string) => { setConvGramsOz(val); setConvOz(val ? (parseFloat(val) / 28.3495).toFixed(2) : ""); };
   const handleCupChange = (val: string) => { setConvCup(val); setConvGramsCup(val ? (parseFloat(val) * 240).toFixed(0) : ""); };
   const handleGramsCupChange = (val: string) => { setConvGramsCup(val); setConvCup(val ? (parseFloat(val) / 240).toFixed(2) : ""); };
 
-  // 1RM
+  // --- LOGIQUE 1RM ---
   const get1RM = () => {
     const w = parseFloat(liftWeight);
     const r = parseInt(liftReps);
@@ -83,24 +130,116 @@ export default function ToolsPage() {
     return Math.round(w * (1 + r / 30));
   };
 
-  // Timer Pro
+  // --- LOGIQUE TIMER CLASSIQUE ---
   useEffect(() => {
-    if (timerIsRunning && timerTime > 0) {
-      timerRef.current = setInterval(() => setTimerTime(prev => prev - 1), 1000);
-    } else if (timerTime === 0) {
-      setTimerIsRunning(false);
-      if (typeof window !== "undefined" && navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]); 
+    if (classicIsRunning && classicTime > 0) {
+      classicRef.current = setInterval(() => setClassicTime(prev => prev - 1), 1000);
+    } else if (classicTime === 0 && classicIsRunning) {
+      setClassicIsRunning(false);
+      if (audioEnabled) playTone(1500, 1.5, "square");
+      if (typeof window !== "undefined" && navigator.vibrate) navigator.vibrate([500, 200, 500]); 
     }
-    return () => clearInterval(timerRef.current as NodeJS.Timeout);
-  }, [timerIsRunning, timerTime]);
+    return () => clearInterval(classicRef.current as NodeJS.Timeout);
+  }, [classicIsRunning, classicTime, audioEnabled]);
 
-  const toggleTimer = () => setTimerIsRunning(!timerIsRunning);
-  const resetTimer = () => { setTimerIsRunning(false); setTimerTime(60); };
+  const setCustomClassicTime = () => {
+    const m = parseInt(customMin) || 0;
+    const s = parseInt(customSec) || 0;
+    setClassicTime(m * 60 + s);
+  };
+
+  // --- LOGIQUE HIIT PRO ---
+  const updateHiitConfig = (key: keyof typeof hiitConfig, val: number) => {
+    if (val < 0) return;
+    setHiitConfig(prev => ({ ...prev, [key]: val }));
+    if (!hiitState.isRunning) {
+      if (key === "prepare") setHiitState(prev => ({ ...prev, timeLeft: val }));
+    }
+  };
+
+  useEffect(() => {
+    if (hiitState.isRunning) {
+      hiitRef.current = setInterval(() => {
+        setHiitState(prev => {
+          let newTime = prev.timeLeft - 1;
+          let newPhase = prev.phase;
+          let newCycle = prev.currentCycle;
+          let newSet = prev.currentSet;
+          let newIsRunning = prev.isRunning;
+
+          // Bips de fin de chrono (3, 2, 1)
+          if (newTime > 0 && newTime <= 3 && audioEnabled) {
+            playTone(800, 0.1);
+            if (navigator.vibrate) navigator.vibrate(100);
+          }
+
+          // Changement de phase
+          if (newTime === 0) {
+            if (audioEnabled) {
+              if (prev.phase === "WORK" && prev.currentCycle === hiitConfig.cycles && prev.currentSet === hiitConfig.sets && hiitConfig.coolDown === 0) {
+                playTone(1500, 1.5, "square"); // Sifflet final
+              } else {
+                playTone(1200, 0.5, "square"); // Sifflet changement de phase
+              }
+            }
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+            if (prev.phase === "PREPARE") { newPhase = "WORK"; newTime = hiitConfig.work; }
+            else if (prev.phase === "WORK") {
+              if (prev.currentCycle < hiitConfig.cycles) {
+                newPhase = "REST"; newTime = hiitConfig.rest;
+              } else if (prev.currentSet < hiitConfig.sets) {
+                newPhase = "SET_REST"; newTime = hiitConfig.restBetweenSets; newCycle = 1;
+              } else if (hiitConfig.coolDown > 0) {
+                newPhase = "COOL_DOWN"; newTime = hiitConfig.coolDown;
+              } else {
+                newPhase = "DONE"; newTime = 0; newIsRunning = false;
+              }
+            }
+            else if (prev.phase === "REST") {
+              newPhase = "WORK"; newTime = hiitConfig.work; newCycle++;
+            }
+            else if (prev.phase === "SET_REST") {
+              newPhase = "WORK"; newTime = hiitConfig.work; newSet++;
+            }
+            else if (prev.phase === "COOL_DOWN") {
+              newPhase = "DONE"; newTime = 0; newIsRunning = false;
+            }
+          }
+          return { isRunning: newIsRunning, phase: newPhase, timeLeft: newTime, currentCycle: newCycle, currentSet: newSet };
+        });
+      }, 1000);
+    }
+    return () => clearInterval(hiitRef.current as NodeJS.Timeout);
+  }, [hiitState.isRunning, hiitConfig, audioEnabled]);
+
+  const toggleHiit = () => {
+    if (hiitState.phase === "DONE") {
+      setHiitState({ isRunning: true, phase: "PREPARE", timeLeft: hiitConfig.prepare, currentCycle: 1, currentSet: 1 });
+    } else {
+      setHiitState(prev => ({ ...prev, isRunning: !prev.isRunning }));
+    }
+    // Débloque l'audio sur iOS au premier clic
+    if (!hiitState.isRunning && audioEnabled) playTone(0, 0.01);
+  };
+
+  const resetHiit = () => setHiitState({ isRunning: false, phase: "PREPARE", timeLeft: hiitConfig.prepare, currentCycle: 1, currentSet: 1 });
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Couleurs dynamiques du HIIT
+  const getPhaseColor = () => {
+    switch (hiitState.phase) {
+      case "WORK": return "bg-green-500 text-white shadow-green-500/50 border-green-400";
+      case "REST": case "SET_REST": return "bg-red-500 text-white shadow-red-500/50 border-red-400";
+      case "PREPARE": case "COOL_DOWN": return "bg-blue-500 text-white shadow-blue-500/50 border-blue-400";
+      case "DONE": return "bg-amber-500 text-white shadow-amber-500/50 border-amber-400";
+      default: return "bg-zinc-900 text-white border-zinc-800";
+    }
   };
 
   return (
@@ -113,7 +252,7 @@ export default function ToolsPage() {
       </div>
 
       {/* CUSTOM TAB SYSTEM */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-8 bg-zinc-200/50 dark:bg-zinc-900 p-1.5 rounded-2xl">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-8 bg-zinc-200/50 dark:bg-zinc-900 p-1.5 rounded-2xl">
         <button onClick={() => setActiveTab("plates")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold ${activeTab === 'plates' ? 'bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
           <Target className="w-5 h-5 mb-1" /><span className="text-[10px] uppercase tracking-wider">{txt.plateCalc}</span>
         </button>
@@ -130,7 +269,7 @@ export default function ToolsPage() {
 
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         
-        {/* TONGLET : PLATE CALCULATOR */}
+        {/* TONGLET 1 : PLATE CALCULATOR */}
         {activeTab === "plates" && (
           <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
             <CardHeader>
@@ -151,7 +290,22 @@ export default function ToolsPage() {
               <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
                 <h4 className="font-black text-sm uppercase tracking-widest text-zinc-400 mb-4">{txt.eachSide}</h4>
                 {requiredPlates.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-8">
+                    {/* DESSIN DE LA BARRE (SILICON VALLEY UI) */}
+                    <div className="flex items-center justify-center p-8 bg-zinc-100 dark:bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                      <div className="w-32 h-6 bg-zinc-400 dark:bg-zinc-700 rounded-l-md border-r-2 border-zinc-500 dark:border-zinc-900 shadow-inner"></div>
+                      <div className="w-8 h-10 bg-zinc-500 dark:bg-zinc-600 border-r-2 border-zinc-800"></div>
+                      <div className="flex items-center">
+                        {requiredPlates.flatMap((p, i) => 
+                          Array.from({ length: p.count }).map((_, j) => (
+                            <div key={`${i}-${j}`} className={`${p.visual.color} ${p.visual.h} ${p.visual.w} rounded-sm border border-black/20 mx-[1px] shadow-md flex items-center justify-center`}>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className="w-24 h-6 bg-zinc-400 dark:bg-zinc-700 rounded-r-sm shadow-inner"></div>
+                    </div>
+
                     <div className="flex flex-wrap gap-3">
                       {requiredPlates.map((p, i) => (
                         <div key={i} className="flex items-center justify-center bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800 rounded-full px-4 py-2 shadow-sm">
@@ -172,7 +326,7 @@ export default function ToolsPage() {
           </Card>
         )}
 
-        {/* ONGLET : 1RM PREDICTOR */}
+        {/* ONGLET 2 : 1RM PREDICTOR */}
         {activeTab === "predict" && (
           <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
             <CardHeader>
@@ -198,7 +352,7 @@ export default function ToolsPage() {
           </Card>
         )}
 
-        {/* ONGLET : CONVERTISSEURS */}
+        {/* ONGLET 3 : CONVERTISSEURS */}
         {activeTab === "convert" && (
           <div className="space-y-4">
             <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
@@ -219,7 +373,7 @@ export default function ToolsPage() {
             </Card>
 
             <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
-              <CardHeader><CardTitle className="flex items-center text-green-600 dark:text-green-400"><Scale className="w-5 h-5 mr-2" /> {txt.nutConv}</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="flex items-center text-green-600 dark:text-green-400"><Apple className="w-5 h-5 mr-2" /> {txt.nutConv}</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between space-x-4">
                   <div className="flex-1 space-y-2"><Label className="font-bold text-zinc-600 dark:text-zinc-400">Ounces (Oz)</Label><Input type="number" value={convOz} onChange={(e) => handleOzChange(e.target.value)} className="font-black text-xl h-12 bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-center" /></div>
@@ -236,31 +390,129 @@ export default function ToolsPage() {
           </div>
         )}
 
-        {/* ONGLET : CHRONOMÈTRE PRO */}
+        {/* ONGLET 4 : CHRONOMÈTRE PRO & HIIT */}
         {activeTab === "timer" && (
-          <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
-            <CardHeader className="text-center pb-2">
-              <CardTitle className="text-red-500 font-black tracking-widest uppercase">Timer Pro</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <div className={`text-8xl font-black tabular-nums transition-colors duration-500 ${timerIsRunning ? 'text-red-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
-                {formatTime(timerTime)}
+          <div className="space-y-4">
+            
+            <div className="flex justify-center mb-4">
+              <div className="bg-zinc-200/50 dark:bg-zinc-900 p-1 rounded-xl flex space-x-1">
+                <button onClick={() => setTimerMode("hiit")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${timerMode === 'hiit' ? 'bg-white dark:bg-zinc-950 text-red-500 shadow-sm' : 'text-zinc-500'}`}>HIIT / Tabata</button>
+                <button onClick={() => setTimerMode("classic")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${timerMode === 'classic' ? 'bg-white dark:bg-zinc-950 text-blue-500 shadow-sm' : 'text-zinc-500'}`}>{txt.classic}</button>
               </div>
-              <div className="flex items-center space-x-4 mt-12 w-full max-w-xs">
-                <Button onClick={toggleTimer} className={`flex-1 h-16 text-xl font-black text-white ${timerIsRunning ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-red-500 hover:bg-red-600 shadow-[0_0_30px_rgba(239,68,68,0.4)]'}`}>
-                  {timerIsRunning ? <><Pause className="w-6 h-6 mr-2"/> {txt.pause}</> : <><Play className="w-6 h-6 mr-2"/> {txt.start}</>}
-                </Button>
-                <Button onClick={resetTimer} variant="outline" className="h-16 px-6 border-zinc-300 dark:border-zinc-700 text-zinc-500">
-                  <RotateCcw className="w-6 h-6" />
-                </Button>
-              </div>
-              <div className="flex gap-4 mt-8">
-                <Button variant="ghost" onClick={() => { setTimerTime(30); setTimerIsRunning(false); }} className="font-bold text-zinc-500">+30s</Button>
-                <Button variant="ghost" onClick={() => { setTimerTime(60); setTimerIsRunning(false); }} className="font-bold text-zinc-500">+60s</Button>
-                <Button variant="ghost" onClick={() => { setTimerTime(120); setTimerIsRunning(false); }} className="font-bold text-zinc-500">+2min</Button>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+
+            {timerMode === "classic" && (
+              <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
+                <CardHeader className="text-center pb-2 relative">
+                  <button onClick={() => setAudioEnabled(!audioEnabled)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-indigo-500 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
+                    {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                  </button>
+                  <CardTitle className="text-blue-500 font-black tracking-widest uppercase">Timer Classique</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center justify-center py-8">
+                  <div className={`text-7xl sm:text-8xl font-black tabular-nums transition-colors duration-500 ${classicIsRunning ? 'text-blue-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                    {formatTime(classicTime)}
+                  </div>
+                  
+                  {!classicIsRunning && (
+                    <div className="flex items-center space-x-2 mt-6">
+                      <Input type="number" value={customMin} onChange={(e) => setCustomMin(e.target.value)} className="w-16 h-10 text-center font-bold" placeholder="Min" />
+                      <span className="font-bold">:</span>
+                      <Input type="number" value={customSec} onChange={(e) => setCustomSec(e.target.value)} className="w-16 h-10 text-center font-bold" placeholder="Sec" />
+                      <Button onClick={setCustomClassicTime} variant="secondary" className="font-bold ml-2">Set</Button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-4 mt-8 w-full max-w-xs">
+                    <Button onClick={() => { setClassicIsRunning(!classicIsRunning); if (!classicIsRunning && audioEnabled) playTone(0,0.01); }} className={`flex-1 h-16 text-xl font-black text-white ${classicIsRunning ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-500/40'}`}>
+                      {classicIsRunning ? <><Pause className="w-6 h-6 mr-2"/> {txt.pause}</> : <><Play className="w-6 h-6 mr-2"/> {txt.start}</>}
+                    </Button>
+                    <Button onClick={() => { setClassicIsRunning(false); setClassicTime(60); }} variant="outline" className="h-16 px-6 border-zinc-300 dark:border-zinc-700 text-zinc-500">
+                      <RotateCcw className="w-6 h-6" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {timerMode === "hiit" && (
+              hiitState.isRunning || hiitState.phase === "DONE" ? (
+                /* ÉCRAN D'EXÉCUTION DU HIIT (Plein Écran dans la Card) */
+                <Card className={`border-2 shadow-2xl transition-colors duration-500 overflow-hidden ${getPhaseColor()}`}>
+                  <CardContent className="flex flex-col items-center justify-center py-20 relative">
+                    
+                    <button onClick={resetHiit} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20">
+                      <X className="w-6 h-6" />
+                    </button>
+                    <button onClick={() => setAudioEnabled(!audioEnabled)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20">
+                      {audioEnabled ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
+                    </button>
+
+                    <h2 className="text-2xl sm:text-4xl font-black uppercase tracking-widest mb-2 opacity-90 drop-shadow-md">
+                      {txt[hiitState.phase.toLowerCase() as keyof typeof txt] || hiitState.phase}
+                    </h2>
+                    
+                    <div className="text-[120px] sm:text-[160px] font-black tabular-nums leading-none drop-shadow-xl mb-8">
+                      {hiitState.phase === "DONE" ? "✅" : formatTime(hiitState.timeLeft)}
+                    </div>
+                    
+                    {hiitState.phase !== "PREPARE" && hiitState.phase !== "DONE" && hiitState.phase !== "COOL_DOWN" && (
+                      <div className="flex space-x-8 text-xl font-bold bg-black/20 px-6 py-3 rounded-2xl backdrop-blur-sm">
+                        <div className="text-center"><span className="block text-xs uppercase opacity-70 mb-1">{txt.cycles}</span>{hiitState.currentCycle} / {hiitConfig.cycles}</div>
+                        <div className="w-px bg-white/20"></div>
+                        <div className="text-center"><span className="block text-xs uppercase opacity-70 mb-1">{txt.sets}</span>{hiitState.currentSet} / {hiitConfig.sets}</div>
+                      </div>
+                    )}
+                    
+                    <Button onClick={toggleHiit} className="mt-12 bg-white text-black hover:bg-zinc-200 h-16 px-12 text-xl font-black shadow-xl">
+                      {hiitState.phase === "DONE" ? <RotateCcw className="w-6 h-6 mr-2" /> : (hiitState.isRunning ? <Pause className="w-6 h-6 mr-2" /> : <Play className="w-6 h-6 mr-2" />)}
+                      {hiitState.phase === "DONE" ? txt.reset : (hiitState.isRunning ? txt.pause : "Reprendre")}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                /* ÉCRAN DE CONFIGURATION DU HIIT */
+                <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                    <CardTitle className="text-red-500 font-black tracking-widest uppercase flex items-center">
+                      <Activity className="w-5 h-5 mr-2" /> HIIT Pro
+                    </CardTitle>
+                    <button onClick={() => setAudioEnabled(!audioEnabled)} className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${audioEnabled ? 'bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-900/30 dark:border-teal-800 dark:text-teal-400' : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400'}`}>
+                      {audioEnabled ? <Volume2 className="w-3 h-3 mr-1.5" /> : <VolumeX className="w-3 h-3 mr-1.5" />}
+                      {audioEnabled ? txt.soundOn : txt.soundOff}
+                    </button>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {[
+                        { key: "prepare", label: txt.prepare, color: "text-blue-500" },
+                        { key: "work", label: txt.work, color: "text-green-500" },
+                        { key: "rest", label: txt.rest, color: "text-red-500" },
+                        { key: "cycles", label: txt.cycles, color: "text-indigo-500" },
+                        { key: "sets", label: txt.sets, color: "text-purple-500" },
+                        { key: "restBetweenSets", label: txt.restBetween, color: "text-orange-500" },
+                        { key: "coolDown", label: txt.coolDown, color: "text-blue-400" }
+                      ].map((item) => (
+                        <div key={item.key} className="flex items-center justify-between p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
+                          <Label className={`font-bold uppercase tracking-widest text-xs sm:text-sm ${item.color}`}>{item.label}</Label>
+                          <div className="flex items-center space-x-4">
+                            <button onClick={() => updateHiitConfig(item.key as any, hiitConfig[item.key as keyof typeof hiitConfig] - 1)} className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-90 transition-all"><Minus className="w-5 h-5" /></button>
+                            <span className="w-12 text-center font-black text-xl text-zinc-900 dark:text-zinc-100">{hiitConfig[item.key as keyof typeof hiitConfig]}</span>
+                            <button onClick={() => updateHiitConfig(item.key as any, hiitConfig[item.key as keyof typeof hiitConfig] + 1)} className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 active:scale-90 transition-all"><Plus className="w-5 h-5" /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-4 border-t border-zinc-100 dark:border-zinc-800">
+                      <Button onClick={toggleHiit} className="w-full h-16 bg-red-500 hover:bg-red-600 text-white font-black text-xl shadow-lg shadow-red-500/30 uppercase tracking-widest transition-transform active:scale-95">
+                        <Play className="w-6 h-6 mr-2" /> {txt.start}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            )}
+          </div>
         )}
 
       </div>
