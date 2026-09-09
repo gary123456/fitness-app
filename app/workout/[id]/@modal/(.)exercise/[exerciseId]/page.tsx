@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, Dumbbell, Info } from "lucide-react";
+import { Loader2, Dumbbell, Info, Star } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
 const getInstructions = (name: string, lang: string) => {
@@ -109,6 +109,20 @@ export default function InterceptedExerciseModal() {
     if (params.exerciseId) fetchEx();
   }, [params.exerciseId]);
 
+  const renderStars = (impact: number) => {
+    const safeImpact = impact || 1;
+    return (
+      <div className="flex space-x-0.5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Star 
+            key={i} 
+            className={`w-4 h-4 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <Dialog defaultOpen onOpenChange={(open) => { if (!open) router.back(); }}>
       <DialogContent className="sm:max-w-[700px] flex flex-col p-0 overflow-hidden bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
@@ -155,12 +169,18 @@ export default function InterceptedExerciseModal() {
                 </div>
               )}
 
-              {/* INSTRUCTIONS */}
+              {/* INSTRUCTIONS & ETOILES */}
               <div className="bg-white dark:bg-zinc-900/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                <h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100 mb-3 border-b border-zinc-100 dark:border-zinc-800 pb-2">
-                  <Info className="w-4 h-4 mr-2 text-teal-500" />
-                  {lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}
-                </h4>
+                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
+                  <h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100">
+                    <Info className="w-4 h-4 mr-2 text-teal-500" />
+                    {lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}
+                  </h4>
+                  <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                    <span className="text-[10px] font-black uppercase text-zinc-500">SNC</span>
+                    {renderStars(exercise.cns_impact)}
+                  </div>
+                </div>
                 <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400 font-medium">
                   {getInstructions(exercise.name, lang).split('\n').map((line, i) => (
                     <li key={i} className="flex items-start">

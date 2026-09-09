@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap } from "lucide-react";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -303,6 +303,21 @@ export default function WorkoutPage() {
     return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
   }) : [];
 
+  // FONCTION DE RENDU DES ETOILES SNC
+  const renderStars = (impact: number) => {
+    const safeImpact = impact || 1;
+    return (
+      <div className="flex space-x-0.5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Star 
+            key={i} 
+            className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
       
@@ -409,7 +424,15 @@ export default function WorkoutPage() {
                               <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
                             </div>
                             <div className="flex items-start">
-                              <div><h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4><p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p></div>
+                              <div>
+                                <h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4>
+                                <div className="flex items-center space-x-2 mt-0.5">
+                                  <p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p>
+                                  <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                                  {/* 🛡️ INJECTION DES ÉTOILES ICI */}
+                                  {renderStars(ex.cns_impact)}
+                                </div>
+                              </div>
                               
                               <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer relative z-20 pointer-events-auto">
                                 <Info className="w-4 h-4" />
@@ -500,6 +523,13 @@ export default function WorkoutPage() {
                 <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
               )}
               <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+              
+              {/* 🛡️ INJECTION DU RENDERSTARS DANS LA MODALE INFO RAPIDE */}
+              <div className="flex items-center justify-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 mt-2">
+                <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
+                {renderStars(infoModal.exercise.cns_impact)}
+              </div>
+
             </div>
           )}
         </DialogContent>

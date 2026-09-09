@@ -3,18 +3,21 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Search, Plus, Dumbbell, Save, Trash2, Info, CalendarCheck, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Plus, Dumbbell, Save, Trash2, Info, CalendarCheck, Loader2, Star, Filter, ChevronUp, ChevronDown, Activity, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLanguage } from "@/lib/useLanguage";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 interface Exercise {
   id: string;
   name: string;
   target_muscle: string;
   equipment_required: string;
+  cns_impact: number;
+  movement_pattern: string;
   gif_url?: string;
 }
 
@@ -38,6 +41,8 @@ export default function CustomBuilderPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("Tous");
+  const [selectedStarFilter, setSelectedStarFilter] = useState<number | null>(null);
+  const [selectedPatternFilter, setSelectedPatternFilter] = useState<string | null>(null); // 🛡️ NOUVEAU FILTRE MOUVEMENT
   
   const [programName, setProgramName] = useState("");
   const [activeDay, setActiveDay] = useState("monday");
@@ -46,10 +51,27 @@ export default function CustomBuilderPage() {
   });
 
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
+  const [guideModal, setGuideModal] = useState(false); // 🛡️ NOUVELLE MODALE GUIDE
 
   const t = {
-    FR: { title: "Constructeur de Programme", sub: "Créez votre routine sur-mesure", catalog: "Bibliothèque", search: "Rechercher...", myPlan: "Ma Semaine", save: "Sauvegarder", empty: "Aucun exercice pour ce jour.", reps: "Reps", sets: "Séries", rest: "Repos (s)", progName: "Nom du programme", progPlaceholder: "Ex: Routine Hybride", error: "Erreur lors de la sauvegarde." },
-    EN: { title: "Program Builder", sub: "Create your custom routine", catalog: "Library", search: "Search...", myPlan: "My Week", save: "Save", empty: "No exercises for this day.", reps: "Reps", sets: "Sets", rest: "Rest (s)", progName: "Program Name", progPlaceholder: "E.g. Hybrid Routine", error: "Error during save." }
+    FR: { 
+      title: "Constructeur de Programme", sub: "Créez votre routine sur-mesure", catalog: "Bibliothèque", search: "Rechercher...", myPlan: "Ma Semaine", save: "Sauvegarder", empty: "Aucun exercice pour ce jour.", reps: "Reps", sets: "Séries", rest: "Repos (s)", progName: "Nom du programme", progPlaceholder: "Ex: Routine Hybride", error: "Erreur lors de la sauvegarde.",
+      pattern: "Mouvement", allPatterns: "Tous les mouvements", push: "Poussée (Push)", pull: "Tirage (Pull)", squat: "Genou (Squat)", hinge: "Hanche (Hinge)", core: "Gainage (Core)",
+      guideTitle: "Structure Scientifique", guideSub: "Comment construire une séance optimale.",
+      g1: "1. Exercice Principal (4 ou 5 Étoiles)", g1d: "Placé au début quand le SNC est frais pour générer la tension mécanique maximale (ex: Squat, Tractions). Max 1 à 2 par séance.",
+      g2: "2. Les Accessoires (3 ou 4 Étoiles)", g2d: "Ciblent les mêmes muscles avec plus de stabilité pour réduire le coût nerveux (ex: Presse à cuisses, Rowing).",
+      g3: "3. Isolation & Métabolique (1 ou 2 Étoiles)", g3d: "Fin de séance. Épuise le muscle sans taxer le SNC (Machines, haltères légers).",
+      g4: "L'Équilibre Full-Body", g4d: "Une séance athlétique complète doit croiser ces patrons de mouvements : Poussée (Push), Tirage (Pull), Dominante Genou (Squat), Dominante Hanche (Hinge) et Gainage (Core)."
+    },
+    EN: { 
+      title: "Program Builder", sub: "Create your custom routine", catalog: "Library", search: "Search...", myPlan: "My Week", save: "Save", empty: "No exercises for this day.", reps: "Reps", sets: "Sets", rest: "Rest (s)", progName: "Program Name", progPlaceholder: "E.g. Hybrid Routine", error: "Error during save.",
+      pattern: "Movement", allPatterns: "All movements", push: "Push", pull: "Pull", squat: "Squat (Knee)", hinge: "Hinge (Hip)", core: "Core",
+      guideTitle: "Scientific Structure", guideSub: "How to build an optimal session.",
+      g1: "1. Main Lift (4-5 Stars)", g1d: "First exercise when CNS is fresh. Maximum mechanical tension (e.g. Squats, Pull-ups). Max 1-2 per session.",
+      g2: "2. Accessories (3-4 Stars)", g2d: "Target the same muscles with more stability to reduce neural cost (e.g. Leg Press, Rows).",
+      g3: "3. Isolation & Metabolic (1-2 Stars)", g3d: "End of session. Exhaust the muscle without taxing the CNS (Machines, light dumbbells).",
+      g4: "Full-Body Balance", g4d: "A complete athletic session should cross these patterns: Push, Pull, Squat (Knee), Hinge (Hip), and Core."
+    }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS_LABELS = lang === "FR" 
@@ -71,22 +93,46 @@ export default function CustomBuilderPage() {
     const target = ex.target_muscle.toLowerCase();
     const filter = selectedMuscle.toLowerCase();
 
+    // Filtre Muscle
     if (filter === "tous") matchMuscle = true;
     else if (filter === "jambes") matchMuscle = target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe");
     else if (filter === "abdos") matchMuscle = target.includes("sangle abdominale") || target.includes("abdo") || target.includes("core");
     else if (filter === "épaules") matchMuscle = target.includes("épaule") || target.includes("epaule") || target.includes("delto");
-    else if (filter === "dos") matchMuscle = target.includes("dos") || target.includes("lombaire");
+    else if (filter === "dos") matchMuscle = target.includes("dos") || target.includes("lombaire") || target.includes("dorsal");
     else matchMuscle = target.includes(filter);
 
-    return matchSearch && matchMuscle;
+    // Filtre Étoiles
+    const matchStars = selectedStarFilter === null || ex.cns_impact === selectedStarFilter;
+
+    // 🛡️ Filtre Patrons de Mouvements
+    const patternLow = ex.movement_pattern?.toLowerCase() || "";
+    let matchPattern = true;
+    if (selectedPatternFilter) {
+      if (selectedPatternFilter === "push") matchPattern = patternLow.includes("push");
+      else if (selectedPatternFilter === "pull") matchPattern = patternLow.includes("pull");
+      else if (selectedPatternFilter === "squat") matchPattern = patternLow.includes("squat");
+      else if (selectedPatternFilter === "hinge") matchPattern = patternLow.includes("hinge");
+      else if (selectedPatternFilter === "core") matchPattern = patternLow.includes("core");
+    }
+
+    return matchSearch && matchMuscle && matchStars && matchPattern;
   });
+
+  const getPatternLabel = () => {
+    if (selectedPatternFilter === "push") return txt.push;
+    if (selectedPatternFilter === "pull") return txt.pull;
+    if (selectedPatternFilter === "squat") return txt.squat;
+    if (selectedPatternFilter === "hinge") return txt.hinge;
+    if (selectedPatternFilter === "core") return txt.core;
+    return txt.pattern;
+  };
 
   const addExercise = (ex: Exercise) => {
     setPlan(prev => ({
       ...prev,
       [activeDay]: [
         ...prev[activeDay],
-        { exercise: ex, sets: 3, target_reps: "8-12", rest_seconds: 90 }
+        { exercise: ex, sets: 3, target_reps: "8-12", rest_seconds: ex.cns_impact >= 4 ? 120 : 90 }
       ]
     }));
   };
@@ -117,7 +163,6 @@ export default function CustomBuilderPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user logged in");
 
-      // LIMITE : 3 Programmes PERSO
       const { data: existingCustoms } = await supabase.from("user_programs").select("id").eq("user_id", user.id).eq("program_type", "custom");
       if (existingCustoms && existingCustoms.length >= 3) {
         alert(lang === 'FR' ? "Limite atteinte (3 programmes perso max). Supprimez-en un dans l'onglet Programme." : "Limit reached (3 custom max). Delete one in the Workout tab.");
@@ -171,8 +216,22 @@ export default function CustomBuilderPage() {
     }
   };
 
+  const renderStars = (impact: number) => {
+    const safeImpact = impact || 1;
+    return (
+      <div className="flex space-x-0.5 mt-1">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Star 
+            key={i} 
+            className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-32">
+    <div className="flex flex-col min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-32 relative">
       <div className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 px-4 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-4">
           <button onClick={() => router.back()} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors">
@@ -189,20 +248,98 @@ export default function CustomBuilderPage() {
         </Button>
       </div>
 
+      <div className="fixed bottom-6 right-4 sm:right-8 z-50 flex flex-col gap-3">
+        <button 
+          onClick={() => document.getElementById('library-section')?.scrollIntoView({ behavior: 'smooth' })}
+          className="w-12 h-12 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center justify-center rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.15)] hover:scale-110 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-500 transition-all opacity-80 hover:opacity-100 focus:outline-none"
+          title={lang === 'FR' ? "Haut (Bibliothèque)" : "Top (Library)"}
+        >
+          <ChevronUp className="w-6 h-6" />
+        </button>
+        <button 
+          onClick={() => document.getElementById('plan-section')?.scrollIntoView({ behavior: 'smooth' })}
+          className="w-12 h-12 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center justify-center rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.15)] hover:scale-110 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-500 transition-all opacity-80 hover:opacity-100 focus:outline-none"
+          title={lang === 'FR' ? "Bas (Ma Semaine)" : "Bottom (My Week)"}
+        >
+          <ChevronDown className="w-6 h-6" />
+        </button>
+      </div>
+
       <div className="flex-1 max-w-7xl mx-auto w-full p-4 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-[calc(100vh-80px)]">
         
-        <div className="flex flex-col space-y-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-sm lg:overflow-hidden">
-          <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 flex items-center mb-2">
-            <Search className="w-5 h-5 mr-2 text-indigo-500" /> {txt.catalog}
-          </h3>
+        <div id="library-section" className="flex flex-col space-y-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-sm lg:overflow-hidden scroll-mt-24">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 flex items-center">
+              <Search className="w-5 h-5 mr-2 text-indigo-500" /> {txt.catalog}
+            </h3>
+            {/* 🛡️ BOUTON GUIDE SCIENTIFIQUE */}
+            <button onClick={() => setGuideModal(true)} className="flex items-center text-xs font-bold text-teal-600 bg-teal-50 dark:text-teal-400 dark:bg-teal-900/30 px-3 py-1.5 rounded-lg hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors">
+              <BookOpen className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">Guide</span>
+            </button>
+          </div>
           
           <div className="space-y-3 shrink-0">
-            <Input 
-              placeholder={txt.search} 
-              value={searchQuery} 
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-indigo-500 font-medium"
-            />
+            {/* Barre de Recherche + Menus Dropdown */}
+            <div className="flex items-center space-x-2">
+              <Input 
+                placeholder={txt.search} 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-indigo-500 font-medium flex-1"
+              />
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 flex items-center px-3 border transition-colors outline-none ${selectedStarFilter !== null ? 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/50' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+                    <Filter className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline font-bold">{selectedStarFilter !== null ? `${selectedStarFilter} Étoiles` : "SNC"}</span>
+                    {selectedStarFilter !== null && (
+                      <span className="ml-1 sm:hidden w-5 h-5 flex items-center justify-center bg-orange-500 text-white rounded-full text-[10px] font-black">
+                        {selectedStarFilter}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 w-48 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
+                  <DropdownMenuItem onClick={() => setSelectedStarFilter(null)} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-zinc-100 dark:focus:bg-zinc-900 outline-none">
+                    Toutes les intensités
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50" />
+                  {[5, 4, 3, 2, 1].map(star => (
+                    <DropdownMenuItem key={star} onClick={() => setSelectedStarFilter(star)} className="font-bold cursor-pointer flex items-center rounded-xl p-3 focus:bg-orange-50 dark:focus:bg-orange-500/10 focus:text-orange-600 dark:focus:text-orange-400 outline-none">
+                      <Star className={`w-4 h-4 mr-2 ${star >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500'}`} />
+                      {star} {star > 1 ? 'Étoiles' : 'Étoile'}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* 🛡️ MENU DROPDOWN MOUVEMENTS */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 flex items-center px-3 border transition-colors outline-none ${selectedPatternFilter !== null ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/50' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+                    <Activity className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline font-bold">{getPatternLabel()}</span>
+                    {selectedPatternFilter !== null && (
+                      <span className="ml-1 sm:hidden w-2 h-2 rounded-full bg-teal-500"></span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 w-56 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
+                  <DropdownMenuItem onClick={() => setSelectedPatternFilter(null)} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-zinc-100 dark:focus:bg-zinc-900 outline-none">
+                    {txt.allPatterns}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50" />
+                  <DropdownMenuItem onClick={() => setSelectedPatternFilter("push")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.push}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedPatternFilter("pull")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.pull}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedPatternFilter("squat")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.squat}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedPatternFilter("hinge")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.hinge}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedPatternFilter("core")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.core}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+            </div>
+
             <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
               {MUSCLE_GROUPS.map(muscle => (
                 <button 
@@ -230,14 +367,18 @@ export default function CustomBuilderPage() {
                   <div key={ex.id} className="flex items-center justify-between p-2 lg:p-3 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors group">
                     <div className="flex items-center space-x-3">
                       <div className="h-10 w-10 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-zinc-200 dark:border-zinc-700 relative">
-                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain" /> : <Dumbbell className="h-5 w-5 text-zinc-400" />}
+                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-5 w-5 text-zinc-400 opacity-50" />}
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">{ex.name}</h4>
-                        <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">{ex.target_muscle}</p>
+                        <div className="flex items-center space-x-2 mt-0.5">
+                          <p className="text-[9px] uppercase tracking-wider text-zinc-500 font-bold">{ex.target_muscle}</p>
+                          <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                          {renderStars(ex.cns_impact)}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1">
+                    <div className="flex items-center space-x-1 shrink-0">
                       <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors"><Info className="w-4 h-4" /></button>
                       <button onClick={() => addExercise(ex)} className="p-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-600 rounded-lg transition-colors">
                         <Plus className="w-4 h-4 stroke-[3px]" />
@@ -252,7 +393,7 @@ export default function CustomBuilderPage() {
           </div>
         </div>
 
-        <div className="flex flex-col space-y-4 bg-zinc-900 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-2xl lg:overflow-hidden relative">
+        <div id="plan-section" className="flex flex-col space-y-4 bg-zinc-900 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-2xl lg:overflow-hidden relative scroll-mt-24">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent pointer-events-none rounded-2xl"></div>
           
           <div className="relative z-10 flex flex-col space-y-3 mb-2">
@@ -307,7 +448,7 @@ export default function CustomBuilderPage() {
                 <div key={idx} className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3 shadow-sm group hover:border-indigo-500/50 transition-colors">
                   
                   <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <h4 className="font-bold text-zinc-100 text-sm">{item.exercise.name}</h4>
+                    <h4 className="font-bold text-zinc-100 text-sm line-clamp-1">{item.exercise.name}</h4>
                     <button onClick={() => removeExercise(activeDay, idx)} className="text-zinc-600 hover:text-red-500 transition-colors p-1">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -355,17 +496,76 @@ export default function CustomBuilderPage() {
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
               {infoModal.exercise.gif_url ? (
-                <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center">
-                  <img src={infoModal.exercise.gif_url.endsWith('.jpg') ? infoModal.exercise.gif_url : `${infoModal.exercise.gif_url}/0.jpg`} className="max-h-full object-contain" alt="Aperçu" />
+                <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
+                  <img src={infoModal.exercise.gif_url.endsWith('.jpg') ? infoModal.exercise.gif_url : `${infoModal.exercise.gif_url}/0.jpg`} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
                 </div>
               ) : (
                 <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
               )}
-              <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+              <div className="flex flex-col items-center space-y-2">
+                <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+                <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
+                  {renderStars(infoModal.exercise.cns_impact)}
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 🛡️ MODALE DU GUIDE SCIENTIFIQUE */}
+      <Dialog open={guideModal} onOpenChange={setGuideModal}>
+        <DialogContent className="sm:max-w-[500px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-teal-600 flex items-center">
+              <BookOpen className="w-6 h-6 mr-2" /> {txt.guideTitle}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-600 dark:text-zinc-400 font-medium">
+              {txt.guideSub}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-5 py-4 max-h-[60vh] overflow-y-auto pr-2">
+            
+            <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900 p-4 rounded-xl">
+              <h4 className="font-black text-red-700 dark:text-red-400 mb-1 flex items-center">
+                {txt.g1}
+              </h4>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g1d}</p>
+            </div>
+
+            <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900 p-4 rounded-xl">
+              <h4 className="font-black text-orange-700 dark:text-orange-400 mb-1 flex items-center">
+                {txt.g2}
+              </h4>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g2d}</p>
+            </div>
+
+            <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl">
+              <h4 className="font-black text-zinc-700 dark:text-zinc-300 mb-1 flex items-center">
+                {txt.g3}
+              </h4>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g3d}</p>
+            </div>
+
+            <div className="bg-teal-50 dark:bg-teal-900/10 border border-teal-100 dark:border-teal-900 p-4 rounded-xl">
+              <h4 className="font-black text-teal-700 dark:text-teal-400 mb-1 flex items-center">
+                <Activity className="w-4 h-4 mr-2" /> {txt.g4}
+              </h4>
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g4d}</p>
+            </div>
+
+          </div>
+          <DialogFooter>
+            <Button className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold" onClick={() => setGuideModal(false)}>
+              J'ai compris
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

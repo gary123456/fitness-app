@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Flame, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
@@ -214,7 +214,6 @@ export default function ActiveWorkoutSession() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // 🛡️ OFFLINE-FIRST FINISH WORKOUT
   const finishWorkout = async () => {
     if (isSaving) return;
     const hasCompletedSets = Object.values(completedSets).some(val => val === true);
@@ -266,7 +265,6 @@ export default function ActiveWorkoutSession() {
     let leveledUp = false;
     let isReplay = false;
 
-    // Tentative d'insertion avec Fallback Hors-Ligne
     try {
       if (!navigator.onLine) throw new Error("OFFLINE");
 
@@ -283,23 +281,13 @@ export default function ActiveWorkoutSession() {
 
     } catch (err: any) {
       console.warn("Réseau indisponible. Sauvegarde locale activée.", err);
-      // Cache local pour les Service Workers
       const offlineQueue = JSON.parse(localStorage.getItem('vivex_offline_queue') || '[]');
       offlineQueue.push(...logsToInsert);
       localStorage.setItem('vivex_offline_queue', JSON.stringify(offlineQueue));
       isOfflineSaved = true;
     }
 
-    setSessionStats({ 
-      duration: durMins, 
-      tonnage: calcTonnage, 
-      bestSet: bestSetStr,
-      xpEarned,
-      leveledUp,
-      isReplay,
-      isOffline: isOfflineSaved
-    });
-    
+    setSessionStats({ duration: durMins, tonnage: calcTonnage, bestSet: bestSetStr, xpEarned, leveledUp, isReplay, isOffline: isOfflineSaved });
     setRestTimer(null);
     setShowBreathingModal(true);
     setIsSaving(false);
@@ -342,6 +330,21 @@ export default function ActiveWorkoutSession() {
   const session = data.sessionData;
   const insights = getSessionInsights(session.workout_exercises, lang);
 
+  // 🛡️ NOUVEAU RENDU ÉTOILES
+  const renderStars = (impact: number) => {
+    const safeImpact = impact || 1;
+    return (
+      <div className="flex space-x-0.5 mt-1">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Star 
+            key={i} 
+            className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
       <div className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-teal-500/30 dark:border-teal-500/20 px-4 py-4 flex items-center justify-between shadow-[0_10px_30px_-15px_rgba(20,184,166,0.4)] relative overflow-hidden">
@@ -358,9 +361,9 @@ export default function ActiveWorkoutSession() {
         {!isWorkoutUnlocked ? (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 opacity-5 pointer-events-none"><Flame className="w-48 h-48" /></div>
+              <div className="absolute -right-10 -top-10 opacity-5 pointer-events-none"><Brain className="w-48 h-48" /></div>
               <div className="flex items-center space-x-3 mb-6 relative z-10">
-                <div className="bg-orange-100 dark:bg-orange-900/40 p-3 rounded-full"><Flame className="w-6 h-6 text-orange-500" /></div>
+                <div className="bg-orange-100 dark:bg-orange-900/40 p-3 rounded-full"><Brain className="w-6 h-6 text-orange-500" /></div>
                 <div>
                   <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100">{txt.warmupTitle}</h3>
                   <p className="text-sm font-medium text-zinc-500">{lang === 'FR' ? "Protégez vos articulations avant de charger." : "Protect joints before loading."}</p>
@@ -409,14 +412,17 @@ export default function ActiveWorkoutSession() {
                 <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
                   <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                     <div className="flex items-center space-x-3">
-                      <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-700 relative p-1">
-                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
-                        <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
+                      <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-700 relative p-1 cursor-pointer hover:border-teal-500 transition-colors" onClick={() => router.push(`/workout/${session.id}/exercice/${ex.id}`)}>
+                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0 opacity-50" />}
                       </div>
                       <div className="flex items-start">
-                        <div>
-                          <h3 className="font-bold text-zinc-900 dark:text-zinc-50">{ex.name}</h3>
-                          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps</p>
+                        <div className="cursor-pointer" onClick={() => router.push(`/workout/${session.id}/exercice/${ex.id}`)}>
+                          <h3 className="font-bold text-zinc-900 dark:text-zinc-50 hover:text-teal-500 transition-colors">{ex.name}</h3>
+                          <div className="flex items-center space-x-2">
+                            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps</p>
+                            <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                            {renderStars(ex.cns_impact)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -511,7 +517,6 @@ export default function ActiveWorkoutSession() {
               </div>
             </div>
             
-            {/* 🛡️ WIDGET OFFLINE / ANTI-TRICHE */}
             {sessionStats.isOffline ? (
               <div className="w-full max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 shadow-sm flex flex-col items-center text-center animate-in slide-in-from-top-8">
                 <WifiOff className="w-8 h-8 text-zinc-500 mb-2" />

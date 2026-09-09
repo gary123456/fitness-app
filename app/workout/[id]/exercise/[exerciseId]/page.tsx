@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Loader2, Dumbbell, Info } from "lucide-react";
+import { ArrowLeft, Loader2, Dumbbell, Info, Star } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
 const getInstructions = (name: string, lang: string) => {
@@ -108,6 +108,20 @@ export default function ExerciseFullPage() {
     if (params.exerciseId) fetchEx();
   }, [params.exerciseId]);
 
+  const renderStars = (impact: number) => {
+    const safeImpact = impact || 1;
+    return (
+      <div className="flex space-x-0.5 mt-2 justify-center">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Star 
+            key={i} 
+            className={`w-4 h-4 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
+          />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <div className="flex items-center px-4 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 sticky top-0 z-10">
@@ -127,34 +141,34 @@ export default function ExerciseFullPage() {
           </div>
         ) : (
           <>
-            {exercise.gif_url ? (
-              <div className="flex flex-col md:flex-row gap-6">
-                <div className="flex-1 bg-white rounded-2xl shadow-md border border-zinc-200 overflow-hidden flex flex-col">
-                  <div className="bg-zinc-100/80 px-4 py-3 border-b border-zinc-200 text-xs font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Position de départ" : "Starting Position"}</div>
-                  <div className="p-6 flex justify-center items-center flex-1 min-h-[300px]">
-                    <img src={`${exercise.gif_url}/0.jpg`} alt="Départ" className="max-w-full object-contain mix-blend-multiply" loading="lazy" />
-                  </div>
-                </div>
-                <div className="flex-1 bg-white rounded-2xl shadow-md border border-zinc-200 overflow-hidden flex flex-col">
-                  <div className="bg-zinc-100/80 px-4 py-3 border-b border-zinc-200 text-xs font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Contraction" : "Contraction"}</div>
-                  <div className="p-6 flex justify-center items-center flex-1 min-h-[300px]">
-                    <img src={`${exercise.gif_url}/1.jpg`} alt="Fin" className="max-w-full object-contain mix-blend-multiply" loading="lazy" />
-                  </div>
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex-1 bg-white dark:bg-zinc-900 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
+                <div className="bg-zinc-100/80 dark:bg-zinc-800/80 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-xs font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Position de départ" : "Starting Position"}</div>
+                <div className="p-6 flex justify-center items-center flex-1 min-h-[300px] relative">
+                  {exercise.gif_url ? <img src={`${exercise.gif_url}/0.jpg`} alt="Départ" className="max-w-full object-contain mix-blend-multiply dark:mix-blend-normal absolute z-10" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
+                  <Dumbbell className="w-16 h-16 text-zinc-300 dark:text-zinc-700 absolute z-0 opacity-50" />
                 </div>
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-[40vh] text-zinc-400 dark:text-zinc-600 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                <Dumbbell className="w-20 h-20 mb-4 opacity-50" />
-                <p className="text-base font-bold">{lang === 'FR' ? "Aucun visuel disponible." : "No visual available."}</p>
+              <div className="flex-1 bg-white dark:bg-zinc-900 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
+                <div className="bg-zinc-100/80 dark:bg-zinc-800/80 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-xs font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Contraction" : "Contraction"}</div>
+                <div className="p-6 flex justify-center items-center flex-1 min-h-[300px] relative">
+                  {exercise.gif_url ? <img src={`${exercise.gif_url}/1.jpg`} alt="Fin" className="max-w-full object-contain mix-blend-multiply dark:mix-blend-normal absolute z-10" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
+                  <Dumbbell className="w-16 h-16 text-zinc-300 dark:text-zinc-700 absolute z-0 opacity-50" />
+                </div>
               </div>
-            )}
+            </div>
 
-            {/* INSTRUCTIONS */}
             <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-md">
-              <h4 className="flex items-center text-sm font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100 mb-4 border-b border-zinc-100 dark:border-zinc-800 pb-3">
-                <Info className="w-5 h-5 mr-2 text-teal-500" />
-                {lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}
-              </h4>
+              <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
+                <h4 className="flex items-center text-sm font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100">
+                  <Info className="w-5 h-5 mr-2 text-teal-500" />
+                  {lang === 'FR' ? "Consignes" : "Guidelines"}
+                </h4>
+                <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <span className="text-[10px] font-black uppercase text-zinc-500">SNC</span>
+                  {renderStars(exercise.cns_impact)}
+                </div>
+              </div>
               <ul className="space-y-3 text-base text-zinc-600 dark:text-zinc-400 font-medium">
                 {getInstructions(exercise.name, lang).split('\n').map((line, i) => (
                   <li key={i} className="flex items-start">
