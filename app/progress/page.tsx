@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
 import { compressImageFile } from "@/lib/image-optimizer";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Camera, Ruler, Upload, CheckCircle2, ArrowLeftRight, Image as ImageIcon, Loader2, Trash2, Maximize2, X, Trophy, Info, Edit3 } from "lucide-react";
+import { Camera, Ruler, Upload, CheckCircle2, ArrowLeftRight, Image as ImageIcon, Loader2, Trash2, Maximize2, X, Trophy, Info, Edit3, Zap, TrendingUp } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
 const BeforeAfterSlider = ({ before, after }: { before: string, after: string }) => {
@@ -30,6 +30,48 @@ const BeforeAfterSlider = ({ before, after }: { before: string, after: string })
   );
 };
 
+// 🛡️ NOUVEAU COMPOSANT : GRAPHIQUE 1RM (Pur SVG, zéro librairie lourde)
+const OneRmChart = ({ data }: { data: { date: string, rm: number }[] }) => {
+  if (!data || data.length === 0) return <div className="h-48 flex items-center justify-center text-zinc-500 font-bold">Pas assez de données.</div>;
+  if (data.length === 1) return <div className="h-48 flex items-center justify-center text-zinc-500 font-bold">Enregistrez une deuxième séance.</div>;
+
+  const minRM = Math.min(...data.map(d => d.rm)) * 0.9;
+  const maxRM = Math.max(...data.map(d => d.rm)) * 1.1;
+  const range = maxRM - minRM;
+  const padding = 20;
+  
+  const points = data.map((d, i) => {
+    const x = padding + (i / (data.length - 1)) * (100 - padding * 2);
+    const y = 100 - padding - ((d.rm - minRM) / range) * (100 - padding * 2);
+    return `${x},${y}`;
+  }).join(" ");
+
+  return (
+    <div className="w-full h-64 bg-zinc-900 rounded-xl p-4 relative overflow-hidden shadow-inner border border-zinc-800">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full absolute inset-0 pt-4 pb-4">
+        {/* Grille de fond */}
+        <line x1="0" y1="25" x2="100" y2="25" stroke="currentColor" className="text-zinc-800" strokeWidth="0.5" />
+        <line x1="0" y1="50" x2="100" y2="50" stroke="currentColor" className="text-zinc-800" strokeWidth="0.5" />
+        <line x1="0" y1="75" x2="100" y2="75" stroke="currentColor" className="text-zinc-800" strokeWidth="0.5" />
+        
+        {/* Ligne de tendance */}
+        <polyline fill="none" stroke="#eab308" strokeWidth="2" points={points} className="drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]" />
+        
+        {/* Points */}
+        {data.map((d, i) => {
+          const x = padding + (i / (data.length - 1)) * (100 - padding * 2);
+          const y = 100 - padding - ((d.rm - minRM) / range) * (100 - padding * 2);
+          return <circle key={i} cx={x} cy={y} r="1.5" fill="#ffffff" />;
+        })}
+      </svg>
+      {/* Légende du Max */}
+      <div className="absolute top-4 left-4 text-xs font-black text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-md border border-yellow-500/20">
+        MAX : {Math.round(Math.max(...data.map(d => d.rm)))} kg
+      </div>
+    </div>
+  );
+};
+
 const fetchProgressData = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Non connecté");
@@ -37,6 +79,9 @@ const fetchProgressData = async () => {
   const { data: profile } = await supabase.from("profiles").select("gender, weight_kg").eq("id", user.id).single();
   const { data: measurements } = await supabase.from("measurements").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
   const { data: photos } = await supabase.from("progress_photos").select("*").eq("user_id", user.id).order("date", { ascending: true });
+  
+  // 🛡️ NOUVEAU : On récupère l'historique des perfs pour le calcul du 1RM
+  const { data: workoutLogs } = await supabase.from("workout_logs").select("weight, reps, created_at, exercise_library(id, name)").eq("user_id", user.id).order("created_at", { ascending: true });
 
   const validMeasurements = measurements?.filter(m => m.weight_kg > 0 || m.arms_cm > 0 || m.chest_cm > 0 || m.waist_cm > 0 || m.thighs_cm > 0) || [];
 
@@ -63,25 +108,24 @@ const fetchProgressData = async () => {
     daysSinceLastWeighIn = 999;
   }
 
-  return { user, gender: profile?.gender || 'homme', currentWeight: profile?.weight_kg, measurements: validMeasurements, photos: photosWithSignedUrls, daysSinceLastWeighIn };
+  return { user, gender: profile?.gender || 'homme', currentWeight: profile?.weight_kg, measurements: validMeasurements, photos: photosWithSignedUrls, daysSinceLastWeighIn, workoutLogs: workoutLogs || [] };
 };
 
 export default function ProgressPage() {
   const { lang } = useLanguage();
-  const [activeTab, setActiveTab] = useState<"measurements" | "photos" | "compare">("measurements");
+  // 🛡️ AJOUT DU NOUVEL ONGLET 'performance'
+  const [activeTab, setActiveTab] = useState<"measurements" | "photos" | "compare" | "performance">("measurements");
   
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // ÉTATS DES MENSURATIONS
   const [weight, setWeight] = useState("");
-  const [bodyFat, setBodyFat] = useState(""); // 🛡️ PHASE 4 : Ajout du champ Masse Grasse
+  const [bodyFat, setBodyFat] = useState(""); 
   const [arms, setArms] = useState("");
   const [chest, setChest] = useState("");
   const [waist, setWaist] = useState("");
   const [thighs, setThighs] = useState("");
   
-  // 🛡️ GESTION DE L'ÉDITION
   const [editingMeasId, setEditingMeasId] = useState<string | null>(null);
 
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -94,13 +138,16 @@ export default function ProgressPage() {
   const [compareMeasA, setCompareMeasA] = useState("");
   const [compareMeasB, setCompareMeasB] = useState("");
   
+  // 🛡️ NOUVEAU STATE : SÉLECTION D'EXERCICE POUR L'ANALYTIQUE 1RM
+  const [selectedExFor1RM, setSelectedExFor1RM] = useState<string>("");
+
   const [enlargeModal, setEnlargeModal] = useState({ show: false, url: "" });
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string>("");
 
   const t = {
-    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", weight: "Poids (kg)", bfLabel: "Masse Grasse (%)", bfPlaceholder: "Optionnel (Ex: 15)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Supprimer cette donnée ?", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun." },
-    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", weight: "Weight (kg)", bfLabel: "Body Fat (%)", bfPlaceholder: "Optional (Ex: 15)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Delete this data?", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach." }
+    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", performance: "Performance (1RM)", weight: "Poids (kg)", bfLabel: "Masse Grasse (%)", bfPlaceholder: "Optionnel (Ex: 15)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Supprimer cette donnée ?", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun.", perfTitle: "Calculateur de 1RM & Courbe de Force", perfSub: "Sélectionnez un exercice pour visualiser l'évolution de votre force maximale estimée.", selectEx: "Choisir un exercice...", cur1RM: "1RM Actuel Estimé", maxLift: "Plus Lourde Charge", volMax: "Volume Max (Série)" },
+    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", performance: "Performance (1RM)", weight: "Weight (kg)", bfLabel: "Body Fat (%)", bfPlaceholder: "Optional (Ex: 15)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Delete this data?", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach.", perfTitle: "1RM Calculator & Strength Curve", perfSub: "Select an exercise to visualize the evolution of your estimated maximal strength.", selectEx: "Select an exercise...", cur1RM: "Current Est. 1RM", maxLift: "Heaviest Lift", volMax: "Max Volume (Set)" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -108,7 +155,7 @@ export default function ProgressPage() {
     onSuccess: (res) => {
       if (res.measurements.length > 0 && !weight && !arms && !chest && !waist && !thighs && !editingMeasId && !bodyFat) { 
         setWeight(res.currentWeight?.toString() || res.measurements[0].weight_kg?.toString() || "");
-        setBodyFat(res.measurements[0].body_fat_percentage?.toString() || ""); // 🛡️ PHASE 4
+        setBodyFat(res.measurements[0].body_fat_percentage?.toString() || ""); 
         setArms(res.measurements[0].arms_cm?.toString() || "");
         setChest(res.measurements[0].chest_cm?.toString() || "");
         setWaist(res.measurements[0].waist_cm?.toString() || "");
@@ -117,11 +164,56 @@ export default function ProgressPage() {
     }
   });
 
+  // 🛡️ EXTRACTION DES EXERCICES UNIQUES POUR LE MENU DÉROULANT 1RM
+  const uniqueExercises = useMemo(() => {
+    if (!data?.workoutLogs) return [];
+    const exMap = new Map();
+    data.workoutLogs.forEach((log: any) => {
+      if (log.exercise_library?.id && log.weight > 0) {
+        exMap.set(log.exercise_library.id, log.exercise_library.name);
+      }
+    });
+    const list = Array.from(exMap, ([id, name]) => ({ id, name }));
+    if (list.length > 0 && !selectedExFor1RM) setSelectedExFor1RM(list[0].id);
+    return list;
+  }, [data?.workoutLogs]);
+
+  // 🛡️ CALCUL DU 1RM POUR L'EXERCICE SÉLECTIONNÉ
+  const performanceData = useMemo(() => {
+    if (!data?.workoutLogs || !selectedExFor1RM) return null;
+    const logs = data.workoutLogs.filter((l: any) => l.exercise_library?.id === selectedExFor1RM && l.weight > 0);
+    if (logs.length === 0) return null;
+
+    // Regrouper par jour pour avoir la meilleure perf de chaque séance
+    const dailyMaxMap = new Map();
+    let absMaxWeight = 0;
+    let absMaxVolume = 0;
+
+    logs.forEach((l: any) => {
+      const dateStr = l.created_at.split('T')[0];
+      const epley1RM = l.weight * (1 + (l.reps / 30));
+      const volume = l.weight * l.reps;
+      
+      if (l.weight > absMaxWeight) absMaxWeight = l.weight;
+      if (volume > absMaxVolume) absMaxVolume = volume;
+
+      if (!dailyMaxMap.has(dateStr) || epley1RM > dailyMaxMap.get(dateStr).rm) {
+        dailyMaxMap.set(dateStr, { date: dateStr, rm: epley1RM, weight: l.weight, reps: l.reps });
+      }
+    });
+
+    const trendData = Array.from(dailyMaxMap.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const currentRM = trendData.length > 0 ? trendData[trendData.length - 1].rm : 0;
+
+    return { trendData, currentRM, absMaxWeight, absMaxVolume };
+  }, [data?.workoutLogs, selectedExFor1RM]);
+
+
   const handleSaveMeasurements = async () => {
     if (!data?.user) return;
     
     const w = parseFloat(weight) || 0;
-    const bf = bodyFat ? parseFloat(bodyFat) : null; // 🛡️ PHASE 4
+    const bf = bodyFat ? parseFloat(bodyFat) : null; 
     const a = parseFloat(arms) || 0;
     const c = parseFloat(chest) || 0;
     const wa = parseFloat(waist) || 0;
@@ -133,10 +225,9 @@ export default function ProgressPage() {
 
     setSaving(true);
     
-    // 🛡️ LOGIQUE ARCHITECTURALE : UPDATE ou INSERT
     const payload = { 
       weight_kg: w || null, 
-      body_fat_percentage: bf, // 🛡️ PHASE 4
+      body_fat_percentage: bf, 
       arms_cm: a || null, 
       chest_cm: c || null, 
       waist_cm: wa || null, 
@@ -155,8 +246,8 @@ export default function ProgressPage() {
 
     await mutate(); 
     setSaving(false);
-    setEditingMeasId(null); // On sort du mode édition
-    setBodyFat(""); // Reset
+    setEditingMeasId(null);
+    setBodyFat("");
     
     setSuccessMessage(txt.successMsgMeas);
     setShowSuccessModal(true);
@@ -165,12 +256,12 @@ export default function ProgressPage() {
   const handleEditMeas = (m: any) => {
     setEditingMeasId(m.id);
     setWeight(m.weight_kg?.toString() || "");
-    setBodyFat(m.body_fat_percentage?.toString() || ""); // 🛡️ PHASE 4
+    setBodyFat(m.body_fat_percentage?.toString() || ""); 
     setArms(m.arms_cm?.toString() || "");
     setChest(m.chest_cm?.toString() || "");
     setWaist(m.waist_cm?.toString() || "");
     setThighs(m.thighs_cm?.toString() || "");
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Remonte l'utilisateur vers le formulaire
+    window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
 
   const handleDeleteMeas = async (id: string) => {
@@ -248,12 +339,73 @@ export default function ProgressPage() {
         <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
       </div>
 
-      <div className="grid w-full grid-cols-3 bg-zinc-200/50 dark:bg-zinc-900 rounded-xl p-1 mb-6 shadow-inner">
-        <button onClick={() => setActiveTab("measurements")} className={`flex items-center justify-center py-2 rounded-lg font-bold text-sm transition-all ${activeTab === "measurements" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><Ruler className="w-4 h-4 mr-2 hidden sm:block" /> {txt.measure}</button>
-        <button onClick={() => setActiveTab("photos")} className={`flex items-center justify-center py-2 rounded-lg font-bold text-sm transition-all ${activeTab === "photos" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><ImageIcon className="w-4 h-4 mr-2 hidden sm:block" /> {txt.photos}</button>
-        <button onClick={() => setActiveTab("compare")} className={`flex items-center justify-center py-2 rounded-lg font-bold text-sm transition-all ${activeTab === "compare" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><ArrowLeftRight className="w-4 h-4 mr-2 hidden sm:block" /> {txt.compare}</button>
+      {/* 🛡️ BARRE D'ONGLETS MISE À JOUR AVEC 4 BOUTONS */}
+      <div className="grid w-full grid-cols-4 bg-zinc-200/50 dark:bg-zinc-900 rounded-xl p-1 mb-6 shadow-inner overflow-x-auto">
+        <button onClick={() => setActiveTab("measurements")} className={`flex items-center justify-center py-2 px-1 rounded-lg font-bold text-xs sm:text-sm transition-all ${activeTab === "measurements" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><Ruler className="w-4 h-4 mr-2 hidden sm:block" /> {txt.measure}</button>
+        <button onClick={() => setActiveTab("photos")} className={`flex items-center justify-center py-2 px-1 rounded-lg font-bold text-xs sm:text-sm transition-all ${activeTab === "photos" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><ImageIcon className="w-4 h-4 mr-2 hidden sm:block" /> {txt.photos}</button>
+        <button onClick={() => setActiveTab("compare")} className={`flex items-center justify-center py-2 px-1 rounded-lg font-bold text-xs sm:text-sm transition-all ${activeTab === "compare" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><ArrowLeftRight className="w-4 h-4 mr-2 hidden sm:block" /> {txt.compare}</button>
+        <button onClick={() => setActiveTab("performance")} className={`flex items-center justify-center py-2 px-1 rounded-lg font-bold text-xs sm:text-sm transition-all ${activeTab === "performance" ? "bg-white dark:bg-zinc-950 text-yellow-600 dark:text-yellow-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><Zap className="w-4 h-4 mr-2 hidden sm:block" /> 1RM</button>
       </div>
       
+      {/* 🛡️ NOUVEL ONGLET : PERFORMANCE & 1RM */}
+      {activeTab === "performance" && (
+        <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm">
+            <div className="flex space-x-4 mb-4 sm:mb-0">
+              <Trophy className="w-8 h-8 text-yellow-500 shrink-0" />
+              <div>
+                <h3 className="font-black text-yellow-700 dark:text-yellow-400 text-lg leading-tight">{txt.perfTitle}</h3>
+                <p className="text-sm text-yellow-600 dark:text-yellow-500/80 font-medium">{txt.perfSub}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="font-bold text-zinc-600 dark:text-zinc-400 ml-1">{txt.selectEx}</Label>
+            <select 
+              value={selectedExFor1RM} 
+              onChange={(e) => setSelectedExFor1RM(e.target.value)} 
+              className="w-full p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 font-bold text-zinc-900 dark:text-zinc-100 shadow-sm focus:ring-2 focus:ring-yellow-500 appearance-none cursor-pointer"
+            >
+              {uniqueExercises.length === 0 && <option value="">Aucune donnée de force enregistrée</option>}
+              {uniqueExercises.map((ex) => (
+                <option key={ex.id} value={ex.id}>{ex.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {performanceData && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10"><Zap className="w-16 h-16 text-yellow-400" /></div>
+                <h4 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{txt.cur1RM}</h4>
+                <div className="text-4xl font-black text-white mt-2">{Math.round(performanceData.currentRM)} <span className="text-xl text-yellow-500">kg</span></div>
+              </div>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm">
+                <h4 className="text-sm font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">{txt.maxLift}</h4>
+                <div className="text-3xl font-black text-zinc-900 dark:text-zinc-100 mt-2">{performanceData.absMaxWeight} <span className="text-lg text-zinc-400">kg</span></div>
+              </div>
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 shadow-sm">
+                <h4 className="text-sm font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">{txt.volMax}</h4>
+                <div className="text-3xl font-black text-zinc-900 dark:text-zinc-100 mt-2">{performanceData.absMaxVolume} <span className="text-lg text-zinc-400">kg</span></div>
+              </div>
+
+              <div className="md:col-span-3">
+                <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                  <CardHeader>
+                    <CardTitle className="flex items-center text-zinc-900 dark:text-zinc-100"><TrendingUp className="w-5 h-5 mr-2 text-yellow-500" /> Évolution du 1RM (Epley)</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <OneRmChart data={performanceData.trendData} />
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* RESTE DES ONGLETS IDENTIQUES */}
       {activeTab === "measurements" && (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
           
@@ -278,7 +430,6 @@ export default function ProgressPage() {
                   <Label className="font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest mb-2 block">{txt.weight}</Label>
                   <Input type="number" step="0.1" value={weight} onChange={e=>setWeight(e.target.value)} className="font-black text-2xl h-14 dark:bg-zinc-900 dark:border-zinc-700 text-zinc-900 dark:text-white" placeholder="0.0" />
                 </div>
-                {/* 🛡️ PHASE 4 : CHAMP MASSE GRASSE */}
                 <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-100 dark:border-zinc-800">
                   <Label className="font-black text-teal-600 dark:text-teal-500 uppercase tracking-widest mb-2 block">{txt.bfLabel}</Label>
                   <Input type="number" step="0.1" value={bodyFat} onChange={e=>setBodyFat(e.target.value)} className="font-black text-2xl h-14 dark:bg-zinc-900 dark:border-zinc-700 text-zinc-900 dark:text-white" placeholder={txt.bfPlaceholder} />
@@ -296,7 +447,6 @@ export default function ProgressPage() {
                 {editingMeasId && (
                   <Button variant="outline" onClick={() => {
                     setEditingMeasId(null);
-                    // 🛡️ CORRECTION DU BUG TYPESCRIPT ICI (Utilisation de optional chaining)
                     setWeight(data?.currentWeight?.toString() || "");
                     setBodyFat(measurements[0]?.body_fat_percentage?.toString() || "");
                     setArms(measurements[0]?.arms_cm?.toString() || "");
@@ -328,7 +478,6 @@ export default function ProgressPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 grid grid-cols-2 gap-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  {/* 🛡️ Affiche le poids ET la masse grasse sur la carte si elle existe */}
                   {(m.weight_kg || m.body_fat_percentage) && (
                     <div className="col-span-2 p-2 bg-teal-50 dark:bg-teal-900/20 rounded-lg flex justify-between font-bold text-teal-700 dark:text-teal-400 border border-teal-100 dark:border-teal-900">
                       <span>{txt.weight} / BF%</span>
@@ -449,6 +598,7 @@ export default function ProgressPage() {
         </div>
       )}
 
+      {/* --- MODALES EXISTANTES --- */}
       <Dialog open={enlargeModal.show} onOpenChange={(open) => !open && setEnlargeModal({ show: false, url: "" })}>
         <DialogContent className="max-w-3xl w-full bg-black/95 border-none p-0 flex justify-center items-center h-[100dvh] sm:h-auto overflow-hidden">
           <button onClick={() => setEnlargeModal({ show: false, url: "" })} className="absolute top-12 right-6 sm:top-4 sm:right-4 z-50 p-3 bg-black/50 text-white rounded-full hover:bg-black/80 backdrop-blur-md">
