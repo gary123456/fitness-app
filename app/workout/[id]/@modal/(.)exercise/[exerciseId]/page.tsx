@@ -112,7 +112,7 @@ export default function InterceptedExerciseModal() {
   const renderStars = (impact: number) => {
     const safeImpact = impact || 1;
     return (
-      <div className="flex space-x-0.5">
+      <div className="flex space-x-0.5 mt-2 justify-center">
         {Array.from({ length: 5 }).map((_, i) => (
           <Star 
             key={i} 
@@ -169,18 +169,26 @@ export default function InterceptedExerciseModal() {
                 </div>
               )}
 
-              {/* INSTRUCTIONS & ETOILES */}
-              <div className="bg-white dark:bg-zinc-900/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3 mb-4">
-                  <h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100">
-                    <Info className="w-4 h-4 mr-2 text-teal-500" />
-                    {lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}
-                  </h4>
-                  <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                    <span className="text-[10px] font-black uppercase text-zinc-500">SNC</span>
-                    {renderStars(exercise.cns_impact)}
-                  </div>
+              {/* INSTRUCTIONS */}
+              <div className="bg-white dark:bg-zinc-900/50 rounded-xl p-5 border border-zinc-200 dark:border-zinc-800 shadow-sm relative">
+                
+                {/* 🛡️ INJECTION DU SCORE SNC EN HAUT À DROITE DE LA BOITE D'INSTRUCTION */}
+                <div className="absolute top-4 right-4 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-center hidden sm:block">
+                  <span className="text-[9px] font-black uppercase text-zinc-500 tracking-widest">Fatigue SNC</span>
+                  {renderStars(exercise.cns_impact)}
                 </div>
+
+                <h4 className="flex items-center text-xs font-black uppercase tracking-widest text-zinc-900 dark:text-zinc-100 mb-5 border-b border-zinc-100 dark:border-zinc-800 pb-2 w-3/4">
+                  <Info className="w-4 h-4 mr-2 text-teal-500" />
+                  {lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}
+                </h4>
+                
+                {/* Affichage Mobile pour le SNC */}
+                <div className="sm:hidden flex items-center justify-between mb-4 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <span className="text-xs font-black uppercase text-zinc-500">Fatigue SNC</span>
+                  {renderStars(exercise.cns_impact)}
+                </div>
+
                 <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400 font-medium">
                   {getInstructions(exercise.name, lang).split('\n').map((line, i) => (
                     <li key={i} className="flex items-start">

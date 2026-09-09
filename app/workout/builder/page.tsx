@@ -42,7 +42,8 @@ export default function CustomBuilderPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("Tous");
   const [selectedStarFilter, setSelectedStarFilter] = useState<number | null>(null);
-  const [selectedPatternFilter, setSelectedPatternFilter] = useState<string | null>(null); // 🛡️ NOUVEAU FILTRE MOUVEMENT
+  const [selectedPatternFilter, setSelectedPatternFilter] = useState<string | null>(null);
+  const [selectedEquipmentFilter, setSelectedEquipmentFilter] = useState<string | null>(null); // NOUVEAU FILTRE EQUIPEMENT
   
   const [programName, setProgramName] = useState("");
   const [activeDay, setActiveDay] = useState("monday");
@@ -51,12 +52,13 @@ export default function CustomBuilderPage() {
   });
 
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
-  const [guideModal, setGuideModal] = useState(false); // 🛡️ NOUVELLE MODALE GUIDE
+  const [guideModal, setGuideModal] = useState(false);
 
   const t = {
     FR: { 
       title: "Constructeur de Programme", sub: "Créez votre routine sur-mesure", catalog: "Bibliothèque", search: "Rechercher...", myPlan: "Ma Semaine", save: "Sauvegarder", empty: "Aucun exercice pour ce jour.", reps: "Reps", sets: "Séries", rest: "Repos (s)", progName: "Nom du programme", progPlaceholder: "Ex: Routine Hybride", error: "Erreur lors de la sauvegarde.",
       pattern: "Mouvement", allPatterns: "Tous les mouvements", push: "Poussée (Push)", pull: "Tirage (Pull)", squat: "Genou (Squat)", hinge: "Hanche (Hinge)", core: "Gainage (Core)",
+      equipment: "Matériel", allEquipment: "Tout le matériel", bodyweight: "Poids de Corps", gym: "Salle (Machines)", homeGym: "Haltères / Léger",
       guideTitle: "Structure Scientifique", guideSub: "Comment construire une séance optimale.",
       g1: "1. Exercice Principal (4 ou 5 Étoiles)", g1d: "Placé au début quand le SNC est frais pour générer la tension mécanique maximale (ex: Squat, Tractions). Max 1 à 2 par séance.",
       g2: "2. Les Accessoires (3 ou 4 Étoiles)", g2d: "Ciblent les mêmes muscles avec plus de stabilité pour réduire le coût nerveux (ex: Presse à cuisses, Rowing).",
@@ -66,6 +68,7 @@ export default function CustomBuilderPage() {
     EN: { 
       title: "Program Builder", sub: "Create your custom routine", catalog: "Library", search: "Search...", myPlan: "My Week", save: "Save", empty: "No exercises for this day.", reps: "Reps", sets: "Sets", rest: "Rest (s)", progName: "Program Name", progPlaceholder: "E.g. Hybrid Routine", error: "Error during save.",
       pattern: "Movement", allPatterns: "All movements", push: "Push", pull: "Pull", squat: "Squat (Knee)", hinge: "Hinge (Hip)", core: "Core",
+      equipment: "Equipment", allEquipment: "All equipment", bodyweight: "Bodyweight", gym: "Gym (Machines)", homeGym: "Dumbbells / Light",
       guideTitle: "Scientific Structure", guideSub: "How to build an optimal session.",
       g1: "1. Main Lift (4-5 Stars)", g1d: "First exercise when CNS is fresh. Maximum mechanical tension (e.g. Squats, Pull-ups). Max 1-2 per session.",
       g2: "2. Accessories (3-4 Stars)", g2d: "Target the same muscles with more stability to reduce neural cost (e.g. Leg Press, Rows).",
@@ -101,21 +104,30 @@ export default function CustomBuilderPage() {
     else if (filter === "dos") matchMuscle = target.includes("dos") || target.includes("lombaire") || target.includes("dorsal");
     else matchMuscle = target.includes(filter);
 
-    // Filtre Étoiles
+    // Filtre Étoiles (SNC)
     const matchStars = selectedStarFilter === null || ex.cns_impact === selectedStarFilter;
 
-    // 🛡️ Filtre Patrons de Mouvements
+    // Filtre Patrons de Mouvements
     const patternLow = ex.movement_pattern?.toLowerCase() || "";
     let matchPattern = true;
     if (selectedPatternFilter) {
       if (selectedPatternFilter === "push") matchPattern = patternLow.includes("push");
       else if (selectedPatternFilter === "pull") matchPattern = patternLow.includes("pull");
-      else if (selectedPatternFilter === "squat") matchPattern = patternLow.includes("squat");
+      else if (selectedPatternFilter === "squat") matchPattern = patternLow.includes("squat") || patternLow.includes("lunge");
       else if (selectedPatternFilter === "hinge") matchPattern = patternLow.includes("hinge");
       else if (selectedPatternFilter === "core") matchPattern = patternLow.includes("core");
     }
 
-    return matchSearch && matchMuscle && matchStars && matchPattern;
+    // NOUVEAU Filtre Équipement
+    const eqLow = ex.equipment_required?.toLowerCase() || "";
+    let matchEquipment = true;
+    if (selectedEquipmentFilter) {
+      if (selectedEquipmentFilter === "poids_corps") matchEquipment = eqLow.includes("poids_corps");
+      else if (selectedEquipmentFilter === "salle") matchEquipment = eqLow.includes("salle");
+      else if (selectedEquipmentFilter === "home_gym") matchEquipment = eqLow.includes("home_gym") || eqLow.includes("kettlebell");
+    }
+
+    return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment;
   });
 
   const getPatternLabel = () => {
@@ -125,6 +137,18 @@ export default function CustomBuilderPage() {
     if (selectedPatternFilter === "hinge") return txt.hinge;
     if (selectedPatternFilter === "core") return txt.core;
     return txt.pattern;
+  };
+
+  const getEquipmentLabel = () => {
+    if (selectedEquipmentFilter === "poids_corps") return txt.bodyweight;
+    if (selectedEquipmentFilter === "salle") return txt.gym;
+    if (selectedEquipmentFilter === "home_gym") return txt.homeGym;
+    return txt.equipment;
+  };
+
+  const getImageUrl = (ex: any, frame: 0 | 1) => {
+    if (ex.gif_url && ex.gif_url.includes('github')) return `${ex.gif_url}/${frame}.jpg`;
+    return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
   };
 
   const addExercise = (ex: Exercise) => {
@@ -251,7 +275,7 @@ export default function CustomBuilderPage() {
       <div className="fixed bottom-6 right-4 sm:right-8 z-50 flex flex-col gap-3">
         <button 
           onClick={() => document.getElementById('library-section')?.scrollIntoView({ behavior: 'smooth' })}
-          className="w-12 h-12 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center justify-center rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.15)] hover:scale-110 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-500 transition-all opacity-80 hover:opacity-100 focus:outline-none"
+          className="w-12 h-12 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center justify-center rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.15)] hover:scale-110 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-500 transition-all opacity-80 hover:opacity-100 focus:outline-none"
           title={lang === 'FR' ? "Haut (Bibliothèque)" : "Top (Library)"}
         >
           <ChevronUp className="w-6 h-6" />
@@ -272,14 +296,12 @@ export default function CustomBuilderPage() {
             <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 flex items-center">
               <Search className="w-5 h-5 mr-2 text-indigo-500" /> {txt.catalog}
             </h3>
-            {/* 🛡️ BOUTON GUIDE SCIENTIFIQUE */}
             <button onClick={() => setGuideModal(true)} className="flex items-center text-xs font-bold text-teal-600 bg-teal-50 dark:text-teal-400 dark:bg-teal-900/30 px-3 py-1.5 rounded-lg hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors">
               <BookOpen className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">Guide</span>
             </button>
           </div>
           
           <div className="space-y-3 shrink-0">
-            {/* Barre de Recherche + Menus Dropdown */}
             <div className="flex items-center space-x-2">
               <Input 
                 placeholder={txt.search} 
@@ -287,6 +309,10 @@ export default function CustomBuilderPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 focus-visible:ring-indigo-500 font-medium flex-1"
               />
+            </div>
+            
+            {/* LIGNE DES DROPDOWNS FILTRES CROISÉS */}
+            <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide">
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -314,7 +340,6 @@ export default function CustomBuilderPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* 🛡️ MENU DROPDOWN MOUVEMENTS */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className={`shrink-0 flex items-center px-3 border transition-colors outline-none ${selectedPatternFilter !== null ? 'border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/50' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
@@ -335,6 +360,28 @@ export default function CustomBuilderPage() {
                   <DropdownMenuItem onClick={() => setSelectedPatternFilter("squat")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.squat}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setSelectedPatternFilter("hinge")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.hinge}</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setSelectedPatternFilter("core")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-teal-50 dark:focus:bg-teal-500/10 outline-none">{txt.core}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* NOUVEAU DROPDOWN ÉQUIPEMENT */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 flex items-center px-3 border transition-colors outline-none ${selectedEquipmentFilter !== null ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/50' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
+                    <Dumbbell className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline font-bold">{getEquipmentLabel()}</span>
+                    {selectedEquipmentFilter !== null && (
+                      <span className="ml-1 sm:hidden w-2 h-2 rounded-full bg-purple-500"></span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 w-56 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter(null)} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-zinc-100 dark:focus:bg-zinc-900 outline-none">
+                    {txt.allEquipment}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50" />
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("poids_corps")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-purple-50 dark:focus:bg-purple-500/10 outline-none">{txt.bodyweight}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("salle")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-purple-50 dark:focus:bg-purple-500/10 outline-none">{txt.gym}</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("home_gym")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-purple-50 dark:focus:bg-purple-500/10 outline-none">{txt.homeGym}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -362,12 +409,13 @@ export default function CustomBuilderPage() {
               <div className="flex justify-center items-center h-32"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
             ) : filteredExercises.length > 0 ? (
               filteredExercises.map(ex => {
-                const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
+                const thumbnailUrl = getImageUrl(ex, 0);
                 return (
                   <div key={ex.id} className="flex items-center justify-between p-2 lg:p-3 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors group">
                     <div className="flex items-center space-x-3">
                       <div className="h-10 w-10 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-zinc-200 dark:border-zinc-700 relative">
-                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-5 w-5 text-zinc-400 opacity-50" />}
+                        <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        <Dumbbell className="h-5 w-5 text-zinc-400 opacity-50 absolute z-0" />
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">{ex.name}</h4>
@@ -495,14 +543,10 @@ export default function CustomBuilderPage() {
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
-              {infoModal.exercise.gif_url ? (
-                <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
-                  <img src={infoModal.exercise.gif_url.endsWith('.jpg') ? infoModal.exercise.gif_url : `${infoModal.exercise.gif_url}/0.jpg`} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                  <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
-                </div>
-              ) : (
-                <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
-              )}
+              <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
+                <img src={getImageUrl(infoModal.exercise, 0)} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
+              </div>
               <div className="flex flex-col items-center space-y-2">
                 <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
                 <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -565,7 +609,6 @@ export default function CustomBuilderPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }

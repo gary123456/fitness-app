@@ -82,7 +82,6 @@ export default function WorkoutPage() {
     else setShowNewCycleModal(true);
   };
 
-  // LOGIQUE MATHÉMATIQUE ABSOLUE : Surcharge, Maintien, et Deload
   const applyProgressiveOverload = async () => {
     if (!data?.existingProgram || !data?.weeklyPlan) return;
     setGenerating(true);
@@ -108,7 +107,6 @@ export default function WorkoutPage() {
             const isRange = we.target_reps?.includes("-");
             const targetMatch = (we.target_reps || "12").match(/\d+/g);
             
-            // Calcul du Plancher (Min) et Plafond (Max)
             const minTargetRep = targetMatch && targetMatch.length > 1 ? parseInt(targetMatch[0]) : (targetMatch ? parseInt(targetMatch[0]) : 8);
             const maxTargetRep = targetMatch ? parseInt(targetMatch[targetMatch.length - 1]) : 12;
             
@@ -118,7 +116,6 @@ export default function WorkoutPage() {
             let newWeight = bestSet.weight;
             let newTargetReps = we.target_reps;
 
-            // 1. SURCHARGE (Plafond atteint)
             if (bestSet.reps >= ceiling || (isRange && bestSet.reps >= maxTargetRep)) {
               if (bestSet.weight > 0) {
                 const increment = we.exercise_library?.cns_impact >= 4 ? 2.5 : 1.25;
@@ -132,10 +129,8 @@ export default function WorkoutPage() {
                 }
               }
             } 
-            // 2. DELOAD (Échec musculaire - Sous le plancher)
             else if (bestSet.reps < floor) {
               if (bestSet.weight > 0) {
-                // Baisse de 10% arrondie au palier de 1.25kg le plus proche
                 const rawDeload = bestSet.weight * 0.9;
                 newWeight = Math.round(rawDeload / 1.25) * 1.25;
                 newTargetReps = "8-12";
@@ -143,7 +138,6 @@ export default function WorkoutPage() {
                 newTargetReps = `Viser > ${Math.max(1, bestSet.reps)} reps`;
               }
             } 
-            // 3. MAINTIEN (Progression dans la fourchette)
             else {
               if (bestSet.weight > 0) newWeight = bestSet.weight;
               const nextTarget = Math.min(bestSet.reps + 1, ceiling);
@@ -303,11 +297,11 @@ export default function WorkoutPage() {
     return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
   }) : [];
 
-  // FONCTION DE RENDU DES ETOILES SNC
+  // 🌟 NOUVEAU RENDU DES ÉTOILES (SNC)
   const renderStars = (impact: number) => {
     const safeImpact = impact || 1;
     return (
-      <div className="flex space-x-0.5">
+      <div className="flex space-x-0.5 ml-2">
         {Array.from({ length: 5 }).map((_, i) => (
           <Star 
             key={i} 
@@ -429,7 +423,7 @@ export default function WorkoutPage() {
                                 <div className="flex items-center space-x-2 mt-0.5">
                                   <p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p>
                                   <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
-                                  {/* 🛡️ INJECTION DES ÉTOILES ICI */}
+                                  {/* 🌟 ÉTOILES INSÉRÉES ICI */}
                                   {renderStars(ex.cns_impact)}
                                 </div>
                               </div>
@@ -522,14 +516,14 @@ export default function WorkoutPage() {
               ) : (
                 <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
               )}
-              <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
-              
-              {/* 🛡️ INJECTION DU RENDERSTARS DANS LA MODALE INFO RAPIDE */}
-              <div className="flex items-center justify-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 mt-2">
-                <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
-                {renderStars(infoModal.exercise.cns_impact)}
+              <div className="flex flex-col items-center space-y-2">
+                <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+                {/* 🌟 ÉTOILES INSÉRÉES ICI */}
+                <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
+                  {renderStars(infoModal.exercise.cns_impact)}
+                </div>
               </div>
-
             </div>
           )}
         </DialogContent>
