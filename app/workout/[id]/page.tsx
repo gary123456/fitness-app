@@ -5,7 +5,8 @@ import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star } from "lucide-react";
+// 🛡️ CORRECTION DES IMPORTS MANQUANTS ICI
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
@@ -74,30 +75,47 @@ const getRecommendedReps = (str: string) => {
 
 const fetchActiveSession = async (id: string) => {
   const { data: { user } } = await supabase.auth.getUser();
-  const { data: profile } = await supabase.from("profiles").select("first_name").eq("id", user?.id).single();
+  if (!user) throw new Error("No user");
+  const { data: profile } = await supabase.from("profiles").select("first_name").eq("id", user.id).single();
   const { data: sessionData } = await supabase.from("workout_sessions").select(`*, workout_exercises (*, exercise_library (*))`).eq("id", id).single();
   
   if (!sessionData) throw new Error("Not found");
   if (sessionData.workout_exercises) sessionData.workout_exercises.sort((a: any, b: any) => a.order_index - b.order_index);
 
+  // 🛡️ POINT 2 : GHOST MODE (Récupération des anciens logs)
+  const exerciseIds = sessionData.workout_exercises.map((we: any) => we.exercise_id);
+  const { data: pastLogs } = await supabase
+    .from('workout_logs')
+    .select('exercise_id, weight, reps, created_at')
+    .eq('user_id', user.id)
+    .in('exercise_id', exerciseIds)
+    .order('created_at', { ascending: false });
+
+  const ghostData: Record<string, { weight: string, reps: string }> = {};
   const initialInputs: Record<string, { weight: string, reps: string }> = {};
   
   sessionData.workout_exercises.forEach((we: any) => {
     const identifier = we.id || we.exercise_id;
-    
     let defaultWeight = "";
-    if (we.recommended_weight !== null && we.recommended_weight !== undefined && we.recommended_weight > 0) {
-      defaultWeight = we.recommended_weight.toString();
-    }
-
+    if (we.recommended_weight !== null && we.recommended_weight !== undefined && we.recommended_weight > 0) defaultWeight = we.recommended_weight.toString();
     const defaultReps = getRecommendedReps(we.target_reps);
 
     for (let i = 0; i < we.sets; i++) {
       initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
     }
+
+    // Calcul Ghost Mode
+    const exLogs = pastLogs?.filter(l => l.exercise_id === we.exercise_id) || [];
+    if (exLogs.length > 0) {
+      const lastDate = exLogs[0].created_at.split('T')[0];
+      const lastSessionLogs = exLogs.filter(l => l.created_at.startsWith(lastDate));
+      lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps);
+      const bestSet = lastSessionLogs[0];
+      ghostData[identifier] = { weight: bestSet.weight.toString(), reps: bestSet.reps.toString() };
+    }
   });
 
-  return { sessionData, initialInputs, loadedCompleted: {}, profile };
+  return { sessionData, initialInputs, ghostData, loadedCompleted: {}, profile };
 };
 
 export default function ActiveWorkoutSession() {
@@ -123,6 +141,11 @@ export default function ActiveWorkoutSession() {
   const [isSharing, setIsSharing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
+  // 🛡️ POINTS 3 & 5 : NOUVEAUX STATES (Plaques et RPE)
+  const [plateModal, setPlateModal] = useState({ show: false, weight: 0 });
+  const [showRpeModal, setShowRpeModal] = useState(false);
+  const [sessionRpe, setSessionRpe] = useState(7);
+
   const [showBreathingModal, setShowBreathingModal] = useState(false);
   const [breatheTime, setBreatheTime] = useState(30);
 
@@ -132,14 +155,37 @@ export default function ActiveWorkoutSession() {
   
   const stravaCardRef = useRef<HTMLDivElement>(null);
 
+  // 🛡️ POINT 1 : WAKELOCK API (Écran toujours allumé)
   useEffect(() => {
-    if (data && warmupChecks.length === 0) {
+    let wakeLock: any = null;
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch (err) { console.warn("Wakelock not supported or denied."); }
+    };
+    if (isWorkoutUnlocked) {
+      requestWakeLock();
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isWorkoutUnlocked) requestWakeLock();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLock !== null) wakeLock.release();
+    };
+  }, [isWorkoutUnlocked]);
+
+  useEffect(() => {
+    if (data && Object.keys(inputs).length === 0) {
       setInputs(data.initialInputs);
       setCompletedSets({}); 
       const stepsCount = getSessionInsights(data.sessionData.workout_exercises, lang).warmup.length;
       setWarmupChecks(new Array(stepsCount).fill(false));
     }
-  }, [data, lang, warmupChecks.length]);
+  }, [data, lang, inputs]);
 
   useEffect(() => {
     if (restTimer === null || restTimer <= 0) return;
@@ -159,8 +205,8 @@ export default function ActiveWorkoutSession() {
   }, [showBreathingModal, breatheTime]);
 
   const t: Record<string, any> = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées au retour du réseau." },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when connection is restored." }
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées au retour du réseau.", ghost: "Précédent", rpeTitle: "Difficulté de la séance (RPE)", rpeSub: "Évaluez l'effort global pour ajuster l'algorithme.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur de Disques", calcSub: "Pour une barre olympique de 20 kg." },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when connection is restored.", ghost: "Previous", rpeTitle: "Session Difficulty (RPE)", rpeSub: "Rate global effort to adjust the algorithm.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "For a standard 20 kg olympic bar." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -214,12 +260,37 @@ export default function ActiveWorkoutSession() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const finishWorkout = async () => {
-    if (isSaving) return;
+  // 🛡️ POINT 3 : CALCULATEUR DE DISQUES
+  const calculatePlates = (totalWeight: number) => {
+    const barWeight = 20;
+    let remaining = (totalWeight - barWeight) / 2;
+    if (remaining <= 0) return [];
+    
+    const availablePlates = [25, 20, 15, 10, 5, 2.5, 1.25];
+    const platesToUse: number[] = [];
+    
+    for (const plate of availablePlates) {
+      while (remaining >= plate) {
+        platesToUse.push(plate);
+        remaining -= plate;
+      }
+    }
+    return platesToUse;
+  };
+
+  // 🛡️ MODIFICATION POINT 5 : Ouvre la modale RPE au lieu de sauvegarder directement
+  const preFinishWorkout = () => {
     const hasCompletedSets = Object.values(completedSets).some(val => val === true);
     if (!hasCompletedSets) { setErrorModal({ show: true, title: txt.noSetTitle, message: txt.noSetMsg }); return; }
+    setShowRpeModal(true);
+  };
 
+  // 🛡️ OFFLINE-FIRST FINISH WORKOUT (Exécuté APRÈS le RPE)
+  const executeFinishWorkout = async () => {
+    if (isSaving) return;
     setIsSaving(true);
+    setShowRpeModal(false);
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !data?.sessionData) { setIsSaving(false); return; }
 
@@ -249,8 +320,13 @@ export default function ActiveWorkoutSession() {
 
         if (we) {
           logsToInsert.push({
-            user_id: user.id, session_id: data.sessionData.id, exercise_id: we.exercise_id,
-            set_number: parseInt(setIdx) + 1, weight, reps
+            user_id: user.id, 
+            session_id: data.sessionData.id, 
+            exercise_id: we.exercise_id,
+            set_number: parseInt(setIdx) + 1, 
+            weight, 
+            reps,
+            rpe: sessionRpe // 🛡️ Sauvegarde du RPE dans la DB
           });
         }
       }
@@ -407,6 +483,9 @@ export default function ActiveWorkoutSession() {
               const identifier = we.id || we.exercise_id;
               const uniqueKey = we.id || `we-${session.id}-${index}`;
               const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
+              
+              // 🛡️ POINT 2 : GHOST MODE (Récupération des perfs)
+              const ghost = data.ghostData[identifier];
 
               return (
                 <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
@@ -423,6 +502,12 @@ export default function ActiveWorkoutSession() {
                             <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
                             {renderStars(ex.cns_impact)}
                           </div>
+                          {/* 🛡️ AFFICHAGE GHOST MODE */}
+                          {ghost && (
+                            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1 opacity-80">
+                              👻 {txt.ghost} : {ghost.weight}kg × {ghost.reps}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -430,7 +515,25 @@ export default function ActiveWorkoutSession() {
                   </div>
 
                   <div className="p-3 space-y-3 bg-white dark:bg-zinc-950">
-                    <div className="grid grid-cols-12 gap-2 px-2 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase text-center tracking-wider"><div className="col-span-2">{txt.set}</div><div className="col-span-4">{txt.weight}</div><div className="col-span-4">{txt.reps}</div><div className="col-span-2">OK</div></div>
+                    <div className="flex flex-wrap items-center gap-3 text-sm px-2 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                      {we.recommended_weight !== null && we.recommended_weight !== undefined && (
+                        <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
+                          <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
+                          
+                          {/* 🛡️ POINT 3 : CALCULATEUR DE DISQUES (Si > 20kg) */}
+                          {we.recommended_weight > 20 && (
+                            <button onClick={(e) => { e.stopPropagation(); setPlateModal({ show: true, weight: we.recommended_weight }); }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors">
+                              <Calculator className="w-3 h-3 text-teal-700 dark:text-teal-400" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer">
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-12 gap-2 px-2 pt-1 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase text-center tracking-wider"><div className="col-span-2">{txt.set}</div><div className="col-span-4">{txt.weight}</div><div className="col-span-4">{txt.reps}</div><div className="col-span-2">OK</div></div>
                     {Array.from({ length: we.sets }).map((_, setIdx) => {
                       const setKey = `${identifier}_${setIdx}`;
                       const isCompleted = completedSets[setKey];
@@ -451,13 +554,102 @@ export default function ActiveWorkoutSession() {
             })}
             <div className="pt-4 pb-10 space-y-3">
               <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm"><CheckCircle2 className="w-5 h-5" /><span>{txt.checkAll}</span></button>
-              <button onClick={finishWorkout} disabled={isSaving} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">{isSaving ? "..." : txt.finish}</button>
+              <button onClick={preFinishWorkout} disabled={isSaving} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">{isSaving ? "..." : txt.finish}</button>
             </div>
           </div>
         )}
       </div>
 
       <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
+
+      {/* 🛡️ POINT 5 : MODALE RPE (Avant de terminer la séance) */}
+      <Dialog open={showRpeModal} onOpenChange={setShowRpeModal}>
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-indigo-600 dark:text-indigo-400 flex items-center">
+              <Brain className="mr-2 h-5 w-5" /> {txt.rpeTitle}
+            </DialogTitle>
+            <DialogDescription className="font-medium text-zinc-500">{txt.rpeSub}</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-8">
+            <div className="text-center">
+              <span className={`text-6xl font-black ${sessionRpe <= 5 ? 'text-green-500' : sessionRpe <= 8 ? 'text-orange-500' : 'text-red-500'}`}>
+                {sessionRpe}
+              </span>
+              <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest mt-2">
+                {sessionRpe <= 5 ? "Facile / Récupération" : sessionRpe <= 8 ? "Stimulant / Parfait" : "Échec / Épuisant"}
+              </p>
+            </div>
+            <input 
+              type="range" min="1" max="10" value={sessionRpe} onChange={(e) => setSessionRpe(parseInt(e.target.value))}
+              className="w-full h-3 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={executeFinishWorkout} disabled={isSaving} className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-white font-black uppercase tracking-widest">
+              {isSaving ? "..." : txt.rpeValidate}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🛡️ POINT 3 : MODALE CALCULATEUR DE DISQUES */}
+      <Dialog open={plateModal.show} onOpenChange={(open) => !open && setPlateModal({ show: false, weight: 0 })}>
+        <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
+              <Calculator className="mr-2 h-5 w-5" /> {txt.calcTitle}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500">{txt.calcSub}</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 flex flex-col items-center">
+            <div className="text-4xl font-black text-zinc-900 dark:text-zinc-100 mb-6">{plateModal.weight} kg</div>
+            
+            <div className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col items-center space-y-3">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">De chaque côté :</span>
+              <div className="flex flex-wrap justify-center gap-2">
+                {calculatePlates(plateModal.weight).length === 0 ? (
+                  <span className="font-medium text-zinc-500">Barre à vide</span>
+                ) : (
+                  calculatePlates(plateModal.weight).map((p, i) => (
+                    <div key={i} className="bg-teal-500 text-white font-black px-3 py-2 rounded-lg shadow-sm border border-teal-600">
+                      {p}kg
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="w-full font-bold dark:border-zinc-800 dark:text-zinc-300" onClick={() => setPlateModal({ show: false, weight: 0 })}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- FIN DES NOUVELLES MODALES --- */}
+
+      <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
+          {infoModal.exercise && (
+            <div className="p-6 text-center space-y-4">
+              <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
+              <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
+                {infoModal.exercise.gif_url ? (
+                  <img src={infoModal.exercise.gif_url.endsWith('.jpg') ? infoModal.exercise.gif_url : `${infoModal.exercise.gif_url}/0.jpg`} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : null}
+                <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
+              </div>
+              <div className="flex flex-col items-center space-y-2">
+                <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+                <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
+                  {renderStars(infoModal.exercise.cns_impact)}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showBreathingModal}>
         <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-none p-0 overflow-hidden outline-none [&>button]:hidden">
@@ -517,6 +709,7 @@ export default function ActiveWorkoutSession() {
               </div>
             </div>
             
+            {/* 🛡️ WIDGET OFFLINE / ANTI-TRICHE */}
             {sessionStats.isOffline ? (
               <div className="w-full max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 shadow-sm flex flex-col items-center text-center animate-in slide-in-from-top-8">
                 <WifiOff className="w-8 h-8 text-zinc-500 mb-2" />

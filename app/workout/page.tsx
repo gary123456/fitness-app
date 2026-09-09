@@ -59,8 +59,8 @@ export default function WorkoutPage() {
   const dynamicDaysOrder = [...DAYS_ORDER.slice(todayOrderedIndex), ...DAYS_ORDER.slice(0, todayOrderedIndex)];
 
   const t: Record<string, Record<string, string>> = {
-    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser votre dernière séance (N-1) et appliquer la Loi de la Double Progression.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va générer de nouveaux exercices pour casser la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 2 Perso / 2 Algo.", deleteErr: "Impossible de supprimer ce programme." },
-    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your last session (N-1) and apply Double Progression Law.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will generate new exercises to break plateaus.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 2 Custom / 2 Algo.", deleteErr: "Cannot delete this program." }
+    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser vos dernières performances et le RPE pour appliquer la Loi de la Double Progression.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va générer de nouveaux exercices pour casser la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 2 Perso / 2 Algo.", deleteErr: "Impossible de supprimer ce programme." },
+    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your past performances and RPE to apply Double Progression Law.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will generate new exercises to break plateaus.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 2 Custom / 2 Algo.", deleteErr: "Cannot delete this program." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -82,6 +82,7 @@ export default function WorkoutPage() {
     else setShowNewCycleModal(true);
   };
 
+  // 🛡️ L'ALGORITHME MET A JOUR AVEC LE RPE
   const applyProgressiveOverload = async () => {
     if (!data?.existingProgram || !data?.weeklyPlan) return;
     setGenerating(true);
@@ -104,6 +105,7 @@ export default function WorkoutPage() {
             logsOfLastSession.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
             const bestSet = logsOfLastSession[0];
             
+            const rpe = bestSet.rpe || 8; // On lit le RPE (par défaut 8 si non renseigné)
             const isRange = we.target_reps?.includes("-");
             const targetMatch = (we.target_reps || "12").match(/\d+/g);
             
@@ -116,30 +118,31 @@ export default function WorkoutPage() {
             let newWeight = bestSet.weight;
             let newTargetReps = we.target_reps;
 
+            // 1. SURCHARGE (Plafond atteint)
             if (bestSet.reps >= ceiling || (isRange && bestSet.reps >= maxTargetRep)) {
-              if (bestSet.weight > 0) {
-                const increment = we.exercise_library?.cns_impact >= 4 ? 2.5 : 1.25;
+              if (rpe === 10) {
+                // 🛑 SNC en danger : On maintient le poids malgré les reps !
+                newWeight = bestSet.weight;
+                newTargetReps = `Viser > ${bestSet.reps} (RPE 10)`;
+              } else if (bestSet.weight > 0) {
+                // 🚀 Trop facile (RPE <= 6) -> On double l'augmentation !
+                const multiplier = rpe <= 6 ? 2 : 1;
+                const increment = (we.exercise_library?.cns_impact >= 4 ? 2.5 : 1.25) * multiplier;
                 newWeight = bestSet.weight + increment;
                 newTargetReps = "8-12"; 
               } else {
-                if (bestSet.reps >= 14) {
-                  newTargetReps = "Plafond atteint ➔ Lestez-vous !";
-                } else {
-                  newTargetReps = `Viser > ${bestSet.reps + 2} reps`;
-                }
+                newTargetReps = `Viser > ${bestSet.reps + 2} reps`;
               }
             } 
-            else if (bestSet.reps < floor) {
-              if (bestSet.weight > 0) {
-                const rawDeload = bestSet.weight * 0.9;
-                newWeight = Math.round(rawDeload / 1.25) * 1.25;
-                newTargetReps = "8-12";
-              } else {
-                newTargetReps = `Viser > ${Math.max(1, bestSet.reps)} reps`;
-              }
+            // 2. DELOAD (Échec musculaire absolu OU RPE 10 avant le plafond)
+            else if (bestSet.reps < floor || (rpe === 10 && bestSet.weight > 0)) {
+              const rawDeload = bestSet.weight * 0.9;
+              newWeight = Math.round(rawDeload / 1.25) * 1.25;
+              newTargetReps = "8-12 (Deload)";
             } 
+            // 3. MAINTIEN (Progression dans la fourchette)
             else {
-              if (bestSet.weight > 0) newWeight = bestSet.weight;
+              newWeight = bestSet.weight;
               const nextTarget = Math.min(bestSet.reps + 1, ceiling);
               newTargetReps = `Viser > ${nextTarget} reps`;
             }
@@ -297,21 +300,6 @@ export default function WorkoutPage() {
     return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
   }) : [];
 
-  // 🌟 NOUVEAU RENDU DES ÉTOILES (SNC)
-  const renderStars = (impact: number) => {
-    const safeImpact = impact || 1;
-    return (
-      <div className="flex space-x-0.5 ml-2">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Star 
-            key={i} 
-            className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
-          />
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
       
@@ -418,15 +406,7 @@ export default function WorkoutPage() {
                               <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
                             </div>
                             <div className="flex items-start">
-                              <div>
-                                <h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4>
-                                <div className="flex items-center space-x-2 mt-0.5">
-                                  <p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p>
-                                  <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
-                                  {/* 🌟 ÉTOILES INSÉRÉES ICI */}
-                                  {renderStars(ex.cns_impact)}
-                                </div>
-                              </div>
+                              <div><h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4><p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p></div>
                               
                               <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer relative z-20 pointer-events-auto">
                                 <Info className="w-4 h-4" />
@@ -516,14 +496,7 @@ export default function WorkoutPage() {
               ) : (
                 <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
               )}
-              <div className="flex flex-col items-center space-y-2">
-                <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
-                {/* 🌟 ÉTOILES INSÉRÉES ICI */}
-                <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                  <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
-                  {renderStars(infoModal.exercise.cns_impact)}
-                </div>
-              </div>
+              <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
             </div>
           )}
         </DialogContent>

@@ -134,7 +134,10 @@ export function generateSmartWorkoutPlan(
           lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
           const bestSet = lastSessionLogs[0];
           
+          // 🛡️ L'IA prend en compte le RPE lors de la création d'un nouveau cycle
+          const rpe = bestSet.rpe || 8;
           const maxTargetRep = parseInt(defaultReps.split('-')[1] || "12");
+          const minTargetRep = parseInt(defaultReps.split('-')[0] || "8");
           
           let isPlateau = false;
           const previousSessions = pastLogs.filter(l => l.session_id !== lastSessionId);
@@ -159,9 +162,23 @@ export function generateSmartWorkoutPlan(
             defaultReps = `Viser > ${bestSet.reps + 2} reps`; 
           } 
           else if (bestSet.reps >= maxTargetRep) {
-            recommendedWeight = bestSet.weight > 0 ? bestSet.weight + (ex.cns_impact >= 4 ? 2.5 : 1.25) : 2.5;
-            defaultReps = `${parseInt(defaultReps.split('-')[0])}-${maxTargetRep}`; 
-          } else {
+            // 🛡️ LOGIQUE RPE
+            if (rpe === 10) {
+              recommendedWeight = bestSet.weight;
+              defaultReps = `Maintenir (RPE 10)`;
+            } else {
+              const multiplier = rpe <= 6 ? 2 : 1;
+              const increment = (ex.cns_impact >= 4 ? 2.5 : 1.25) * multiplier;
+              recommendedWeight = bestSet.weight > 0 ? bestSet.weight + increment : 2.5;
+              defaultReps = `${parseInt(defaultReps.split('-')[0])}-${maxTargetRep}`; 
+            }
+          } 
+          else if (bestSet.reps < minTargetRep || (rpe === 10 && bestSet.weight > 0)) {
+            // 🛡️ DELOAD forcé si RPE 10 avant d'avoir atteint les reps
+            recommendedWeight = bestSet.weight > 0 ? Number((bestSet.weight * 0.9).toFixed(1)) : 0;
+            defaultReps = "8-10 (Deload)";
+          }
+          else {
             recommendedWeight = bestSet.weight;
             defaultReps = `Viser > ${bestSet.reps} reps`;
           }
