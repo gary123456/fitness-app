@@ -5,9 +5,11 @@ import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-// 🛡️ CORRECTION DES IMPORTS MANQUANTS ICI
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight } from "lucide-react";
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight, Scale, Filter, Activity } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
 import { awardWorkoutXP } from "@/lib/gamification-engine";
@@ -76,13 +78,12 @@ const getRecommendedReps = (str: string) => {
 const fetchActiveSession = async (id: string) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No user");
-  const { data: profile } = await supabase.from("profiles").select("first_name").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("first_name, equipment_access").eq("id", user.id).single();
   const { data: sessionData } = await supabase.from("workout_sessions").select(`*, workout_exercises (*, exercise_library (*))`).eq("id", id).single();
   
   if (!sessionData) throw new Error("Not found");
   if (sessionData.workout_exercises) sessionData.workout_exercises.sort((a: any, b: any) => a.order_index - b.order_index);
 
-  // 🛡️ POINT 2 : GHOST MODE (Récupération des anciens logs)
   const exerciseIds = sessionData.workout_exercises.map((we: any) => we.exercise_id);
   const { data: pastLogs } = await supabase
     .from('workout_logs')
@@ -104,7 +105,6 @@ const fetchActiveSession = async (id: string) => {
       initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
     }
 
-    // Calcul Ghost Mode
     const exLogs = pastLogs?.filter(l => l.exercise_id === we.exercise_id) || [];
     if (exLogs.length > 0) {
       const lastDate = exLogs[0].created_at.split('T')[0];
@@ -141,10 +141,12 @@ export default function ActiveWorkoutSession() {
   const [isSharing, setIsSharing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // 🛡️ POINTS 3 & 5 : NOUVEAUX STATES (Plaques et RPE)
   const [plateModal, setPlateModal] = useState({ show: false, weight: 0 });
   const [showRpeModal, setShowRpeModal] = useState(false);
   const [sessionRpe, setSessionRpe] = useState(7);
+  
+  // 🛡️ POINT 2 : STATE DU CONVERTISSEUR INTERACTIF
+  const [convertModal, setConvertModal] = useState({ show: false, kgValue: "", lbsValue: "" });
 
   const [showBreathingModal, setShowBreathingModal] = useState(false);
   const [breatheTime, setBreatheTime] = useState(30);
@@ -153,9 +155,17 @@ export default function ActiveWorkoutSession() {
   const [errorModal, setErrorModal] = useState({ show: false, title: "", message: "" });
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   
+  // 🛡️ NOUVEAUX STATES SUPER-SWAP
+  const [swapModal, setSwapModal] = useState({ show: false, weId: "", currentEx: null as any, alternatives: [] as any[] });
+  const [swapLoading, setSwapLoading] = useState(false);
+  const [searchSwapQuery, setSearchSwapQuery] = useState("");
+  const [selectedSwapMuscle, setSelectedSwapMuscle] = useState("Tous");
+  const [selectedSwapStar, setSelectedSwapStar] = useState<number | null>(null);
+  const [selectedSwapPattern, setSelectedSwapPattern] = useState<string | null>(null);
+  const [selectedSwapEquipment, setSelectedSwapEquipment] = useState<string | null>(null);
+
   const stravaCardRef = useRef<HTMLDivElement>(null);
 
-  // 🛡️ POINT 1 : WAKELOCK API (Écran toujours allumé)
   useEffect(() => {
     let wakeLock: any = null;
     const requestWakeLock = async () => {
@@ -205,8 +215,8 @@ export default function ActiveWorkoutSession() {
   }, [showBreathingModal, breatheTime]);
 
   const t: Record<string, any> = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées au retour du réseau.", ghost: "Précédent", rpeTitle: "Difficulté de la séance (RPE)", rpeSub: "Évaluez l'effort global pour ajuster l'algorithme.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur de Disques", calcSub: "Pour une barre olympique de 20 kg." },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when connection is restored.", ghost: "Previous", rpeTitle: "Session Difficulty (RPE)", rpeSub: "Rate global effort to adjust the algorithm.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "For a standard 20 kg olympic bar." }
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées au retour du réseau.", ghost: "Précédent", rpeTitle: "Difficulté de la séance (RPE)", rpeSub: "Évaluez l'effort global pour ajuster l'algorithme.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur de Disques", calcSub: "Pour une barre olympique de 20 kg.", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", search: "Rechercher..." },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when connection is restored.", ghost: "Previous", rpeTitle: "Session Difficulty (RPE)", rpeSub: "Rate global effort to adjust the algorithm.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "For a standard 20 kg olympic bar.", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", search: "Search..." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -260,7 +270,6 @@ export default function ActiveWorkoutSession() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // 🛡️ POINT 3 : CALCULATEUR DE DISQUES
   const calculatePlates = (totalWeight: number) => {
     const barWeight = 20;
     let remaining = (totalWeight - barWeight) / 2;
@@ -278,14 +287,12 @@ export default function ActiveWorkoutSession() {
     return platesToUse;
   };
 
-  // 🛡️ MODIFICATION POINT 5 : Ouvre la modale RPE au lieu de sauvegarder directement
   const preFinishWorkout = () => {
     const hasCompletedSets = Object.values(completedSets).some(val => val === true);
     if (!hasCompletedSets) { setErrorModal({ show: true, title: txt.noSetTitle, message: txt.noSetMsg }); return; }
     setShowRpeModal(true);
   };
 
-  // 🛡️ OFFLINE-FIRST FINISH WORKOUT (Exécuté APRÈS le RPE)
   const executeFinishWorkout = async () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -326,7 +333,7 @@ export default function ActiveWorkoutSession() {
             set_number: parseInt(setIdx) + 1, 
             weight, 
             reps,
-            rpe: sessionRpe // 🛡️ Sauvegarde du RPE dans la DB
+            rpe: sessionRpe 
           });
         }
       }
@@ -400,22 +407,85 @@ export default function ActiveWorkoutSession() {
     }
   };
 
+  // 🛡️ POINT 3 : LE SUPER-SWAP (Chargement)
+  const openSwapModal = async (weId: string, currentEx: any) => {
+    if (!data?.profile) return;
+    setSwapLoading(true);
+    const { data: alts, error: altsError } = await supabase.from('exercise_library').select('*').neq('id', currentEx.id);
+    if (altsError) { setSwapLoading(false); alert("Erreur chargement alternatives"); return; }
+    
+    setSwapModal({ show: true, weId, currentEx, alternatives: alts || [] });
+    setSwapLoading(false);
+  };
+
+  // 🛡️ POINT 3 : LE SUPER-SWAP (Filtrage)
+  const filteredSwapAlternatives = swapModal.alternatives.filter(ex => {
+    const matchSearch = ex.name.toLowerCase().includes(searchSwapQuery.toLowerCase());
+    const target = ex.target_muscle.toLowerCase();
+    const filter = selectedSwapMuscle.toLowerCase();
+
+    let matchMuscle = false;
+    if (filter === "tous") matchMuscle = true;
+    else if (filter === "jambes") matchMuscle = target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe");
+    else if (filter === "abdos") matchMuscle = target.includes("sangle abdominale") || target.includes("abdo") || target.includes("core");
+    else if (filter === "épaules") matchMuscle = target.includes("épaule") || target.includes("epaule") || target.includes("delto");
+    else if (filter === "dos") matchMuscle = target.includes("dos") || target.includes("lombaire") || target.includes("dorsal");
+    else matchMuscle = target.includes(filter);
+
+    const matchStars = selectedSwapStar === null || ex.cns_impact === selectedSwapStar;
+
+    const patternLow = ex.movement_pattern?.toLowerCase() || "";
+    let matchPattern = true;
+    if (selectedSwapPattern) {
+      if (selectedSwapPattern === "push") matchPattern = patternLow.includes("push");
+      else if (selectedSwapPattern === "pull") matchPattern = patternLow.includes("pull");
+      else if (selectedSwapPattern === "squat") matchPattern = patternLow.includes("squat") || patternLow.includes("lunge");
+      else if (selectedSwapPattern === "hinge") matchPattern = patternLow.includes("hinge");
+      else if (selectedSwapPattern === "core") matchPattern = patternLow.includes("core");
+    }
+
+    const eqLow = ex.equipment_required?.toLowerCase() || "";
+    let matchEquipment = true;
+    if (selectedSwapEquipment) {
+      if (selectedSwapEquipment === "poids_corps") matchEquipment = eqLow.includes("poids_corps");
+      else if (selectedSwapEquipment === "salle") matchEquipment = eqLow.includes("salle");
+      else if (selectedSwapEquipment === "home_gym") matchEquipment = eqLow.includes("home_gym") || eqLow.includes("kettlebell");
+    }
+
+    const userEq = data?.profile?.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : [];
+    const matchProfileEq = userEq.length === 0 || userEq.includes(ex.equipment_required);
+
+    return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment && matchProfileEq;
+  });
+
+  const confirmSwap = async (newEx: any) => {
+    try {
+      const { error } = await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
+      if (error) throw new Error(error.message);
+      
+      window.location.reload();
+    } catch (error: any) {
+      alert("Erreur lors du remplacement : " + error.message);
+    }
+  };
+
   if (isLoading && !data) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">{txt.load}</div>;
   if (error || !data?.sessionData) return <div className="p-8 text-center text-red-500">{txt.notFound}</div>;
 
   const session = data.sessionData;
   const insights = getSessionInsights(session.workout_exercises, lang);
 
-  // 🛡️ NOUVEAU RENDU ÉTOILES
+  const getImageUrl = (ex: any, frame: 0 | 1) => {
+    if (ex.gif_url && ex.gif_url.includes('github')) return `${ex.gif_url}/${frame}.jpg`;
+    return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
+  };
+
   const renderStars = (impact: number) => {
     const safeImpact = impact || 1;
     return (
       <div className="flex space-x-0.5 mt-1">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Star 
-            key={i} 
-            className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
-          />
+          <Star key={i} className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} />
         ))}
       </div>
     );
@@ -484,7 +554,6 @@ export default function ActiveWorkoutSession() {
               const uniqueKey = we.id || `we-${session.id}-${index}`;
               const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
               
-              // 🛡️ POINT 2 : GHOST MODE (Récupération des perfs)
               const ghost = data.ghostData[identifier];
 
               return (
@@ -502,7 +571,6 @@ export default function ActiveWorkoutSession() {
                             <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
                             {renderStars(ex.cns_impact)}
                           </div>
-                          {/* 🛡️ AFFICHAGE GHOST MODE */}
                           {ghost && (
                             <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1 opacity-80">
                               👻 {txt.ghost} : {ghost.weight}kg × {ghost.reps}
@@ -511,7 +579,10 @@ export default function ActiveWorkoutSession() {
                         </div>
                       </div>
                     </div>
-                    <button onClick={() => duplicateFirstSet(identifier, we.sets)} className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors" title={txt.dup}><Repeat className="w-5 h-5" /></button>
+                    <div className="flex space-x-1">
+                      <button onClick={() => openSwapModal(we.id, ex)} disabled={swapLoading} className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors" title={txt.swapTitle}><ArrowLeftRight className="w-5 h-5" /></button>
+                      <button onClick={() => duplicateFirstSet(identifier, we.sets)} className="p-2 text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 rounded-md transition-colors" title={txt.dup}><Repeat className="w-5 h-5" /></button>
+                    </div>
                   </div>
 
                   <div className="p-3 space-y-3 bg-white dark:bg-zinc-950">
@@ -520,7 +591,6 @@ export default function ActiveWorkoutSession() {
                         <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
                           <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
                           
-                          {/* 🛡️ POINT 3 : CALCULATEUR DE DISQUES (Si > 20kg) */}
                           {we.recommended_weight > 20 && (
                             <button onClick={(e) => { e.stopPropagation(); setPlateModal({ show: true, weight: we.recommended_weight }); }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors">
                               <Calculator className="w-3 h-3 text-teal-700 dark:text-teal-400" />
@@ -528,6 +598,15 @@ export default function ActiveWorkoutSession() {
                           )}
                         </div>
                       )}
+                      
+                      {/* 🛡️ POINT 2 : Convertisseur Interactif TOUJOURS ACCESSIBLE */}
+                      <button onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setConvertModal({ show: true, kgValue: we.recommended_weight > 0 ? we.recommended_weight.toString() : "", lbsValue: we.recommended_weight > 0 ? (we.recommended_weight * 2.20462).toFixed(1) : "" }); 
+                      }} className="p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer" title="Convertisseur">
+                        <Scale className="w-4 h-4" />
+                      </button>
+
                       <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer">
                         <Info className="w-4 h-4" />
                       </button>
@@ -562,7 +641,96 @@ export default function ActiveWorkoutSession() {
 
       <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
 
-      {/* 🛡️ POINT 5 : MODALE RPE (Avant de terminer la séance) */}
+      {/* 🛡️ MODALE DU SUPER-SWAP */}
+      <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
+        <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
+          <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+            <DialogTitle className="flex items-center text-indigo-600 dark:text-indigo-400">
+              <ArrowLeftRight className="mr-2 h-5 w-5"/> {txt.swapTitle}
+            </DialogTitle>
+            <DialogDescription className="font-medium text-zinc-500">
+              Remplacer : <span className="font-bold text-zinc-900 dark:text-zinc-100">{swapModal.currentEx?.name}</span>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 space-y-3 shrink-0">
+            <div className="flex items-center space-x-2">
+              <Input placeholder={txt.search} value={searchSwapQuery} onChange={(e) => setSearchSwapQuery(e.target.value)} className="bg-white dark:bg-zinc-950 font-medium flex-1" />
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapStar !== null ? 'border-orange-500 text-orange-600' : ''}`}><Filter className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">SNC</span></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSelectedSwapStar(null)}>Toutes</DropdownMenuItem>
+                  {[5, 4, 3, 2, 1].map(s => <DropdownMenuItem key={s} onClick={() => setSelectedSwapStar(s)}>{s} Étoiles</DropdownMenuItem>)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapPattern !== null ? 'border-teal-500 text-teal-600' : ''}`}><Activity className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Mouv.</span></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern(null)}>Tous</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("push")}>Push</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("pull")}>Pull</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("squat")}>Squat</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("hinge")}>Hinge</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("core")}>Core</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapEquipment !== null ? 'border-purple-500 text-purple-600' : ''}`}><Dumbbell className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Matériel</span></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment(null)}>Tous</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("poids_corps")}>Poids de corps</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("salle")}>Machine/Salle</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("home_gym")}>Haltères/Léger</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide">
+              {["Tous", "Pectoraux", "Dos", "Jambes", "Épaules", "Biceps", "Triceps", "Abdos"].map(muscle => (
+                <button key={muscle} onClick={() => setSelectedSwapMuscle(muscle)} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold border ${selectedSwapMuscle === muscle ? 'bg-indigo-500 text-white' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                  {muscle}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-zinc-50 dark:bg-zinc-950">
+            {filteredSwapAlternatives.length === 0 ? (
+              <p className="text-sm font-bold text-zinc-500 text-center mt-10">{txt.noAlt}</p>
+            ) : (
+              filteredSwapAlternatives.map((alt) => (
+                <div key={alt.id} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500 transition-colors">
+                  <div className="flex-1 min-w-0 pr-4">
+                    <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate">{alt.name}</h5>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{alt.target_muscle}</p>
+                      <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                      <div className="flex space-x-0.5">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star key={i} className={`w-2 h-2 ${i < alt.cns_impact ? (alt.cns_impact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold shrink-0">
+                    {txt.select}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showRpeModal} onOpenChange={setShowRpeModal}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
@@ -593,7 +761,6 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ POINT 3 : MODALE CALCULATEUR DE DISQUES */}
       <Dialog open={plateModal.show} onOpenChange={(open) => !open && setPlateModal({ show: false, weight: 0 })}>
         <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
@@ -626,7 +793,47 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
 
-      {/* --- FIN DES NOUVELLES MODALES --- */}
+      {/* 🛡️ MODALE DE CONVERSION INTERACTIVE KG <-> LBS */}
+      <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
+        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
+              <Scale className="mr-2 h-5 w-5" /> Conversion
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs font-bold text-zinc-500">KILOGRAMMES</Label>
+                <Input 
+                  type="number" 
+                  value={convertModal.kgValue} 
+                  onChange={(e) => {
+                    const kg = e.target.value;
+                    setConvertModal({ show: true, kgValue: kg, lbsValue: kg ? (parseFloat(kg) * 2.20462).toFixed(1) : "" });
+                  }} 
+                  className="font-black text-xl text-center h-14 bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800" 
+                  placeholder="0"
+                />
+              </div>
+              <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700 mt-4 shrink-0" />
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs font-bold text-teal-600 dark:text-teal-500">POUNDS (LBS)</Label>
+                <Input 
+                  type="number" 
+                  value={convertModal.lbsValue} 
+                  onChange={(e) => {
+                    const lbs = e.target.value;
+                    setConvertModal({ show: true, lbsValue: lbs, kgValue: lbs ? (parseFloat(lbs) / 2.20462).toFixed(1) : "" });
+                  }} 
+                  className="font-black text-xl text-center text-teal-600 dark:text-teal-500 h-14 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800" 
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
@@ -635,7 +842,7 @@ export default function ActiveWorkoutSession() {
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
               <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
                 {infoModal.exercise.gif_url ? (
-                  <img src={infoModal.exercise.gif_url.endsWith('.jpg') ? infoModal.exercise.gif_url : `${infoModal.exercise.gif_url}/0.jpg`} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                  <img src={getImageUrl(infoModal.exercise, 0)} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 ) : null}
                 <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
               </div>
@@ -709,7 +916,6 @@ export default function ActiveWorkoutSession() {
               </div>
             </div>
             
-            {/* 🛡️ WIDGET OFFLINE / ANTI-TRICHE */}
             {sessionStats.isOffline ? (
               <div className="w-full max-w-[280px] bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 shadow-sm flex flex-col items-center text-center animate-in slide-in-from-top-8">
                 <WifiOff className="w-8 h-8 text-zinc-500 mb-2" />

@@ -11,18 +11,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, XCircle, User, Share2, Loader2, BellRing, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Target } from "lucide-react";
+import { Activity, Flame, Settings, LogOut, Trash2, Edit3, AlertTriangle, Utensils, Pill, Calendar, RefreshCw, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, Clock, Apple, ArrowLeftRight, Medal, Brain, CheckCircle2, Check, XCircle, User, Share2, Loader2, BellRing, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Target, Dumbbell } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getMicronutrients, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, generateMealIdeas, calculateWaterIntake, getCurrentWeekStreak } from "@/lib/fitness";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/lib/useLanguage";
 import { awardQuizXP } from "@/lib/gamification-engine";
+import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 
 const EXTRA_SPORTS = [ 
   { id: "jjb", label: "JJB / MMA" }, { id: "football", label: "Football / Rugby" }, 
   { id: "basketball", label: "Basketball / Volley" }, { id: "running", label: "Running / Sprint" }, 
   { id: "natation", label: "Natation" }, { id: "cyclisme", label: "Cyclisme / Vélo" }, 
   { id: "randonnee", label: "Randonnée / Marche" }, { id: "padel_tennis", label: "Padel / Tennis" } 
+];
+
+const EQUIPMENTS = [
+  { id: "poids_corps", label: "Poids du corps (Bodyweight)" },
+  { id: "salle", label: "Salle de sport (Machines, Barres)" },
+  { id: "home_gym", label: "Home Gym (Haltères, Kettlebells)" }
 ];
 
 const AVATAR_LIST = [
@@ -75,7 +82,6 @@ const fetchDashboardData = async () => {
   
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   
-  // 🛡️ SCALING OPTIMIZATION
   const { data: dashMetrics } = await supabase.rpc('get_dashboard_metrics', { p_user_id: user.id });
   const acwrScore = dashMetrics?.acwr || 1;
   const yesterdayVol = dashMetrics?.yesterday || 0;
@@ -197,9 +203,12 @@ export default function DashboardPage() {
   const [editGoal, setEditGoal] = useState("");
   const [editExperience, setEditExperience] = useState("");
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
+  const [editEquipment, setEditEquipment] = useState<string[]>([]); // 🛡️ NOUVEAU: Équipement
   const [editDisableQuiz, setEditDisableQuiz] = useState(false);
   const [editAvatar, setEditAvatar] = useState("default");
   const [isPushEnabled, setIsPushEnabled] = useState(false);
+  
+  const [recalibrateAI, setRecalibrateAI] = useState(false);
 
   useEffect(() => {
     if (data?.profile) {
@@ -211,6 +220,7 @@ export default function DashboardPage() {
       setEditGoal(data.profile.current_goal);
       setEditExperience(data.profile.experience_level || "debutant");
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
+      setEditEquipment(data.profile.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : ['poids_corps']); // 🛡️ INIT ÉQUIPEMENT
       setEditDisableQuiz(data.profile.disable_quiz || false);
       setEditAvatar(data.profile.avatar_url || "default");
 
@@ -235,11 +245,11 @@ export default function DashboardPage() {
     FR: { title: "Moniteur", sub: "Analyse systémique et prescriptions métaboliques.", param: "Paramètres", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bio: "Biométrie", bmi: "IMC", weight: "Normal", under: "Insuffisance", over: "Surpoids", obese: "Obésité", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", cancel: "Annuler", save: "Sauvegarder", confirm: "Confirmer", deleteMsg: "Tapez 'SUPPRIMER'", deleteWarn: "Cette action détruira définitivement vos données.", understood: "Compris", adjust: "Ajuster mon profil", changeGoal: "Changer d'objectif", updateBio: "Mettre à jour le poids", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", bioMsg: "Une modification ajustera votre IMC, IMG et vos calories.", changeGoalMsg: "Modifier votre objectif ajustera instantanément vos calories cibles et la répartition de vos macros.", water: "Hydratation", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgTitle: "Masse Grasse", imgSub: "Indice de masse grasse sur votre corps.", imgWhere: "Où vous situez-vous ?", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Stratégie Repas :", mealSub: "Exemples calibrés pour vos macros. Cliquez sur un protocole pour l'ouvrir.", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", shareInsta: "Partager en Story", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Précision Clinique)", readinessTitle: "Readiness Score (SNC)", 
           readinessDesc: "Ce score sur 100 évalue la fatigue de votre Système Nerveux Central (SNC).\n\nIl croise 3 variables :\n• Ratio de fatigue (ACWR).\n• Tonnage de la veille.\n• Qualité du sommeil.\n\n🟢 85-100 : Récupération optimale. C'est le moment de battre des records (PR).\n🟡 60-84 : Fatigue modérée. Entraînement normal, privilégiez la technique.\n🔴 < 60 : Risque de blessure élevé. Baissez le volume de 20% ou prenez un jour de repos actif.",
           sleepPrompt: "Comment avez-vous dormi cette nuit ?", sleepExc: "Excellent", sleepAvg: "Moyen", sleepBad: "Mauvais",
-          sleepLegendExc: "8h+ ininterrompu", sleepLegendAvg: "6-7h, réveils", sleepLegendBad: "< 6h, insomnie", sleepContext: "L'algorithme a besoin de votre ressenti." },
+          sleepLegendExc: "8h+ ininterrompu", sleepLegendAvg: "6-7h, réveils", sleepLegendBad: "< 6h, insomnie", sleepContext: "L'algorithme a besoin de votre ressenti.", recalibrate: "Recalibrer mon programme IA avec ces paramètres", equipmentTitle: "Équipement disponible" },
     EN: { title: "Monitor", sub: "Systemic analysis and metabolic prescriptions.", param: "Settings", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bio: "Biometrics", bmi: "BMI", weight: "Normal", under: "Underweight", over: "Overweight", obese: "Obese", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", cancel: "Cancel", save: "Save", confirm: "Confirm", deleteMsg: "Type 'DELETE'", deleteWarn: "This action will permanently destroy your data.", understood: "Got it", adjust: "Adjust my profile", changeGoal: "Change Goal", updateBio: "Update Weight", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", bioMsg: "Updating this will recalculate your BMI, estimated body fat, and daily calories.", changeGoalMsg: "Changing your goal will instantly adjust your target calories and macronutrient distribution.", water: "Hydration", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgTitle: "Body Fat", imgSub: "Percentage of fat on your body.", imgWhere: "Where do you stand?", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Meal Strategy:", mealSub: "Calibrated examples for your macros. Click a protocol to expand.", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", shareInsta: "Share to Story", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5", clinicBmr: "Katch-McArdle (Clinical Precision)", readinessTitle: "Readiness Score (CNS)", 
           readinessDesc: "This score out of 100 evaluates the fatigue of your Central Nervous System (CNS).\n\nIt crosses 3 variables:\n• Fatigue ratio (ACWR).\n• Yesterday's tonnage.\n• Sleep quality.\n\n🟢 85-100: Optimal recovery. Time to hit PRs.\n🟡 60-84: Moderate fatigue. Normal training, focus on technique.\n🔴 < 60: High injury risk. Drop volume by 20% or take an active rest day.",
           sleepPrompt: "How did you sleep last night?", sleepExc: "Excellent", sleepAvg: "Average", sleepBad: "Poor",
-          sleepLegendExc: "8h+ uninterrupted", sleepLegendAvg: "6-7h, minor waking", sleepLegendBad: "< 6h, restless", sleepContext: "The algorithm needs your input." }
+          sleepLegendExc: "8h+ uninterrupted", sleepLegendAvg: "6-7h, minor waking", sleepLegendBad: "< 6h, restless", sleepContext: "The algorithm needs your input.", recalibrate: "Recalibrate my AI program with these settings", equipmentTitle: "Available equipment" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -248,7 +258,6 @@ export default function DashboardPage() {
     if (!data?.profile) return;
     const todayStr = new Date().toISOString().split('T')[0];
     
-    // 🛡️ MAJ PROFIL ET HISTORISATION DANS DAILY_METRICS
     await supabase.from("profiles").update({ 
       sleep_quality: quality, 
       last_sleep_check: todayStr 
@@ -345,7 +354,7 @@ export default function DashboardPage() {
       const newHeight = parseFloat(editHeight);
       const newBF = editBodyFat ? parseFloat(editBodyFat) : null;
       
-      await supabase.from("profiles").update({ 
+      const updatedProfileData = { 
         first_name: editFirstName,
         last_name: editLastName,
         height_cm: newHeight,
@@ -353,9 +362,12 @@ export default function DashboardPage() {
         current_goal: editGoal, 
         experience_level: editExperience, 
         weekly_schedule: editSchedule,
+        equipment_access: editEquipment.join(','), // 🛡️ ENREGISTREMENT ÉQUIPEMENT
         disable_quiz: editDisableQuiz,
         avatar_url: editAvatar
-      }).eq("id", data.profile.id);
+      };
+
+      await supabase.from("profiles").update(updatedProfileData).eq("id", data.profile.id);
       
       if (newWeight !== data.currentWeight || newBF !== data.currentActualBodyFat) {
         await supabase.from("measurements").insert([{ 
@@ -364,10 +376,43 @@ export default function DashboardPage() {
           body_fat_percentage: newBF
         }]);
       }
+
+      // 🧠 L'I.A. PREND LE RELAIS SI L'OPTION EST COCHÉE
+      if (recalibrateAI) {
+         const { data: library } = await supabase.from("exercise_library").select("*");
+         const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
+         
+         const completeProfileForAI = { ...data.profile, ...updatedProfileData };
+         const newPlan = generateSmartWorkoutPlan(completeProfileForAI, library || [], historyLogs || [], false, []);
+         
+         await supabase.from("user_programs").update({ is_active: false }).eq("user_id", data.profile.id);
+
+         const { data: newProgram } = await supabase.from("user_programs").insert([{ 
+            user_id: data.profile.id, 
+            name: "Programme I.A. (Recalibré)", 
+            is_active: true, 
+            program_type: 'ai' 
+         }]).select().single();
+
+         if (newProgram) {
+            let orderIndex = 0;
+            for (const day of newPlan) {
+              const { data: newSession } = await supabase.from("workout_sessions").insert([{ program_id: newProgram.id, day_name: day.day, order_index: orderIndex }]).select().single();
+              if (newSession) {
+                const exercisesToInsert = day.exercises.map((ex: any) => ({ session_id: newSession.id, exercise_id: ex.exercise.id, sets: ex.sets, target_reps: ex.target_reps, recommended_weight: ex.recommended_weight, rest_seconds: ex.rest_seconds, order_index: ex.order_index }));
+                if (exercisesToInsert.length > 0) {
+                  await supabase.from("workout_exercises").insert(exercisesToInsert);
+                }
+              }
+              orderIndex++;
+            }
+         }
+      }
       
       await mutate();
       setIsEditModalOpen(false); setIsGoalModalOpen(false); setIsBioModalOpen(false);
-    } catch (error) { alert("Erreur."); } finally { setActionLoading(false); }
+      setRecalibrateAI(false); // Reset
+    } catch (error) { alert("Erreur de sauvegarde."); } finally { setActionLoading(false); }
   };
 
   const handleDeleteProfile = async () => {
@@ -596,7 +641,6 @@ export default function DashboardPage() {
         </DropdownMenu>
       </div>
 
-      {/* 🛡️ DAILY CHECK-IN (SOMMEIL) - "SILICON VALLEY" REDESIGN */}
       {showSleepPrompt && (
         <div className="relative overflow-hidden rounded-3xl border border-indigo-500/20 bg-white dark:bg-zinc-950 shadow-2xl animate-in slide-in-from-top-8 duration-700">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-yellow-500 to-red-500"></div>
@@ -635,7 +679,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 🧬 PHASE 6 : READINESS SCORE */}
       <div className={`p-6 rounded-2xl border ${rUI.border} bg-white dark:bg-zinc-950 shadow-sm flex items-center justify-between relative`}>
         <button onClick={() => setIsReadinessModalOpen(true)} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
           <Info className="w-4 h-4" />
@@ -907,7 +950,6 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 📘 MODALE OBJECTIF ACTUEL (MANQUANTE) */}
       <Dialog open={isGoalModalOpen} onOpenChange={setIsGoalModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader>
@@ -934,6 +976,14 @@ export default function DashboardPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* 🛡️ OPTION RECALIBRAGE INTELLIGENT (I.A.) */}
+            <div className="flex items-center space-x-2 mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-200 dark:border-indigo-800">
+              <Checkbox id="recal-goal" checked={recalibrateAI} onCheckedChange={(c) => setRecalibrateAI(c as boolean)} className="border-indigo-500 data-[state=checked]:bg-indigo-500" />
+              <Label htmlFor="recal-goal" className="text-xs font-bold text-indigo-700 dark:text-indigo-400 cursor-pointer">
+                {txt.recalibrate}
+              </Label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setIsGoalModalOpen(false); setEditGoal(data.profile.current_goal); }} className="dark:border-zinc-700 dark:text-zinc-300 font-bold">{txt.cancel}</Button>
@@ -959,7 +1009,43 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-2"><Label className="dark:text-zinc-300 flex items-center"><Medal className="w-4 h-4 mr-2 text-yellow-500" /> Niveau d'Expérience</Label><Select value={editExperience} onValueChange={(val) => { setEditExperience(val); }}><SelectTrigger className="dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"><SelectValue placeholder="Sélectionnez un niveau" /></SelectTrigger><SelectContent className="dark:bg-zinc-950 dark:border-zinc-800"><SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem><SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem><SelectItem value="avance">Avancé (+3 ans)</SelectItem></SelectContent></Select></div>
+            
+            {/* 🛡️ NOUVEAU : ÉDITION DE L'ÉQUIPEMENT ICI */}
+            <div className="space-y-4">
+              <h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100">
+                <Dumbbell className="h-4 w-4 mr-2"/> {txt.equipmentTitle}
+              </h4>
+              <div className="flex flex-col gap-2">
+                {EQUIPMENTS.map(eq => (
+                  <div key={eq.id} className="flex items-center space-x-2 bg-zinc-50 dark:bg-zinc-900 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                    <Checkbox
+                      id={`eq-${eq.id}`}
+                      checked={editEquipment.includes(eq.id)}
+                      onCheckedChange={(c) => {
+                        if (typeof c === 'boolean') {
+                          setEditEquipment(prev => c ? [...prev, eq.id] : prev.filter(e => e !== eq.id));
+                        }
+                      }}
+                      className="data-[state=checked]:bg-teal-500 border-zinc-300 dark:border-zinc-700"
+                    />
+                    <Label htmlFor={`eq-${eq.id}`} className="text-sm font-medium cursor-pointer dark:text-zinc-300">
+                      {eq.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-4"><h4 className="text-sm font-bold flex items-center border-b border-zinc-200 dark:border-zinc-800 pb-2 dark:text-zinc-100"><Calendar className="h-4 w-4 mr-2"/> Sports Annexes (Fatigue)</h4><div className="space-y-3">{Object.keys(DAYS).map((dayKey) => (<div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 gap-2 text-sm"><span className="font-bold w-24 text-zinc-700 dark:text-zinc-300">{DAYS[dayKey as keyof typeof DAYS]}</span><div className="flex flex-wrap gap-3">{EXTRA_SPORTS.map((sport) => {const isChecked = (editSchedule[dayKey] as string[] || []).includes(sport.id);return (<div key={sport.id} className="flex items-center space-x-1"><Checkbox id={`edit-${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => {if (typeof c === 'boolean') handleSportToggle(dayKey, sport.id, c);}} className="dark:border-zinc-700 dark:data-[state=checked]:bg-teal-500" /><Label htmlFor={`edit-${dayKey}-${sport.id}`} className="text-xs cursor-pointer dark:text-zinc-400">{sport.label}</Label></div>);})}</div></div>))}</div></div>
+            
+            {/* 🛡️ OPTION RECALIBRAGE INTELLIGENT (I.A.) DANS L'ÉDITION COMPLÈTE */}
+            <div className="flex items-center space-x-2 mt-4 p-3 bg-teal-50 dark:bg-teal-900/20 rounded-xl border border-teal-200 dark:border-teal-800">
+              <Checkbox id="recal-full" checked={recalibrateAI} onCheckedChange={(c) => setRecalibrateAI(c as boolean)} className="border-teal-500 data-[state=checked]:bg-teal-500" />
+              <Label htmlFor="recal-full" className="text-xs font-bold text-teal-700 dark:text-teal-400 cursor-pointer">
+                {txt.recalibrate}
+              </Label>
+            </div>
+
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><Brain className="w-4 h-4 mr-2 text-indigo-500" /> Daily Brain Gain</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Afficher les quiz sur l'accueil</p></div><button type="button" onClick={() => setEditDisableQuiz(!editDisableQuiz)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!editDisableQuiz ? 'bg-teal-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!editDisableQuiz ? 'translate-x-5' : 'translate-x-0'}`} /></button></div></div>
             <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800"><div className="flex items-center justify-between mb-4"><div className="space-y-0.5"><Label className="text-base font-bold dark:text-zinc-100 flex items-center"><BellRing className="w-4 h-4 mr-2 text-orange-500" /> Notifications</Label><p className="text-[10px] uppercase tracking-widest text-zinc-500 dark:text-zinc-400">Recevoir des rappels d'entraînement</p></div><button type="button" onClick={togglePushNotifications} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isPushEnabled ? 'bg-orange-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}><span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isPushEnabled ? 'translate-x-5' : 'translate-x-0'}`} /></button></div>{isPushEnabled && (<Button variant="outline" size="sm" onClick={testPushNotification} className="w-full text-xs font-bold border-zinc-700 text-zinc-400 hover:text-white">Envoyer une notification de test</Button>)}</div>
           </div>
@@ -1050,6 +1136,41 @@ export default function DashboardPage() {
           </div>
           <DialogFooter>
             <Button onClick={() => setIsReadinessModalOpen(false)} className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold">
+              {txt.understood}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 📘 MODALE FLAMME (STREAK) RESTAURÉE */}
+      <Dialog open={isStreakModalOpen} onOpenChange={setIsStreakModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black text-orange-500 flex items-center">
+              <Flame className="w-6 h-6 mr-2" /> {txt.streakTitle}
+            </DialogTitle>
+            <DialogDescription className="font-medium text-zinc-500">{txt.streakSub}</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 flex justify-between items-center px-2">
+            {currentWeek.map((day: any, i: number) => (
+              <div key={i} className="flex flex-col items-center space-y-2">
+                <span className={`text-[10px] font-black uppercase tracking-widest ${day.isToday ? 'text-orange-500' : 'text-zinc-400'}`}>
+                  {day.dayName.substring(0, 3)}
+                </span>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                  day.completed 
+                    ? 'bg-gradient-to-br from-orange-400 to-red-500 border-transparent text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]' 
+                    : day.isFuture 
+                      ? 'border-zinc-200 dark:border-zinc-800 bg-transparent opacity-40' 
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-300 dark:text-zinc-700'
+                }`}>
+                  {day.completed ? <Check className="w-5 h-5 stroke-[3px]" /> : <div className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-700" />}
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIsStreakModalOpen(false)} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-widest">
               {txt.understood}
             </Button>
           </DialogFooter>

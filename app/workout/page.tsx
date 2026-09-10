@@ -7,10 +7,12 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 const SPORT_LABELS: Record<string, string> = { jjb: "JJB / MMA", football: "Football", basketball: "Basketball", running: "Running", natation: "Natation", cyclisme: "Cyclisme", randonnee: "Randonnée", padel_tennis: "Padel / Tennis" };
 
@@ -46,8 +48,16 @@ export default function WorkoutPage() {
   const [showNewCycleModal, setShowNewCycleModal] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   
+  // 🛡️ NOUVEAUX STATES POUR LE SUPER-SWAP ET LE CONVERTISSEUR
   const [swapModal, setSwapModal] = useState({ show: false, weId: "", currentEx: null as any, alternatives: [] as any[] });
   const [swapLoading, setSwapLoading] = useState(false);
+  const [searchSwapQuery, setSearchSwapQuery] = useState("");
+  const [selectedSwapMuscle, setSelectedSwapMuscle] = useState("Tous");
+  const [selectedSwapStar, setSelectedSwapStar] = useState<number | null>(null);
+  const [selectedSwapPattern, setSelectedSwapPattern] = useState<string | null>(null);
+  const [selectedSwapEquipment, setSelectedSwapEquipment] = useState<string | null>(null);
+  const [convertModal, setConvertModal] = useState({ show: false, weightKg: 0 });
+  
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
 
   const currentJsDay = new Date().getDay();
@@ -59,8 +69,8 @@ export default function WorkoutPage() {
   const dynamicDaysOrder = [...DAYS_ORDER.slice(todayOrderedIndex), ...DAYS_ORDER.slice(0, todayOrderedIndex)];
 
   const t: Record<string, Record<string, string>> = {
-    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser vos dernières performances et le RPE pour appliquer la Loi de la Double Progression.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va générer de nouveaux exercices pour casser la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 2 Perso / 2 Algo.", deleteErr: "Impossible de supprimer ce programme." },
-    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your past performances and RPE to apply Double Progression Law.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will generate new exercises to break plateaus.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 2 Custom / 2 Algo.", deleteErr: "Cannot delete this program." }
+    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser vos dernières performances et le RPE pour appliquer la Loi de la Double Progression.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va générer de nouveaux exercices pour casser la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 2 Perso / 2 Algo.", deleteErr: "Impossible de supprimer ce programme.", search: "Rechercher..." },
+    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your past performances and RPE to apply Double Progression Law.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will generate new exercises to break plateaus.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 2 Custom / 2 Algo.", deleteErr: "Cannot delete this program.", search: "Search..." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -82,7 +92,6 @@ export default function WorkoutPage() {
     else setShowNewCycleModal(true);
   };
 
-  // 🛡️ L'ALGORITHME MET A JOUR AVEC LE RPE
   const applyProgressiveOverload = async () => {
     if (!data?.existingProgram || !data?.weeklyPlan) return;
     setGenerating(true);
@@ -105,7 +114,7 @@ export default function WorkoutPage() {
             logsOfLastSession.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
             const bestSet = logsOfLastSession[0];
             
-            const rpe = bestSet.rpe || 8; // On lit le RPE (par défaut 8 si non renseigné)
+            const rpe = bestSet.rpe || 8; 
             const isRange = we.target_reps?.includes("-");
             const targetMatch = (we.target_reps || "12").match(/\d+/g);
             
@@ -118,14 +127,11 @@ export default function WorkoutPage() {
             let newWeight = bestSet.weight;
             let newTargetReps = we.target_reps;
 
-            // 1. SURCHARGE (Plafond atteint)
             if (bestSet.reps >= ceiling || (isRange && bestSet.reps >= maxTargetRep)) {
               if (rpe === 10) {
-                // 🛑 SNC en danger : On maintient le poids malgré les reps !
                 newWeight = bestSet.weight;
                 newTargetReps = `Viser > ${bestSet.reps} (RPE 10)`;
               } else if (bestSet.weight > 0) {
-                // 🚀 Trop facile (RPE <= 6) -> On double l'augmentation !
                 const multiplier = rpe <= 6 ? 2 : 1;
                 const increment = (we.exercise_library?.cns_impact >= 4 ? 2.5 : 1.25) * multiplier;
                 newWeight = bestSet.weight + increment;
@@ -134,13 +140,11 @@ export default function WorkoutPage() {
                 newTargetReps = `Viser > ${bestSet.reps + 2} reps`;
               }
             } 
-            // 2. DELOAD (Échec musculaire absolu OU RPE 10 avant le plafond)
             else if (bestSet.reps < floor || (rpe === 10 && bestSet.weight > 0)) {
               const rawDeload = bestSet.weight * 0.9;
               newWeight = Math.round(rawDeload / 1.25) * 1.25;
               newTargetReps = "8-12 (Deload)";
             } 
-            // 3. MAINTIEN (Progression dans la fourchette)
             else {
               newWeight = bestSet.weight;
               const nextTarget = Math.min(bestSet.reps + 1, ceiling);
@@ -167,6 +171,7 @@ export default function WorkoutPage() {
     }
   };
 
+  // 🛡️ POINT 1 : L'OPTIMISATION DU GÉNÉRATEUR (ANTI-SPAM)
   const generateProgram = async (isNewCycle: boolean = false) => {
     if (!data?.profile) return;
     setGenerating(true);
@@ -183,6 +188,14 @@ export default function WorkoutPage() {
       let deloadFlag = false;
 
       const isFirstProgram = data.allPrograms.length === 0;
+
+      // 🛡️ LOGIQUE DE SUPPRESSION : On garde le Défaut, on supprime l'ancien Algo
+      if (!isFirstProgram) {
+        const oldAlgoProg = data.allPrograms.find((p: any) => p.program_type === 'ai' && !p.is_default);
+        if (oldAlgoProg) {
+           await supabase.from("user_programs").delete().eq("id", oldAlgoProg.id);
+        }
+      }
 
       if (data.existingProgram) {
         const { data: currentSessions } = await supabase.from("workout_sessions").select(`id, workout_exercises (exercise_id)`).eq("program_id", data.existingProgram.id);
@@ -202,7 +215,8 @@ export default function WorkoutPage() {
         throw new Error("Impossible de générer le programme : Vérifiez vos équipements ou vos jours de sport.");
       }
 
-      const cycleName = isFirstProgram ? "Programme Base (Défaut)" : `Programme Algo - Cycle ${algoProgs.length + 1}`;
+      // Nom constant pour éviter le spam Visuel
+      const cycleName = isFirstProgram ? "Programme Base (Défaut)" : `Programme Algo`;
 
       const { data: newProgram, error: progError } = await supabase.from("user_programs").insert([{ 
         user_id: user.id, 
@@ -270,17 +284,56 @@ export default function WorkoutPage() {
     }
   };
 
+  // 🛡️ POINT 3 : LE SUPER-SWAP (Chargement)
   const openSwapModal = async (weId: string, currentEx: any) => {
     if (!data?.profile) return;
     setSwapLoading(true);
-    const { data: alts, error: altsError } = await supabase.from('exercise_library').select('*').eq('movement_pattern', currentEx.movement_pattern).neq('id', currentEx.id);
+    const { data: alts, error: altsError } = await supabase.from('exercise_library').select('*').neq('id', currentEx.id);
     if (altsError) { setSwapLoading(false); alert("Erreur chargement alternatives"); return; }
     
-    const userEq = data.profile.equipment_access.split(',').map((e: string) => e.trim());
-    const validAlts = (alts || []).filter((ex: any) => userEq.includes(ex.equipment_required));
-    setSwapModal({ show: true, weId, currentEx, alternatives: validAlts });
+    setSwapModal({ show: true, weId, currentEx, alternatives: alts || [] });
     setSwapLoading(false);
   };
+
+  // 🛡️ POINT 3 : LE SUPER-SWAP (Filtrage)
+  const filteredSwapAlternatives = swapModal.alternatives.filter(ex => {
+    const matchSearch = ex.name.toLowerCase().includes(searchSwapQuery.toLowerCase());
+    const target = ex.target_muscle.toLowerCase();
+    const filter = selectedSwapMuscle.toLowerCase();
+
+    let matchMuscle = false;
+    if (filter === "tous") matchMuscle = true;
+    else if (filter === "jambes") matchMuscle = target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe");
+    else if (filter === "abdos") matchMuscle = target.includes("sangle abdominale") || target.includes("abdo") || target.includes("core");
+    else if (filter === "épaules") matchMuscle = target.includes("épaule") || target.includes("epaule") || target.includes("delto");
+    else if (filter === "dos") matchMuscle = target.includes("dos") || target.includes("lombaire") || target.includes("dorsal");
+    else matchMuscle = target.includes(filter);
+
+    const matchStars = selectedSwapStar === null || ex.cns_impact === selectedSwapStar;
+
+    const patternLow = ex.movement_pattern?.toLowerCase() || "";
+    let matchPattern = true;
+    if (selectedSwapPattern) {
+      if (selectedSwapPattern === "push") matchPattern = patternLow.includes("push");
+      else if (selectedSwapPattern === "pull") matchPattern = patternLow.includes("pull");
+      else if (selectedSwapPattern === "squat") matchPattern = patternLow.includes("squat") || patternLow.includes("lunge");
+      else if (selectedSwapPattern === "hinge") matchPattern = patternLow.includes("hinge");
+      else if (selectedSwapPattern === "core") matchPattern = patternLow.includes("core");
+    }
+
+    const eqLow = ex.equipment_required?.toLowerCase() || "";
+    let matchEquipment = true;
+    if (selectedSwapEquipment) {
+      if (selectedSwapEquipment === "poids_corps") matchEquipment = eqLow.includes("poids_corps");
+      else if (selectedSwapEquipment === "salle") matchEquipment = eqLow.includes("salle");
+      else if (selectedSwapEquipment === "home_gym") matchEquipment = eqLow.includes("home_gym") || eqLow.includes("kettlebell");
+    }
+
+    const userEq = data?.profile?.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : [];
+    const matchProfileEq = userEq.length === 0 || userEq.includes(ex.equipment_required);
+
+    return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment && matchProfileEq;
+  });
 
   const confirmSwap = async (newEx: any) => {
     try {
@@ -299,6 +352,20 @@ export default function WorkoutPage() {
   const sortedPlan = data?.weeklyPlan ? [...data.weeklyPlan].sort((a: any, b: any) => {
     return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
   }) : [];
+
+  const renderStars = (impact: number) => {
+    const safeImpact = impact || 1;
+    return (
+      <div className="flex space-x-0.5 mt-1">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Star 
+            key={i} 
+            className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
+          />
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
@@ -406,7 +473,14 @@ export default function WorkoutPage() {
                               <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
                             </div>
                             <div className="flex items-start">
-                              <div><h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4><p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p></div>
+                              <div>
+                                <h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4>
+                                <div className="flex items-center space-x-2 mt-0.5">
+                                  <p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p>
+                                  <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                                  {renderStars(ex.cns_impact)}
+                                </div>
+                              </div>
                               
                               <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="ml-2 mt-0.5 p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer relative z-20 pointer-events-auto">
                                 <Info className="w-4 h-4" />
@@ -415,11 +489,19 @@ export default function WorkoutPage() {
                           </div>
                           <div className="flex flex-wrap items-center gap-3 text-sm mt-2 sm:mt-0 relative z-10">
                             {we.recommended_weight !== null && we.recommended_weight !== undefined && (
-                              <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800"><Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}</div>
+                              <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
+                                <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
+                                {/* 🛡️ POINT 2 : Convertisseur Lbs */}
+                                {we.recommended_weight > 0 && (
+                                  <button onClick={(e) => { e.stopPropagation(); setConvertModal({ show: true, weightKg: we.recommended_weight }); }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors" title="Convertir en Lbs">
+                                    <Scale className="w-3 h-3 text-teal-700 dark:text-teal-400" />
+                                  </button>
+                                )}
+                              </div>
                             )}
                             <div className="flex items-center text-zinc-700 dark:text-zinc-300 font-bold bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded"><Repeat className="w-4 h-4 mr-2 text-zinc-500" /> {we.sets} {txt.sets} × {we.target_reps}</div>
                             <div className="flex items-center text-zinc-500 font-medium"><Clock className="w-4 h-4 mr-1.5" />{we.rest_seconds}s</div>
-                            <button onClick={() => !isFuture && openSwapModal(we.id, ex)} disabled={swapLoading || isFuture} className={`p-1.5 ml-2 rounded-md transition-colors ${isFuture ? 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed' : 'text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30'}`}>
+                            <button onClick={() => !isFuture && openSwapModal(we.id, ex)} disabled={swapLoading || isFuture} className={`p-1.5 ml-2 rounded-md transition-colors ${isFuture ? 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed' : 'text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30'}`} title={txt.swapTitle}>
                               <ArrowLeftRight className="w-5 h-5" />
                             </button>
                           </div>
@@ -496,9 +578,129 @@ export default function WorkoutPage() {
               ) : (
                 <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
               )}
-              <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+              <div className="flex flex-col items-center space-y-2">
+                <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
+                <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                  <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
+                  {renderStars(infoModal.exercise.cns_impact)}
+                </div>
+              </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 🛡️ POINT 2 : MODALE DE CONVERSION KG -> LBS */}
+      <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, weightKg: 0 })}>
+        <DialogContent className="sm:max-w-[300px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
+              <Scale className="mr-2 h-5 w-5" /> Conversion Lbs
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 flex flex-col items-center">
+            <div className="flex items-center space-x-4">
+              <div className="text-center">
+                <div className="text-3xl font-black text-zinc-900 dark:text-zinc-100">{convertModal.weightKg}</div>
+                <div className="text-xs font-bold text-zinc-500 uppercase">kg</div>
+              </div>
+              <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700" />
+              <div className="text-center">
+                <div className="text-3xl font-black text-teal-500">{(convertModal.weightKg * 2.20462).toFixed(1)}</div>
+                <div className="text-xs font-bold text-teal-500/70 uppercase">lbs</div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🛡️ POINT 3 : LE SUPER-SWAP (Modale étendue) */}
+      <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
+        <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
+          <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+            <DialogTitle className="flex items-center text-indigo-600 dark:text-indigo-400">
+              <ArrowLeftRight className="mr-2 h-5 w-5"/> {txt.swapTitle}
+            </DialogTitle>
+            <DialogDescription className="font-medium text-zinc-500">
+              Remplacer : <span className="font-bold text-zinc-900 dark:text-zinc-100">{swapModal.currentEx?.name}</span>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 space-y-3 shrink-0">
+            <div className="flex items-center space-x-2">
+              <Input placeholder={txt.search} value={searchSwapQuery} onChange={(e) => setSearchSwapQuery(e.target.value)} className="bg-white dark:bg-zinc-950 font-medium flex-1" />
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapStar !== null ? 'border-orange-500 text-orange-600' : ''}`}><Filter className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">SNC</span></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSelectedSwapStar(null)}>Toutes</DropdownMenuItem>
+                  {[5, 4, 3, 2, 1].map(s => <DropdownMenuItem key={s} onClick={() => setSelectedSwapStar(s)}>{s} Étoiles</DropdownMenuItem>)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapPattern !== null ? 'border-teal-500 text-teal-600' : ''}`}><Activity className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Mouv.</span></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern(null)}>Tous</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("push")}>Push</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("pull")}>Pull</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("squat")}>Squat</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("hinge")}>Hinge</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("core")}>Core</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapEquipment !== null ? 'border-purple-500 text-purple-600' : ''}`}><Dumbbell className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Matériel</span></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment(null)}>Tous</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("poids_corps")}>Poids de corps</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("salle")}>Machine/Salle</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("home_gym")}>Haltères/Léger</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide">
+              {["Tous", "Pectoraux", "Dos", "Jambes", "Épaules", "Biceps", "Triceps", "Abdos"].map(muscle => (
+                <button key={muscle} onClick={() => setSelectedSwapMuscle(muscle)} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold border ${selectedSwapMuscle === muscle ? 'bg-indigo-500 text-white' : 'text-zinc-600 dark:text-zinc-400'}`}>
+                  {muscle}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-zinc-50 dark:bg-zinc-950">
+            {filteredSwapAlternatives.length === 0 ? (
+              <p className="text-sm font-bold text-zinc-500 text-center mt-10">{txt.noAlt}</p>
+            ) : (
+              filteredSwapAlternatives.map((alt) => (
+                <div key={alt.id} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500 transition-colors">
+                  <div className="flex-1 min-w-0 pr-4">
+                    <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate">{alt.name}</h5>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{alt.target_muscle}</p>
+                      <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
+                      <div className="flex space-x-0.5">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star key={i} className={`w-2 h-2 ${i < alt.cns_impact ? (alt.cns_impact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold shrink-0">
+                    {txt.select}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
