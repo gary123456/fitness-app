@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon, Camera, User, Wrench } from "lucide-react";
+import { LayoutDashboard, Dumbbell, LogOut, Globe, Activity, Sun, Moon, Camera, User, Wrench, Settings } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/lib/useLanguage";
@@ -22,8 +22,8 @@ export function Navbar() {
   };
 
   const t = {
-    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", track: "Progression", tools: "Outils", profile: "Profil", logout: "Sortir" },
-    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", track: "Progress", tools: "Tools", profile: "Profile", logout: "Logout" }
+    FR: { dash: "Dashboard", prog: "Programme", stats: "Analytics", track: "Progression", tools: "Outils", profile: "Profil", settings: "Paramètres", logout: "Sortir" },
+    EN: { dash: "Dashboard", prog: "Workout", stats: "Analytics", track: "Progress", tools: "Tools", profile: "Profile", settings: "Settings", logout: "Logout" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -88,7 +88,14 @@ export function Navbar() {
           <div className="flex items-center space-x-2">
             <ThemeToggle />
             <LanguageSelector />
+            
             <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 mx-2"></div>
+            
+            <Link href="/settings" className="flex items-center space-x-2 rounded-md p-2 text-sm font-bold text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900/50 dark:hover:text-zinc-50">
+              <Settings className="h-5 w-5" />
+              <span>{txt.settings}</span>
+            </Link>
+
             <button onClick={handleLogout} className="flex items-center space-x-2 rounded-md p-2 text-sm font-bold text-zinc-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-zinc-400 dark:hover:bg-red-950/30 dark:hover:text-red-500">
               <LogOut className="h-5 w-5" />
               <span>{txt.logout}</span>
@@ -105,6 +112,9 @@ export function Navbar() {
         <div className="flex items-center space-x-1">
           <ThemeToggle />
           <LanguageSelector />
+          <Link href="/settings" className="p-2 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-50 transition-colors">
+            <Settings className="h-5 w-5" />
+          </Link>
         </div>
       </div>
 
