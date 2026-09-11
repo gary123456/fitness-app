@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { mutate as mutateGlobal } from "swr";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-// 🛡️ CORRECTION : Imports Exhaustifs pour éviter tout crash
-import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Medal, Loader2 } from "lucide-react";
+import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Medal, Loader2, CheckCircle2 } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const EXTRA_SPORTS = [ 
   { id: "jjb", label: "JJB / MMA" }, { id: "football", label: "Football / Rugby" }, 
@@ -84,10 +84,11 @@ export default function SettingsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const t = {
-    FR: { title: "Paramètres", sub: "Configuration du moteur algorithmique.", save: "Enregistrer les modifications", recalc: "Recalibrer mon programme IA", danger: "Zone de Danger", deleteAcc: "Supprimer le compte", deleteWarn: "Tapez 'SUPPRIMER'", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5" },
-    EN: { title: "Settings", sub: "Algorithmic engine configuration.", save: "Save changes", recalc: "Recalibrate AI program", danger: "Danger Zone", deleteAcc: "Delete Account", deleteWarn: "Type 'DELETE'", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5" }
+    FR: { title: "Paramètres", sub: "Configuration du moteur algorithmique.", save: "Enregistrer les modifications", recalc: "Recalibrer mon programme IA", danger: "Zone de Danger", deleteAcc: "Supprimer le compte", deleteWarn: "Tapez 'SUPPRIMER'", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5", successTitle: "Profil Sauvegardé", successDesc: "Vos paramètres ont été mis à jour avec succès.", successAI: "L'IA a généré un nouveau programme complet.", continueBtn: "Continuer" },
+    EN: { title: "Settings", sub: "Algorithmic engine configuration.", save: "Save changes", recalc: "Recalibrate AI program", danger: "Danger Zone", deleteAcc: "Delete Account", deleteWarn: "Type 'DELETE'", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5", successTitle: "Profile Saved", successDesc: "Your settings have been successfully updated.", successAI: "AI has generated a new comprehensive program.", continueBtn: "Continue" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -107,7 +108,6 @@ export default function SettingsPage() {
       setEditAvatar(data.profile.avatar_url || "default");
     }
 
-    // 🛡️ SÉCURITÉ PWA : Éviter les erreurs côté serveur (SSR)
     if (typeof window !== "undefined" && 'serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.getRegistration().then(reg => {
         if (reg) {
@@ -198,16 +198,19 @@ export default function SettingsPage() {
 
          const { data: newProgram } = await supabase.from("user_programs").insert([{ 
             user_id: data.profile.id, name: "Programme I.A. (Recalibré)", is_active: true, program_type: 'ai' 
-         }]).select().single();
+         } as any]).select().single();
 
          if (newProgram) {
             let orderIndex = 0;
             for (const day of newPlan) {
-              const { data: newSession } = await supabase.from("workout_sessions").insert([{ program_id: newProgram.id, day_name: day.day, order_index: orderIndex }]).select().single();
+              const { data: newSession } = await supabase.from("workout_sessions").insert([{ 
+                program_id: newProgram.id, day_name: day.day, order_index: orderIndex 
+              } as any]).select().single();
+              
               if (newSession) {
                 const exercisesToInsert = day.exercises.map((ex: any) => ({ session_id: newSession.id, exercise_id: ex.exercise.id, sets: ex.sets, target_reps: ex.target_reps, recommended_weight: ex.recommended_weight, rest_seconds: ex.rest_seconds, order_index: ex.order_index }));
                 if (exercisesToInsert.length > 0) {
-                  await supabase.from("workout_exercises").insert(exercisesToInsert);
+                  await supabase.from("workout_exercises").insert(exercisesToInsert as any[]);
                 }
               }
               orderIndex++;
@@ -216,10 +219,17 @@ export default function SettingsPage() {
       }
       
       await mutate();
-      setRecalibrateAI(false);
-      alert(lang === 'FR' ? "Profil sauvegardé avec succès." : "Profile saved successfully.");
-      router.push("/dashboard");
-    } catch (error) { alert("Erreur de sauvegarde."); } finally { setActionLoading(false); }
+      mutateGlobal('navbarProfile'); 
+      mutateGlobal('dashboardData');
+      
+      setShowSuccessModal(true);
+      
+    } catch (error) { 
+      console.error(error);
+      alert("Erreur de sauvegarde."); 
+    } finally { 
+      setActionLoading(false); 
+    }
   };
 
   const handleDeleteProfile = async () => {
@@ -403,6 +413,38 @@ export default function SettingsPage() {
         </Card>
 
       </div>
+
+      {/* 🛡️ MODALE DE SUCCÈS (REMPLACE L'ALERT NATIF) */}
+      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl text-center p-6">
+          <div className="flex flex-col items-center">
+            <div className="w-16 h-16 bg-teal-100 dark:bg-teal-900/30 rounded-full flex items-center justify-center mb-4 shadow-sm border border-teal-200 dark:border-teal-800">
+              <CheckCircle2 className="w-8 h-8 text-teal-500" />
+            </div>
+            <DialogTitle className="text-xl font-black text-zinc-900 dark:text-zinc-100 mb-2">
+              {txt.successTitle}
+            </DialogTitle>
+            <DialogDescription className="font-medium text-zinc-500 mb-6">
+              {txt.successDesc}
+              {recalibrateAI && (
+                <span className="block mt-2 font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded-lg">
+                  🤖 {txt.successAI}
+                </span>
+              )}
+            </DialogDescription>
+            <Button 
+              className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold h-12 text-lg rounded-xl"
+              onClick={() => {
+                setRecalibrateAI(false);
+                setShowSuccessModal(false);
+                router.push("/dashboard");
+              }}
+            >
+              {txt.continueBtn}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

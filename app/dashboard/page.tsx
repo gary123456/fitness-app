@@ -4,13 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
-import { toPng } from "html-to-image";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, ArrowLeftRight, Check, User, Edit3, LogOut, Trash2 } from "lucide-react";
+import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, ArrowLeftRight, Check, User, Edit3, LogOut, Dumbbell } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, calculateWaterIntake, getCurrentWeekStreak, generateMealIdeas, getMicronutrients } from "@/lib/fitness";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/lib/useLanguage";
 
 const getMicroDetails = (name: string, lang: string) => {
@@ -133,7 +131,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const { lang } = useLanguage();
   const { data, isLoading, mutate } = useSWR('dashboardData', fetchDashboardData, { revalidateOnFocus: true });
-  const quizCardRef = useRef<HTMLDivElement>(null);
   
   const [isCalModalOpen, setIsCalModalOpen] = useState(false);
   const [isImgModalOpen, setIsImgModalOpen] = useState(false);
@@ -157,8 +154,8 @@ export default function DashboardPage() {
   }, [data]);
 
   const t = {
-    FR: { sub: "Analyse systémique et prescriptions métaboliques.", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bmi: "IMC", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", water: "Hydratation", imgTitle: "Masse Grasse", imgWhere: "Où vous situez-vous ?", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", sleepPrompt: "Comment avez-vous dormi cette nuit ?", sleepContext: "L'algorithme a besoin de votre ressenti.", settingsHint: "Ajustez vos paramètres", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Stratégie Repas :", mealSub: "Exemples calibrés pour vos macros. Cliquez sur un protocole pour l'ouvrir.", clinicBmr: "Katch-McArdle (Précision Clinique)", understood: "Compris", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgSub: "Indice de masse grasse sur votre corps.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", sleepExc: "Excellent", sleepAvg: "Moyen", sleepBad: "Mauvais", sleepLegendExc: "8h+ ininterrompu", sleepLegendAvg: "6-7h, réveils", sleepLegendBad: "< 6h, insomnie", account: "Mon Compte", edit: "Ajuster mon profil", out: "Se déconnecter", del: "Effacer l'écosystème" },
-    EN: { sub: "Systemic analysis and metabolic prescriptions.", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bmi: "BMI", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", water: "Hydration", imgTitle: "Body Fat", imgWhere: "Where do you stand?", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", sleepPrompt: "How did you sleep last night?", sleepContext: "The algorithm needs your input.", settingsHint: "Adjust your settings", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Meal Strategy:", mealSub: "Calibrated examples for your macros. Click a protocol to expand.", clinicBmr: "Katch-McArdle (Clinical Precision)", understood: "Got it", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgSub: "Percentage of fat on your body.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", sleepExc: "Excellent", sleepAvg: "Average", sleepBad: "Poor", sleepLegendExc: "8h+ uninterrupted", sleepLegendAvg: "6-7h, minor waking", sleepLegendBad: "< 6h, restless", account: "My Account", edit: "Adjust my profile", out: "Log Out", del: "Purge Ecosystem" }
+    FR: { sub: "Analyse systémique et prescriptions métaboliques.", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bmi: "IMC", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", water: "Hydratation", imgTitle: "Masse Grasse", imgWhere: "Où vous situez-vous ?", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", sleepPrompt: "Comment avez-vous dormi cette nuit ?", sleepContext: "L'algorithme a besoin de votre ressenti.", settingsHint: "Ajustez vos paramètres", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Stratégie Repas :", mealSub: "Exemples calibrés pour vos macros. Cliquez sur un protocole pour l'ouvrir.", clinicBmr: "Katch-McArdle (Précision Clinique)", understood: "Compris", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgSub: "Indice de masse grasse sur votre corps.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", sleepExc: "Excellent", sleepAvg: "Moyen", sleepBad: "Mauvais", sleepLegendExc: "8h+ ininterrompu", sleepLegendAvg: "6-7h, réveils", sleepLegendBad: "< 6h, insomnie" },
+    EN: { sub: "Systemic analysis and metabolic prescriptions.", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bmi: "BMI", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", water: "Hydration", imgTitle: "Body Fat", imgWhere: "Where do you stand?", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", sleepPrompt: "How did you sleep last night?", sleepContext: "The algorithm needs your input.", settingsHint: "Adjust your settings", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Meal Strategy:", mealSub: "Calibrated examples for your macros. Click a protocol to expand.", clinicBmr: "Katch-McArdle (Clinical Precision)", understood: "Got it", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgSub: "Percentage of fat on your body.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", sleepExc: "Excellent", sleepAvg: "Average", sleepBad: "Poor", sleepLegendExc: "8h+ uninterrupted", sleepLegendAvg: "6-7h, minor waking", sleepLegendBad: "< 6h, restless" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -286,6 +283,7 @@ export default function DashboardPage() {
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
       
+      {/* 🛡️ SEUL LE BLOC DE SALUTATION ET DE FLAMME EST CONSERVÉ ICI POUR RETIRER LE DOUBLON AVATAR */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <div className="flex items-center space-x-3 mb-1">
@@ -300,35 +298,6 @@ export default function DashboardPage() {
           </div>
           <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
         </div>
-        
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="relative outline-none group focus:ring-2 focus:ring-teal-500 rounded-full shrink-0">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-teal-400 to-indigo-500 flex items-center justify-center text-white font-black shadow-sm group-hover:shadow-md transition-all">
-                {profile.avatar_url && profile.avatar_url !== 'default' ? (
-                  <span className="text-4xl leading-none">{profile.avatar_url}</span>
-                ) : (
-                  <span className="text-3xl leading-none">{profile.first_name ? profile.first_name.charAt(0).toUpperCase() : <User className="w-8 h-8" />}</span>
-                )}
-              </div>
-              <div className="absolute -bottom-1 -right-1 bg-white dark:bg-zinc-900 rounded-full p-1.5 shadow-sm border border-zinc-200 dark:border-zinc-800">
-                <Settings className="w-4 h-4 text-zinc-600 dark:text-zinc-400 group-hover:rotate-90 transition-transform duration-500" />
-              </div>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 p-3 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] mt-2">
-            <DropdownMenuLabel className="px-3 py-2 text-xs font-black tracking-widest text-zinc-400 uppercase">{txt.account}</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50 my-2" />
-            
-            <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer p-3 rounded-xl font-bold dark:text-zinc-100 focus:bg-teal-50 dark:focus:bg-teal-500/10 focus:text-teal-600 dark:focus:text-teal-400 transition-colors outline-none">
-              <Edit3 className="w-5 h-5 mr-3 opacity-70" /> {txt.edit}
-            </DropdownMenuItem>
-            
-            <DropdownMenuItem onClick={async () => { await supabase.auth.signOut(); router.push("/login"); }} className="cursor-pointer p-3 rounded-xl font-bold text-orange-600 focus:bg-orange-50 dark:focus:bg-orange-500/10 focus:text-orange-500 transition-colors outline-none">
-              <LogOut className="w-5 h-5 mr-3 opacity-70" /> {txt.out}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
       {showSleepPrompt && (
