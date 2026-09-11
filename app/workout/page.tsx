@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
@@ -48,7 +49,6 @@ export default function WorkoutPage() {
   const [showNewCycleModal, setShowNewCycleModal] = useState(false);
   const [showProgressModal, setShowProgressModal] = useState(false);
   
-  // 🛡️ NOUVEAUX STATES POUR LE SUPER-SWAP ET LE CONVERTISSEUR
   const [swapModal, setSwapModal] = useState({ show: false, weId: "", currentEx: null as any, alternatives: [] as any[] });
   const [swapLoading, setSwapLoading] = useState(false);
   const [searchSwapQuery, setSearchSwapQuery] = useState("");
@@ -56,7 +56,7 @@ export default function WorkoutPage() {
   const [selectedSwapStar, setSelectedSwapStar] = useState<number | null>(null);
   const [selectedSwapPattern, setSelectedSwapPattern] = useState<string | null>(null);
   const [selectedSwapEquipment, setSelectedSwapEquipment] = useState<string | null>(null);
-  const [convertModal, setConvertModal] = useState({ show: false, weightKg: 0 });
+  const [convertModal, setConvertModal] = useState({ show: false, kgValue: "", lbsValue: "" });
   
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
 
@@ -171,7 +171,7 @@ export default function WorkoutPage() {
     }
   };
 
-  // 🛡️ POINT 1 : L'OPTIMISATION DU GÉNÉRATEUR (ANTI-SPAM)
+  // 🛡️ LISSAGE ANTI-SPAM
   const generateProgram = async (isNewCycle: boolean = false) => {
     if (!data?.profile) return;
     setGenerating(true);
@@ -189,11 +189,11 @@ export default function WorkoutPage() {
 
       const isFirstProgram = data.allPrograms.length === 0;
 
-      // 🛡️ LOGIQUE DE SUPPRESSION : On garde le Défaut, on supprime l'ancien Algo
+      // Purge stricte des anciens programmes IA non-défaut
       if (!isFirstProgram) {
-        const oldAlgoProg = data.allPrograms.find((p: any) => p.program_type === 'ai' && !p.is_default);
-        if (oldAlgoProg) {
-           await supabase.from("user_programs").delete().eq("id", oldAlgoProg.id);
+        const oldAlgoProgs = data.allPrograms.filter((p: any) => p.program_type === 'ai' && !p.is_default);
+        for (const p of oldAlgoProgs) {
+           await supabase.from("user_programs").delete().eq("id", p.id);
         }
       }
 
@@ -215,7 +215,6 @@ export default function WorkoutPage() {
         throw new Error("Impossible de générer le programme : Vérifiez vos équipements ou vos jours de sport.");
       }
 
-      // Nom constant pour éviter le spam Visuel
       const cycleName = isFirstProgram ? "Programme Base (Défaut)" : `Programme Algo`;
 
       const { data: newProgram, error: progError } = await supabase.from("user_programs").insert([{ 
@@ -284,7 +283,6 @@ export default function WorkoutPage() {
     }
   };
 
-  // 🛡️ POINT 3 : LE SUPER-SWAP (Chargement)
   const openSwapModal = async (weId: string, currentEx: any) => {
     if (!data?.profile) return;
     setSwapLoading(true);
@@ -295,7 +293,6 @@ export default function WorkoutPage() {
     setSwapLoading(false);
   };
 
-  // 🛡️ POINT 3 : LE SUPER-SWAP (Filtrage)
   const filteredSwapAlternatives = swapModal.alternatives.filter(ex => {
     const matchSearch = ex.name.toLowerCase().includes(searchSwapQuery.toLowerCase());
     const target = ex.target_muscle.toLowerCase();
@@ -329,17 +326,15 @@ export default function WorkoutPage() {
       else if (selectedSwapEquipment === "home_gym") matchEquipment = eqLow.includes("home_gym") || eqLow.includes("kettlebell");
     }
 
-    const userEq = data?.profile?.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : [];
-    const matchProfileEq = userEq.length === 0 || userEq.includes(ex.equipment_required);
-
-    return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment && matchProfileEq;
+    return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment;
   });
 
+  // 🛡️ SWR MUTATION PURE - PLUS DE RECHARGEMENT ABRUPT
   const confirmSwap = async (newEx: any) => {
     try {
       const { error } = await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
       if (error) throw new Error(error.message);
-      await mutate();
+      await mutate(); 
       setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] });
     } catch (error: any) {
       alert("Erreur lors du remplacement : " + error.message);
@@ -358,10 +353,7 @@ export default function WorkoutPage() {
     return (
       <div className="flex space-x-0.5 mt-1">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Star 
-            key={i} 
-            className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} 
-          />
+          <Star key={i} className={`w-3 h-3 ${i < safeImpact ? (safeImpact >= 4 ? 'text-red-500 fill-red-500' : 'text-orange-500 fill-orange-500') : 'text-zinc-300 dark:text-zinc-700'}`} />
         ))}
       </div>
     );
@@ -469,8 +461,7 @@ export default function WorkoutPage() {
                         <div key={uniqueKey} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors ${isToday ? 'border-teal-100 dark:border-teal-900/50 bg-white/50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-900' : 'border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'}`}>
                           <div className="flex items-center space-x-4 mb-2 sm:mb-0">
                             <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative p-1">
-                              {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
-                              <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0" />
+                              {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0 opacity-50" />}
                             </div>
                             <div className="flex items-start">
                               <div>
@@ -491,9 +482,13 @@ export default function WorkoutPage() {
                             {we.recommended_weight !== null && we.recommended_weight !== undefined && (
                               <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
                                 <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
-                                {/* 🛡️ POINT 2 : Convertisseur Lbs */}
+                                {/* Convertisseur Interactif Lbs */}
                                 {we.recommended_weight > 0 && (
-                                  <button onClick={(e) => { e.stopPropagation(); setConvertModal({ show: true, weightKg: we.recommended_weight }); }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors" title="Convertir en Lbs">
+                                  <button onClick={(e) => { 
+                                    e.stopPropagation(); 
+                                    const initKg = we.recommended_weight > 0 ? we.recommended_weight.toString() : "";
+                                    setConvertModal({ show: true, kgValue: initKg, lbsValue: initKg ? (parseFloat(initKg) * 2.20462).toFixed(1) : "" }); 
+                                  }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors" title="Convertir en Lbs">
                                     <Scale className="w-3 h-3 text-teal-700 dark:text-teal-400" />
                                   </button>
                                 )}
@@ -590,31 +585,49 @@ export default function WorkoutPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ POINT 2 : MODALE DE CONVERSION KG -> LBS */}
-      <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, weightKg: 0 })}>
-        <DialogContent className="sm:max-w-[300px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+      {/* 🛡️ POINT 2 : MODALE DE CONVERSION INTERACTIVE KG <-> LBS */}
+      <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
+        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
-              <Scale className="mr-2 h-5 w-5" /> Conversion Lbs
+              <Scale className="mr-2 h-5 w-5" /> Conversion
             </DialogTitle>
           </DialogHeader>
-          <div className="py-6 flex flex-col items-center">
-            <div className="flex items-center space-x-4">
-              <div className="text-center">
-                <div className="text-3xl font-black text-zinc-900 dark:text-zinc-100">{convertModal.weightKg}</div>
-                <div className="text-xs font-bold text-zinc-500 uppercase">kg</div>
+          <div className="py-6 space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs font-bold text-zinc-500">KILOGRAMMES</Label>
+                <Input 
+                  type="number" 
+                  value={convertModal.kgValue} 
+                  onChange={(e) => {
+                    const kg = e.target.value;
+                    setConvertModal({ show: true, kgValue: kg, lbsValue: kg ? (parseFloat(kg) * 2.20462).toFixed(1) : "" });
+                  }} 
+                  className="font-black text-xl text-center h-14 bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800" 
+                  placeholder="0"
+                />
               </div>
-              <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700" />
-              <div className="text-center">
-                <div className="text-3xl font-black text-teal-500">{(convertModal.weightKg * 2.20462).toFixed(1)}</div>
-                <div className="text-xs font-bold text-teal-500/70 uppercase">lbs</div>
+              <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700 mt-4 shrink-0" />
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs font-bold text-teal-600 dark:text-teal-500">POUNDS (LBS)</Label>
+                <Input 
+                  type="number" 
+                  value={convertModal.lbsValue} 
+                  onChange={(e) => {
+                    const lbs = e.target.value;
+                    setConvertModal({ show: true, lbsValue: lbs, kgValue: lbs ? (parseFloat(lbs) / 2.20462).toFixed(1) : "" });
+                  }} 
+                  className="font-black text-xl text-center text-teal-600 dark:text-teal-500 h-14 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800" 
+                  placeholder="0"
+                />
               </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ POINT 3 : LE SUPER-SWAP (Modale étendue) */}
+      {/* 🛡️ POINT 3 : LE SUPER-SWAP (Modale étendue avec UI Builder) */}
       <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
         <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">

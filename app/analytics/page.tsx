@@ -39,13 +39,12 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       endDate.setHours(23, 59, 59, 999);
     }
   } else {
-    startDate.setFullYear(startDate.getFullYear() - 5); // Fallback "All Time"
+    startDate.setFullYear(startDate.getFullYear() - 5); 
   }
 
   const startDateStr = startDate.toISOString().split('T')[0];
   const endDateStr = endDate.toISOString().split('T')[0];
 
-  // 🛡️ SCALING : Déportation massive de la charge vers le serveur (RPC)
   const [
     { data: measurements }, 
     { data: library }, 
@@ -54,7 +53,7 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     { data: sleepLogs }
   ] = await Promise.all([
     supabase.from("measurements").select("created_at, weight_kg, body_fat_percentage, arms_cm, chest_cm, waist_cm, thighs_cm").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: true }),
-    supabase.from("exercise_library").select("id, name"),
+    supabase.from("exercise_library").select("id, name, target_muscle"),
     supabase.rpc('get_analytics_payload', { p_user_id: user.id, p_start_date: startDateStr, p_end_date: endDateStr }),
     supabase.rpc('get_dashboard_metrics', { p_user_id: user.id }),
     supabase.from('daily_metrics').select('date, readiness_score').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true })
@@ -82,7 +81,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     })).filter(m => m.arms || m.chest || m.waist || m.thighs);
   }
 
-  // Historique du Sommeil et du Readiness Score
   const readinessHistory = (sleepLogs || []).map((log: any) => ({
     date: new Date(log.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }),
     score: log.readiness_score
@@ -95,10 +93,10 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   let availableList: {id: string, name: string}[] = [];
   const muscleDistribution: Record<string, number> = { Chest: 0, Back: 0, Legs: 0, Arms: 0, Shoulders: 0, Core: 0 };
 
-  const libMap: Record<string, string> = {};
-  if (library) library.forEach((ex: any) => libMap[ex.id] = ex.name);
+  // 🛡️ CORRECTION RADAR ANALYTICS : Utilisation de target_muscle
+  const libMap: Record<string, any> = {};
+  if (library) library.forEach((ex: any) => libMap[ex.id] = ex);
 
-  // 🛡️ TRAITEMENT RAPIDE DU PAYLOAD SERVEUR (RPC)
   if (rpcData) {
     rpcData.volume_by_date?.forEach((v: any) => {
       const d = new Date(v.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
@@ -111,9 +109,9 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       exData[r.exercise_id].push({ date: d, e1RM: Number(r.e1rm).toFixed(1), weight: r.weight, reps: r.reps });
       exSet.add(r.exercise_id);
 
-      const exName = libMap[r.exercise_id];
-      if (exName) {
-        const nameLower = exName.toLowerCase();
+      const exObj = libMap[r.exercise_id];
+      if (exObj) {
+        const nameLower = exObj.name.toLowerCase();
         if (nameLower.includes("squat barre")) best1RMs["Squat"] = Math.max(best1RMs["Squat"], r.e1rm);
         else if (nameLower.includes("couché barre") || nameLower.includes("bench press")) best1RMs["Bench"] = Math.max(best1RMs["Bench"], r.e1rm);
         else if (nameLower.includes("terre classique") || nameLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], r.e1rm);
@@ -121,19 +119,19 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     });
 
     rpcData.muscle_distribution?.forEach((m: any) => {
-      const exName = libMap[m.exercise_id];
-      if (exName) {
-        const nameLower = exName.toLowerCase();
-        if (nameLower.includes("squat") || nameLower.includes("leg") || nameLower.includes("presse") || nameLower.includes("fente")) muscleDistribution.Legs += m.tonnage;
-        else if (nameLower.includes("couché") || nameLower.includes("pec") || nameLower.includes("bench") || nameLower.includes("écarté")) muscleDistribution.Chest += m.tonnage;
-        else if (nameLower.includes("traction") || nameLower.includes("row") || nameLower.includes("tirage") || nameLower.includes("dos") || nameLower.includes("terre") || nameLower.includes("deadlift")) muscleDistribution.Back += m.tonnage;
-        else if (nameLower.includes("curl") || nameLower.includes("triceps") || nameLower.includes("biceps") || nameLower.includes("bras")) muscleDistribution.Arms += m.tonnage;
-        else if (nameLower.includes("militaire") || nameLower.includes("élévation") || nameLower.includes("épaule") || nameLower.includes("shoulder")) muscleDistribution.Shoulders += m.tonnage;
-        else if (nameLower.includes("crunch") || nameLower.includes("gainage") || nameLower.includes("abs")) muscleDistribution.Core += m.tonnage;
+      const exObj = libMap[m.exercise_id];
+      if (exObj && exObj.target_muscle) {
+        const target = exObj.target_muscle.toLowerCase();
+        if (target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe")) muscleDistribution.Legs += m.tonnage;
+        else if (target.includes("pec")) muscleDistribution.Chest += m.tonnage;
+        else if (target.includes("dos") || target.includes("dorsal") || target.includes("rhomboïde") || target.includes("trapèze") || target.includes("lombaire")) muscleDistribution.Back += m.tonnage;
+        else if (target.includes("épaule") || target.includes("delto")) muscleDistribution.Shoulders += m.tonnage;
+        else if (target.includes("biceps") || target.includes("triceps") || target.includes("bras")) muscleDistribution.Arms += m.tonnage;
+        else if (target.includes("abdo") || target.includes("core") || target.includes("gainage") || target.includes("transverse") || target.includes("oblique") || target.includes("sangle")) muscleDistribution.Core += m.tonnage;
       }
     });
 
-    availableList = Array.from(exSet).map(id => ({ id, name: libMap[id] || "Exercice" }));
+    availableList = Array.from(exSet).map(id => ({ id, name: libMap[id]?.name || "Exercice" }));
     availableList.sort((a, b) => a.name.localeCompare(b.name));
   }
   

@@ -8,9 +8,9 @@ import { toPng } from "html-to-image";
 import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight, Scale, Filter, Activity } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/lib/useLanguage";
 import { awardWorkoutXP } from "@/lib/gamification-engine";
 import AudioHapticTimer from "@/components/AudioHapticTimer";
@@ -124,8 +124,9 @@ export default function ActiveWorkoutSession() {
   const { lang } = useLanguage();
 
   const [sessionKey] = useState(`session-${params.id}-${Date.now()}`);
+  const storageKey = `vivex_tracker_${params.id}`;
   
-  const { data, error, isLoading } = useSWR(sessionKey, () => fetchActiveSession(params.id as string), { 
+  const { data, error, mutate, isLoading } = useSWR(sessionKey, () => fetchActiveSession(params.id as string), { 
     revalidateOnFocus: false,
     keepPreviousData: true 
   });
@@ -145,7 +146,6 @@ export default function ActiveWorkoutSession() {
   const [showRpeModal, setShowRpeModal] = useState(false);
   const [sessionRpe, setSessionRpe] = useState(7);
   
-  // 🛡️ POINT 2 : STATE DU CONVERTISSEUR INTERACTIF
   const [convertModal, setConvertModal] = useState({ show: false, kgValue: "", lbsValue: "" });
 
   const [showBreathingModal, setShowBreathingModal] = useState(false);
@@ -155,7 +155,6 @@ export default function ActiveWorkoutSession() {
   const [errorModal, setErrorModal] = useState({ show: false, title: "", message: "" });
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   
-  // 🛡️ NOUVEAUX STATES SUPER-SWAP
   const [swapModal, setSwapModal] = useState({ show: false, weId: "", currentEx: null as any, alternatives: [] as any[] });
   const [swapLoading, setSwapLoading] = useState(false);
   const [searchSwapQuery, setSearchSwapQuery] = useState("");
@@ -166,6 +165,7 @@ export default function ActiveWorkoutSession() {
 
   const stravaCardRef = useRef<HTMLDivElement>(null);
 
+  // 🛡️ PHASE 1 : WAKELOCK API
   useEffect(() => {
     let wakeLock: any = null;
     const requestWakeLock = async () => {
@@ -188,14 +188,39 @@ export default function ActiveWorkoutSession() {
     };
   }, [isWorkoutUnlocked]);
 
+  // 🛡️ PHASE 1 : RESTAURATION DE L'ÉTAT LOCAL (ANTI-CRASH)
   useEffect(() => {
     if (data && Object.keys(inputs).length === 0) {
-      setInputs(data.initialInputs);
-      setCompletedSets({}); 
+      const savedState = localStorage.getItem(storageKey);
+      if (savedState) {
+        try {
+          const parsed = JSON.parse(savedState);
+          setInputs(parsed.inputs || data.initialInputs);
+          setCompletedSets(parsed.completedSets || {});
+          setIsWorkoutUnlocked(parsed.isWorkoutUnlocked || false);
+        } catch (e) {
+          setInputs(data.initialInputs);
+          setCompletedSets({});
+        }
+      } else {
+        setInputs(data.initialInputs);
+        setCompletedSets({}); 
+      }
       const stepsCount = getSessionInsights(data.sessionData.workout_exercises, lang).warmup.length;
       setWarmupChecks(new Array(stepsCount).fill(false));
     }
-  }, [data, lang, inputs]);
+  }, [data, lang, inputs, storageKey]);
+
+  // 🛡️ PHASE 1 : SAUVEGARDE DE L'ÉTAT LOCAL À CHAQUE MODIFICATION
+  useEffect(() => {
+    if (Object.keys(inputs).length > 0) {
+      localStorage.setItem(storageKey, JSON.stringify({
+        inputs,
+        completedSets,
+        isWorkoutUnlocked
+      }));
+    }
+  }, [inputs, completedSets, isWorkoutUnlocked, storageKey]);
 
   useEffect(() => {
     if (restTimer === null || restTimer <= 0) return;
@@ -370,6 +395,9 @@ export default function ActiveWorkoutSession() {
       isOfflineSaved = true;
     }
 
+    // 🛡️ PHASE 1 : PURGE DU CACHE LOCAL DE LA SÉANCE
+    localStorage.removeItem(storageKey);
+
     setSessionStats({ duration: durMins, tonnage: calcTonnage, bestSet: bestSetStr, xpEarned, leveledUp, isReplay, isOffline: isOfflineSaved });
     setRestTimer(null);
     setShowBreathingModal(true);
@@ -407,7 +435,7 @@ export default function ActiveWorkoutSession() {
     }
   };
 
-  // 🛡️ POINT 3 : LE SUPER-SWAP (Chargement)
+  // 🛡️ PHASE 1 : LE SUPER-SWAP (Chargement)
   const openSwapModal = async (weId: string, currentEx: any) => {
     if (!data?.profile) return;
     setSwapLoading(true);
@@ -418,7 +446,6 @@ export default function ActiveWorkoutSession() {
     setSwapLoading(false);
   };
 
-  // 🛡️ POINT 3 : LE SUPER-SWAP (Filtrage)
   const filteredSwapAlternatives = swapModal.alternatives.filter(ex => {
     const matchSearch = ex.name.toLowerCase().includes(searchSwapQuery.toLowerCase());
     const target = ex.target_muscle.toLowerCase();
@@ -452,18 +479,16 @@ export default function ActiveWorkoutSession() {
       else if (selectedSwapEquipment === "home_gym") matchEquipment = eqLow.includes("home_gym") || eqLow.includes("kettlebell");
     }
 
-    const userEq = data?.profile?.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : [];
-    const matchProfileEq = userEq.length === 0 || userEq.includes(ex.equipment_required);
-
-    return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment && matchProfileEq;
+    return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment;
   });
 
+  // 🛡️ PHASE 1 : SWR MUTATION PURE - PLUS DE RECHARGEMENT ABRUPT
   const confirmSwap = async (newEx: any) => {
     try {
       const { error } = await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
       if (error) throw new Error(error.message);
-      
-      window.location.reload();
+      await mutate(); 
+      setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] });
     } catch (error: any) {
       alert("Erreur lors du remplacement : " + error.message);
     }
@@ -571,6 +596,7 @@ export default function ActiveWorkoutSession() {
                             <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
                             {renderStars(ex.cns_impact)}
                           </div>
+                          {/* 🛡️ GHOST MODE */}
                           {ghost && (
                             <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1 opacity-80">
                               👻 {txt.ghost} : {ghost.weight}kg × {ghost.reps}
@@ -591,6 +617,7 @@ export default function ActiveWorkoutSession() {
                         <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
                           <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
                           
+                          {/* CALCULATEUR DE DISQUES */}
                           {we.recommended_weight > 20 && (
                             <button onClick={(e) => { e.stopPropagation(); setPlateModal({ show: true, weight: we.recommended_weight }); }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors">
                               <Calculator className="w-3 h-3 text-teal-700 dark:text-teal-400" />
@@ -599,10 +626,11 @@ export default function ActiveWorkoutSession() {
                         </div>
                       )}
                       
-                      {/* 🛡️ POINT 2 : Convertisseur Interactif TOUJOURS ACCESSIBLE */}
+                      {/* 🛡️ POINT 2 : LE BOUTON BALANCE TOUJOURS LÀ */}
                       <button onClick={(e) => { 
                         e.stopPropagation(); 
-                        setConvertModal({ show: true, kgValue: we.recommended_weight > 0 ? we.recommended_weight.toString() : "", lbsValue: we.recommended_weight > 0 ? (we.recommended_weight * 2.20462).toFixed(1) : "" }); 
+                        const initKg = we.recommended_weight > 0 ? we.recommended_weight.toString() : "";
+                        setConvertModal({ show: true, kgValue: initKg, lbsValue: initKg ? (parseFloat(initKg) * 2.20462).toFixed(1) : "" }); 
                       }} className="p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer" title="Convertisseur">
                         <Scale className="w-4 h-4" />
                       </button>
@@ -641,7 +669,7 @@ export default function ActiveWorkoutSession() {
 
       <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
 
-      {/* 🛡️ MODALE DU SUPER-SWAP */}
+      {/* 🛡️ POINT 3 : LE SUPER-SWAP (Modale étendue avec UI Builder) */}
       <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
         <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
@@ -793,7 +821,7 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ MODALE DE CONVERSION INTERACTIVE KG <-> LBS */}
+      {/* 🛡️ POINT 2 : MODALE DE CONVERSION INTERACTIVE KG <-> LBS */}
       <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
         <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
