@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Utensils, Droplets, Plus, Flame, Play, CheckCircle2, Activity, ChevronRight } from "lucide-react";
+import { Utensils, Droplets, Plus, Flame, Play, CheckCircle2, Activity, ChevronRight, Trash2, History, Scale, ShieldCheck, Pill, Apple, Brain, XCircle } from "lucide-react";
 import { calculateAge, calculateBMR, calculateTDEE, calculateTargetCalories, calculateMacros } from "@/lib/fitness";
 import { useLanguage } from "@/lib/useLanguage";
 import { calculateRecipePortions } from "@/lib/nutrition-engine";
@@ -39,21 +39,14 @@ const fetchNutritionData = async () => {
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
   const today = new Date().toISOString().split('T')[0];
 
-  let dailyLog = null;
+  let { data: dailyLog } = await supabase.from("daily_nutrition_logs").select("*").eq("user_id", user.id).eq("date", today).maybeSingle();
   
-  try {
-    const { data: existingLog } = await supabase.from("daily_nutrition_logs").select("*").eq("user_id", user.id).eq("date", today).maybeSingle();
-    if (!existingLog) {
-      const { data: newLog } = await supabase.from("daily_nutrition_logs").insert([{ user_id: user.id, date: today }]).select().maybeSingle();
-      dailyLog = newLog;
-    } else {
-      dailyLog = existingLog;
-    }
-  } catch (error) {
-    console.error("Erreur DB Log Nutrition:", error);
+  if (!dailyLog) {
+    const { data: newLog } = await supabase.from("daily_nutrition_logs").insert([{ user_id: user.id, date: today }]).select().maybeSingle();
+    dailyLog = newLog;
   }
 
-  // 🛡️ SAFETY NET ABSOLU : Si Supabase échoue, on simule une journée vide
+  // 🛡️ SAFETY NET ABSOLU POUR EMPÊCHER LE CRASH "log is null"
   const safeLog = dailyLog || {
     id: "temp_log",
     total_kcal: 0, total_prot: 0, total_carbs: 0, total_fats: 0, total_fibers: 0,
@@ -97,23 +90,23 @@ export default function NutritionPage() {
   const [qaFat, setQaFat] = useState("");
 
   if (isLoading || !data) {
-    return <div className="p-8 text-center font-bold text-teal-500 animate-pulse">Chargement de la Matrice Nutritionnelle...</div>;
+    return <div className="p-8 text-center font-bold text-teal-500 animate-pulse">Chargement de l'Autopilote...</div>;
   }
 
   const t = {
-    FR: { title: "Nutrition", sub: "Autopilote Métabolique & Chrononutrition.", cals: "Kcal", prot: "Prot", carb: "Gluc", fat: "Lip", fib: "Fibres", add: "Ajout Rapide", selectMeal: "Choisissez un protocole", solve: "Calculer mes portions", genMenu: "Générer", cook: "Cuisiner & Valider", success: "Repas validé avec succès !" },
-    EN: { title: "Nutrition", sub: "Metabolic Autopilot & Chrononutrition.", cals: "Kcal", prot: "Pro", carb: "Carbs", fat: "Fat", fib: "Fiber", add: "Quick Add", selectMeal: "Select a protocol", solve: "Calculate my portions", genMenu: "Generate", cook: "Cook & Log", success: "Meal successfully logged!" }
+    FR: { title: "Nutrition", sub: "Autopilote Métabolique & Chrononutrition.", cals: "Kcal", prot: "Prot", carb: "Gluc", fat: "Lip", fib: "Fibres", add: "Ajout Rapide", selectMeal: "Choisissez un protocole", solve: "Calculer mes portions", genMenu: "Générer", cook: "Cuisiner & Valider", history: "Repas Consommés", emptyHist: "Aucun repas enregistré aujourd'hui." },
+    EN: { title: "Nutrition", sub: "Metabolic Autopilot & Chrononutrition.", cals: "Kcal", prot: "Pro", carb: "Carbs", fat: "Fat", fib: "Fiber", add: "Quick Add", selectMeal: "Select a protocol", solve: "Calculate my portions", genMenu: "Generate", cook: "Cook & Log", history: "Consumed Meals", emptyHist: "No meals logged today." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
-  // 🛡️ DOUBLE VÉRIFICATION DE SÉCURITÉ
-  const log = data?.dailyLog || { total_kcal: 0, total_prot: 0, total_carbs: 0, total_fats: 0, total_fibers: 0, logged_meals: [] };
-  const tgs = data?.targets || { calories: 2000, protein: 150, carbs: 200, fat: 60, fibers: 30 };
+  const log = data.dailyLog || { total_kcal: 0, total_prot: 0, total_carbs: 0, total_fats: 0, total_fibers: 0, logged_meals: [] };
+  const tgs = data.targets;
+  const loggedMealsList = log.logged_meals || [];
 
   const handleQuickAdd = async () => {
     const k = parseFloat(qaKcal)||0; const p = parseFloat(qaProt)||0; const c = parseFloat(qaCarb)||0; const f = parseFloat(qaFat)||0;
-    const newMeal = { title: qaName || "Repas Libre", kcal: k, protein: p, carbs: c, fats: f, fiber: 0 };
-    const updatedMeals = [...(log.logged_meals || []), newMeal];
+    const newMeal = { title: qaName || "Repas Libre", kcal: k, protein: p, carbs: c, fats: f, fiber: 0, id: Date.now().toString() };
+    const updatedMeals = [...loggedMealsList, newMeal];
     
     if (log.id !== "temp_log") {
       await supabase.from("daily_nutrition_logs").update({
@@ -123,7 +116,49 @@ export default function NutritionPage() {
       }).eq("id", log.id);
     }
     
+    setQaName(""); setQaKcal(""); setQaProt(""); setQaCarb(""); setQaFat("");
     setQuickAddModal(false);
+    mutate();
+  };
+
+  const confirmAndLogRecipe = async () => {
+    if (!recipeModal || log.id === "temp_log") return;
+    const m = recipeModal.macros;
+    const newMeal = { 
+      id: Date.now().toString(),
+      title: lang === 'FR' ? recipeModal.recipe.title_fr : recipeModal.recipe.title_en, 
+      image_emoji: recipeModal.recipe.image_emoji,
+      ...m 
+    };
+    const updatedMeals = [...loggedMealsList, newMeal];
+    
+    await supabase.from("daily_nutrition_logs").update({
+      total_kcal: (log.total_kcal || 0) + m.kcal, total_prot: (log.total_prot || 0) + m.protein,
+      total_carbs: (log.total_carbs || 0) + m.carbs, total_fats: (log.total_fats || 0) + m.fats,
+      total_fibers: (log.total_fibers || 0) + m.fiber, logged_meals: updatedMeals
+    }).eq("id", log.id);
+    
+    setRecipeModal(null); setActiveMealType(null);
+    mutate();
+  };
+
+  // 🛡️ NOUVEAU : FONCTION DE SUPPRESSION D'UN REPAS (Remboursement des macros)
+  const handleRemoveMeal = async (mealId: string) => {
+    if (log.id === "temp_log") return;
+    const mealToRemove = loggedMealsList.find((m: any) => m.id === mealId);
+    if (!mealToRemove) return;
+
+    const updatedMeals = loggedMealsList.filter((m: any) => m.id !== mealId);
+
+    await supabase.from("daily_nutrition_logs").update({
+      total_kcal: Math.max(0, (log.total_kcal || 0) - mealToRemove.kcal), 
+      total_prot: Math.max(0, (log.total_prot || 0) - mealToRemove.protein),
+      total_carbs: Math.max(0, (log.total_carbs || 0) - mealToRemove.carbs), 
+      total_fats: Math.max(0, (log.total_fats || 0) - mealToRemove.fats),
+      total_fibers: Math.max(0, (log.total_fibers || 0) - (mealToRemove.fiber || 0)), 
+      logged_meals: updatedMeals
+    }).eq("id", log.id);
+
     mutate();
   };
 
@@ -141,24 +176,8 @@ export default function NutritionPage() {
     }
   };
 
-  const confirmAndLogRecipe = async () => {
-    if (!recipeModal || log.id === "temp_log") return;
-    const m = recipeModal.macros;
-    const newMeal = { title: lang === 'FR' ? recipeModal.recipe.title_fr : recipeModal.recipe.title_en, ...m };
-    const updatedMeals = [...(log.logged_meals || []), newMeal];
-    
-    await supabase.from("daily_nutrition_logs").update({
-      total_kcal: (log.total_kcal || 0) + m.kcal, total_prot: (log.total_prot || 0) + m.protein,
-      total_carbs: (log.total_carbs || 0) + m.carbs, total_fats: (log.total_fats || 0) + m.fats,
-      total_fibers: (log.total_fibers || 0) + m.fiber, logged_meals: updatedMeals
-    }).eq("id", log.id);
-    
-    setRecipeModal(null); setActiveMealType(null);
-    mutate();
-  };
-
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full pb-24">
+    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
@@ -166,7 +185,7 @@ export default function NutritionPage() {
           </h2>
           <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
         </div>
-        <Button onClick={() => setQuickAddModal(true)} className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold rounded-full">
+        <Button onClick={() => setQuickAddModal(true)} className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold rounded-full shadow-md">
           <Plus className="w-4 h-4 mr-2" /> {txt.add}
         </Button>
       </div>
@@ -188,52 +207,95 @@ export default function NutritionPage() {
         </CardContent>
       </Card>
 
-      <div className="space-y-4 relative">
-        <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-zinc-200 dark:bg-zinc-800"></div>
+      {/* 🛡️ NOUVELLE DISPOSITION : 2 COLONNES (Timeline à gauche, Historique à droite) */}
+      <div className="grid lg:grid-cols-2 gap-8">
         
-        {Object.entries(data.mealDistribution).map(([type, info]: any) => {
-          const targetKcal = Math.round(tgs.calories * info.pct);
+        {/* COLONNE GAUCHE : CHRONONUTRITION */}
+        <div className="space-y-4 relative">
+          <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100 mb-4 ml-2">Programme du Jour</h3>
+          <div className="absolute left-6 top-14 bottom-4 w-0.5 bg-zinc-200 dark:bg-zinc-800"></div>
+          
+          {Object.entries(data.mealDistribution).map(([type, info]: any) => {
+            const targetKcal = Math.round(tgs.calories * info.pct);
+            return (
+              <div key={type} className="relative pl-14">
+                <div className="absolute left-4 top-5 w-4 h-4 rounded-full border-4 border-white dark:border-zinc-950 bg-teal-500 shadow-sm"></div>
+                <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm hover:border-teal-500/30 transition-colors">
+                  <CardHeader className="py-4 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-lg font-black dark:text-zinc-100">{lang === 'FR' ? info.labelFR : info.labelEN}</CardTitle>
+                      <CardDescription className="font-bold text-teal-600 dark:text-teal-400">Cible : ~{targetKcal} kcal</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setActiveMealType(activeMealType === type ? null : type)} className="font-bold border-teal-500 text-teal-600 hover:bg-teal-50">
+                      <Utensils className="w-4 h-4 mr-2" /> {txt.genMenu}
+                    </Button>
+                  </CardHeader>
+                  {activeMealType === type && (
+                    <CardContent className="pt-0 border-t border-zinc-100 dark:border-zinc-800 mt-4 py-4 bg-zinc-50 dark:bg-zinc-950/50">
+                      <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-3">{txt.selectMeal}</h4>
+                      {data.recipes.length === 0 ? (
+                        <p className="text-sm font-bold text-zinc-500">Base de données vide. Veuillez injecter le script SQL.</p>
+                      ) : (
+                        <div className="grid gap-3">
+                          {data.recipes.filter((r: any) => r.meal_type === type).map((recipe: any) => (
+                            <button key={recipe.id} onClick={() => openRecipeSolver(recipe.id, type)} disabled={isSolving} className="text-left flex items-center p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-teal-500 transition-all shadow-sm">
+                              <span className="text-3xl mr-4">{recipe.image_emoji}</span>
+                              <div className="flex-1">
+                                <span className="block font-bold text-sm text-zinc-900 dark:text-zinc-100">{lang === 'FR' ? recipe.title_fr : recipe.title_en}</span>
+                                <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-widest mt-1 block">{recipe.prep_time_min} min • {recipe.is_supplement ? "Supplément" : "Whole Food"}</span>
+                              </div>
+                              <ChevronRight className="w-5 h-5 text-zinc-400" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              </div>
+            );
+          })}
+        </div>
 
-          return (
-            <div key={type} className="relative pl-14">
-              <div className="absolute left-4 top-5 w-4 h-4 rounded-full border-4 border-white dark:border-zinc-950 bg-teal-500 shadow-sm"></div>
-              <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
-                <CardHeader className="py-4 flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg font-black dark:text-zinc-100">{lang === 'FR' ? info.labelFR : info.labelEN}</CardTitle>
-                    <CardDescription className="font-bold text-teal-600 dark:text-teal-400">Cible : ~{targetKcal} kcal</CardDescription>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => setActiveMealType(activeMealType === type ? null : type)} className="font-bold border-teal-500 text-teal-600 hover:bg-teal-50">
-                    <Utensils className="w-4 h-4 mr-2" /> {txt.genMenu}
-                  </Button>
-                </CardHeader>
-                {activeMealType === type && (
-                  <CardContent className="pt-0 border-t border-zinc-100 dark:border-zinc-800 mt-4 py-4 bg-zinc-50 dark:bg-zinc-950/50">
-                    <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-3">{txt.selectMeal}</h4>
-                    {data.recipes.length === 0 ? (
-                      <p className="text-sm font-bold text-zinc-500">Base de données vide. Veuillez injecter le script SQL.</p>
-                    ) : (
-                      <div className="grid sm:grid-cols-2 gap-3">
-                        {data.recipes.filter((r: any) => r.meal_type === type).map((recipe: any) => (
-                          <button key={recipe.id} onClick={() => openRecipeSolver(recipe.id, type)} disabled={isSolving} className="text-left flex items-center p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-teal-500 transition-all shadow-sm">
-                            <span className="text-2xl mr-3">{recipe.image_emoji}</span>
-                            <div className="flex-1">
-                              <span className="block font-bold text-sm text-zinc-900 dark:text-zinc-100">{lang === 'FR' ? recipe.title_fr : recipe.title_en}</span>
-                              <span className="text-[10px] text-zinc-500 font-medium">{recipe.prep_time_min} min • {recipe.is_supplement ? "Supplément" : "Whole Food"}</span>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-zinc-400" />
-                          </button>
-                        ))}
+        {/* COLONNE DROITE : LA "BOX" HISTORIQUE */}
+        <div>
+          <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100 mb-4 flex items-center">
+            <History className="w-5 h-5 mr-2 text-indigo-500" /> {txt.history}
+          </h3>
+          <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 min-h-[300px]">
+            {loggedMealsList.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-zinc-400 opacity-60 pt-12">
+                <Utensils className="w-12 h-12 mb-2" />
+                <p className="font-bold">{txt.emptyHist}</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {loggedMealsList.map((meal: any) => (
+                  <div key={meal.id} className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-3 rounded-xl flex items-center justify-between shadow-sm group hover:border-indigo-500 transition-colors">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center text-xl shrink-0">
+                        {meal.image_emoji || "🍽️"}
                       </div>
-                    )}
-                  </CardContent>
-                )}
-              </Card>
-            </div>
-          );
-        })}
+                      <div>
+                        <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm line-clamp-1">{meal.title}</h4>
+                        <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">
+                          {Math.round(meal.kcal)} kcal • {Math.round(meal.protein)}g P
+                        </p>
+                      </div>
+                    </div>
+                    <button onClick={() => handleRemoveMeal(meal.id)} className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
 
+      {/* MODALE DU SOLVEUR (Recette détaillée) */}
       <Dialog open={recipeModal !== null} onOpenChange={(open) => !open && setRecipeModal(null)}>
         <DialogContent className="sm:max-w-[500px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[90vh] overflow-y-auto">
           {recipeModal && (
@@ -241,7 +303,7 @@ export default function NutritionPage() {
               <DialogHeader>
                 <div className="flex justify-center mb-4"><span className="text-6xl drop-shadow-md">{recipeModal.recipe.image_emoji}</span></div>
                 <DialogTitle className="text-2xl font-black text-center dark:text-zinc-100">{lang === 'FR' ? recipeModal.recipe.title_fr : recipeModal.recipe.title_en}</DialogTitle>
-                <DialogDescription className="text-center font-bold text-teal-600 bg-teal-50 dark:bg-teal-900/20 py-2 rounded-lg mt-2 mx-8">
+                <DialogDescription className="text-center font-bold text-teal-600 bg-teal-50 dark:bg-teal-900/20 py-2 rounded-lg mt-2 mx-8 shadow-sm">
                   {recipeModal.macros.kcal} kcal • {recipeModal.macros.protein}g P • {recipeModal.macros.carbs}g G • {recipeModal.macros.fats}g L
                   <span className="block text-xs mt-1 text-purple-500">+ {recipeModal.macros.fiber}g Fibres</span>
                 </DialogDescription>
@@ -252,9 +314,9 @@ export default function NutritionPage() {
                   <h4 className="font-black text-sm uppercase tracking-widest text-zinc-500 mb-3 border-b border-zinc-100 dark:border-zinc-800 pb-2">Ingrédients Calculés</h4>
                   <ul className="space-y-2">
                     {recipeModal.ingredients.map((ing: any, i: number) => (
-                      <li key={i} className="flex justify-between items-center text-sm font-bold dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-900 p-2 rounded-md">
+                      <li key={i} className="flex justify-between items-center text-sm font-bold dark:text-zinc-200 bg-zinc-50 dark:bg-zinc-900 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-800">
                         <span>{lang === 'FR' ? ing.name_fr : ing.name_en}</span>
-                        <span className="text-teal-600 bg-teal-100 dark:bg-teal-900/40 px-2 py-0.5 rounded">{ing.grams} g</span>
+                        <span className="text-teal-700 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/40 px-2.5 py-1 rounded-md">{ing.grams} g</span>
                       </li>
                     ))}
                   </ul>
@@ -262,11 +324,11 @@ export default function NutritionPage() {
                 
                 <div>
                   <h4 className="font-black text-sm uppercase tracking-widest text-zinc-500 mb-3 border-b border-zinc-100 dark:border-zinc-800 pb-2">Préparation</h4>
-                  <ol className="space-y-3">
+                  <ol className="space-y-4">
                     {(lang === 'FR' ? recipeModal.recipe.instructions_fr : recipeModal.recipe.instructions_en).map((step: string, i: number) => (
-                      <li key={i} className="flex space-x-3 text-sm font-medium dark:text-zinc-300">
-                        <span className="font-black text-teal-500 shrink-0">{i + 1}.</span>
-                        <span>{step}</span>
+                      <li key={i} className="flex space-x-3 text-sm font-medium dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                        <span className="font-black text-teal-500 shrink-0 bg-teal-50 dark:bg-teal-900/30 w-6 h-6 flex items-center justify-center rounded-full">{i + 1}</span>
+                        <span className="leading-relaxed">{step}</span>
                       </li>
                     ))}
                   </ol>
@@ -274,7 +336,7 @@ export default function NutritionPage() {
               </div>
               
               <DialogFooter>
-                <Button onClick={confirmAndLogRecipe} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-black h-12 text-lg">
+                <Button onClick={confirmAndLogRecipe} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-black h-12 text-lg shadow-lg shadow-teal-500/20">
                   <Play className="w-5 h-5 mr-2" /> {txt.cook}
                 </Button>
               </DialogFooter>
@@ -283,6 +345,7 @@ export default function NutritionPage() {
         </DialogContent>
       </Dialog>
 
+      {/* MODALE D'AJOUT RAPIDE */}
       <Dialog open={quickAddModal} onOpenChange={setQuickAddModal}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader><DialogTitle className="dark:text-zinc-100 flex items-center"><Plus className="w-5 h-5 mr-2 text-teal-500" /> {txt.add}</DialogTitle></DialogHeader>

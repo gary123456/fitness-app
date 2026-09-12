@@ -7,7 +7,6 @@ export interface MacroTarget {
 }
 
 export async function calculateRecipePortions(recipeId: string, target: MacroTarget) {
-  // 1. Récupération de la recette et de la composition des aliments
   const { data: recipeData, error } = await supabase
     .from('nutrition_recipes')
     .select(`
@@ -23,6 +22,12 @@ export async function calculateRecipePortions(recipeId: string, target: MacroTar
   if (error || !recipeData) throw new Error("Recette introuvable.");
 
   const ingredients = recipeData.recipe_ingredients;
+  
+  // 🛡️ SÉCURITÉ : Si la matrice de liaison est vide
+  if (!ingredients || ingredients.length === 0) {
+    throw new Error("⚠️ Matrice vide : Cette recette n'a pas encore ses ingrédients assignés dans la base de données.");
+  }
+
   let computedIngredients = [];
   let totalKcal = 0;
   let totalProt = 0;
@@ -32,40 +37,39 @@ export async function calculateRecipePortions(recipeId: string, target: MacroTar
 
   for (const item of ingredients) {
     const ing = item.nutrition_ingredients;
+    if (!ing) continue;
+
+    // Forcer la conversion en nombre (Supabase renvoie parfois des Strings pour les NUMERIC)
+    const prot_100g = parseFloat(ing.prot_per_100g) || 0;
+    const carb_100g = parseFloat(ing.carb_per_100g) || 0;
+    const fat_100g = parseFloat(ing.fat_per_100g) || 0;
+    const fiber_100g = parseFloat(ing.fiber_per_100g) || 0;
+    const kcal_100g = parseFloat(ing.kcal_per_100g) || 0;
+
     let computedGrams = 0;
 
-    // Calcul de l'ancre Protéine
-    if (item.is_protein_anchor) {
-      computedGrams = (target.protein / ing.prot_per_100g) * 100;
-    } 
-    // Calcul de l'ancre Glucides
-    else if (item.is_carb_anchor) {
-      computedGrams = (target.carbs / ing.carb_per_100g) * 100;
-    } 
-    // Calcul de l'ancre Lipides
-    else if (item.is_fat_anchor) {
-      computedGrams = (target.fats / ing.fat_per_100g) * 100;
-    } 
-    // Aliments de volume et de fibres (Légumes) calculés proportionnellement
-    else if (item.is_free_food) {
-      // Si la cible calorique du repas est haute (ex: gros dîner), on scale les légumes
+    if (item.is_protein_anchor && prot_100g > 0) {
+      computedGrams = (target.protein / prot_100g) * 100;
+    } else if (item.is_carb_anchor && carb_100g > 0) {
+      computedGrams = (target.carbs / carb_100g) * 100;
+    } else if (item.is_fat_anchor && fat_100g > 0) {
+      computedGrams = (target.fats / fat_100g) * 100;
+    } else if (item.is_free_food) {
       computedGrams = Math.round(target.carbs * 2.5); 
-      if (computedGrams < 100) computedGrams = 100; // Minimum 100g de fibres
-    }
-    // Si l'ingrédient a un grammage fixe (Épices, Sauces)
-    else if (item.fixed_amount_g) {
-      computedGrams = item.fixed_amount_g;
+      if (computedGrams < 100) computedGrams = 100; 
+    } else if (item.fixed_amount_g) {
+      computedGrams = parseFloat(item.fixed_amount_g);
     }
 
     computedGrams = Math.round(computedGrams);
     if (computedGrams <= 0 && !item.is_free_food) computedGrams = 10;
 
     const r = computedGrams / 100;
-    totalProt += ing.prot_per_100g * r;
-    totalCarb += ing.carb_per_100g * r;
-    totalFat += ing.fat_per_100g * r;
-    totalFiber += (ing.fiber_per_100g || 0) * r;
-    totalKcal += ing.kcal_per_100g * r;
+    totalProt += prot_100g * r;
+    totalCarb += carb_100g * r;
+    totalFat += fat_100g * r;
+    totalFiber += fiber_100g * r;
+    totalKcal += kcal_100g * r;
 
     computedIngredients.push({
       name_fr: ing.name_fr,
