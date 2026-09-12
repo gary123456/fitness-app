@@ -10,8 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// 🛡️ CORRECTION : Imports de TOUTES les icônes nécessaires
-import { Utensils, Droplets, Plus, Flame, Play, Activity, ChevronRight, Trash2, History, Target, Search, Brain, XCircle, Database, Filter } from "lucide-react";
+import { Utensils, Plus, Flame, Play, Activity, ChevronRight, Trash2, History, Target, Search, Brain, XCircle, Filter, CalendarDays, Database } from "lucide-react";
 import { calculateAge, calculateBMR, calculateTDEE, calculateTargetCalories, calculateMacros } from "@/lib/fitness";
 import { useLanguage } from "@/lib/useLanguage";
 import { calculateRecipePortions } from "@/lib/nutrition-engine";
@@ -73,7 +72,6 @@ export default function NutritionPage() {
   const router = useRouter();
   const { lang } = useLanguage();
   
-  // 🛡️ TOUS LES HOOKS SONT APPELÉS EN HAUT, AUCUN RETURN CONDITIONNEL AVANT
   const { data, isLoading, mutate } = useSWR('nutritionData', fetchNutritionData);
 
   const [activeTab, setActiveTab] = useState<"autopilot" | "tracker">("autopilot");
@@ -97,7 +95,7 @@ export default function NutritionPage() {
   const [qaFat, setQaFat] = useState("");
 
   const units: Record<string, number> = {
-    "g": 1, "ml": 1, "c.à.s (15g)": 15, "c.à.c (5g)": 5, "scoop (30g)": 30, "poignée (20g)": 20, "cup (250g)": 250
+    "g": 1, "ml": 1, "c.à.s (15g)": 15, "c.à.c (5g)": 5, "scoop (30g)": 30, "poignée (20g)": 20, "cup (250g)": 250, "tranche (30g)": 30
   };
 
   const calculatedTrackerMacros = useMemo(() => {
@@ -124,31 +122,39 @@ export default function NutritionPage() {
     }
 
     if (activeCategory !== 'all') {
-      list = list.filter((i: any) => {
-        const p = parseFloat(i.prot_per_100g)||0; const c = parseFloat(i.carb_per_100g)||0; 
-        const f = parseFloat(i.fat_per_100g)||0; const k = parseFloat(i.kcal_per_100g)||0;
-        if (activeCategory === 'prot') return p > 12 && p > c && p > f;
-        if (activeCategory === 'carb') return c > 15 && c > p && f < 15;
-        if (activeCategory === 'fat') return f > 15 && f > p;
-        if (activeCategory === 'veg') return k < 60 && c < 15 && p < 10;
-        return true;
-      });
+      list = list.filter((i: any) => i.category === activeCategory);
     }
 
     if (qolFilter === 'high_prot') list = list.filter((i: any) => (parseFloat(i.prot_per_100g)||0) > 15);
     if (qolFilter === 'low_cal') list = list.filter((i: any) => (parseFloat(i.kcal_per_100g)||0) < 100);
     if (qolFilter === 'high_fiber') list = list.filter((i: any) => (parseFloat(i.fiber_per_100g)||0) > 5);
 
-    return list.slice(0, 50);
+    return list.slice(0, 100);
   }, [data?.ingredients, searchIng, activeCategory, qolFilter]);
 
-  // VALEURS PAR DÉFAUT SÉCURISÉES POUR NE JAMAIS CRASHER
-  const log = data?.dailyLog || { total_kcal: 0, total_prot: 0, total_carbs: 0, total_fats: 0, total_fibers: 0, logged_meals: [] };
-  const tgs = data?.targets || { calories: 2000, protein: 150, carbs: 200, fat: 60, fibers: 30 };
+  const getCurrentDateFormatted = () => {
+    const options: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' };
+    const dateStr = new Date().toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', options);
+    return dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+  };
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-safe flex items-center justify-center min-h-[50vh]">
+        <div className="text-center font-bold text-teal-500 animate-pulse flex flex-col items-center">
+          <Activity className="w-12 h-12 mb-4 animate-bounce" />
+          Chargement de l'Autopilote Métabolique...
+        </div>
+      </div>
+    );
+  }
+
+  const log = data.dailyLog || { total_kcal: 0, total_prot: 0, total_carbs: 0, total_fats: 0, total_fibers: 0, logged_meals: [] };
+  const tgs = data.targets;
   const loggedMealsList = log.logged_meals || [];
 
   const t = {
-    FR: { title: "Nutrition", sub: "Autopilote Métabolique & Chrononutrition.", cals: "Kcal", prot: "Prot", carb: "Gluc", fat: "Lip", fib: "Fibres", add: "Ajout Rapide", selectMeal: "Choisissez un protocole", solve: "Calculer mes portions", genMenu: "Générer", cook: "Cuisiner & Valider", history: "Repas Consommés", emptyHist: "Aucun repas enregistré aujourd'hui.", filterAll: "Tous", filterProt: "Protéines", filterCarb: "Glucides", filterFat: "Lipides", filterVeg: "Légumes", qolNone: "Sans filtre", qolHighProt: "High Protein (>15g)", qolLowCal: "Low Calorie (<100k)", qolFiber: "High Fiber (>5g)" },
+    FR: { title: "Nutrition", sub: "Autopilote Métabolique & Chrononutrition.", cals: "Kcal", prot: "Prot", carb: "Gluc", fat: "Lip", fib: "Fibres", add: "Ajout Rapide", selectMeal: "Choisissez un protocole", solve: "Calculer mes portions", genMenu: "Générer", cook: "Cuisiner & Valider", history: "Repas Consommés", emptyHist: "Aucun aliment enregistré aujourd'hui.", filterAll: "Tous", filterProt: "Protéines", filterCarb: "Glucides", filterFat: "Lipides", filterVeg: "Légumes", qolNone: "Sans filtre", qolHighProt: "High Protein (>15g)", qolLowCal: "Low Calorie (<100k)", qolFiber: "High Fiber (>5g)" },
     EN: { title: "Nutrition", sub: "Metabolic Autopilot & Chrononutrition.", cals: "Kcal", prot: "Pro", carb: "Carbs", fat: "Fat", fib: "Fiber", add: "Quick Add", selectMeal: "Select a protocol", solve: "Calculate my portions", genMenu: "Generate", cook: "Cook & Log", history: "Consumed Meals", emptyHist: "No meals logged today.", filterAll: "All", filterProt: "Proteins", filterCarb: "Carbs", filterFat: "Fats", filterVeg: "Veggies", qolNone: "No filter", qolHighProt: "High Protein (>15g)", qolLowCal: "Low Calorie (<100k)", qolFiber: "High Fiber (>5g)" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
@@ -255,26 +261,17 @@ export default function NutritionPage() {
     mutate();
   };
 
-  // 🛡️ L'ÉCRAN DE CHARGEMENT EST GÉRÉ ICI, À LA FIN, POUR NE PAS CASSER LES HOOKS
-  if (isLoading || !data) {
-    return (
-      <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-safe flex items-center justify-center min-h-[50vh]">
-        <div className="text-center font-bold text-teal-500 animate-pulse flex flex-col items-center">
-          <Activity className="w-12 h-12 mb-4 animate-bounce" />
-          Chargement de l'Autopilote Métabolique...
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-safe">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
+          <div className="flex items-center space-x-2 text-zinc-500 dark:text-zinc-400 mb-1">
+            <CalendarDays className="w-4 h-4" />
+            <span className="font-bold text-sm uppercase tracking-widest">{getCurrentDateFormatted()}</span>
+          </div>
           <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
             <Utensils className="w-8 h-8 mr-3 text-teal-500" /> Nutrition Élite
           </h2>
-          <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
         </div>
         
         <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl shadow-inner border border-zinc-200 dark:border-zinc-800 w-full sm:w-auto">
@@ -282,7 +279,7 @@ export default function NutritionPage() {
             <Brain className="w-4 h-4 inline mr-2" /> Autopilote
           </button>
           <button onClick={() => setActiveTab("tracker")} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === "tracker" ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
-            <Target className="w-4 h-4 inline mr-2" /> Tracker
+            <Target className="w-4 h-4 inline mr-2" /> Tracker Libre
           </button>
         </div>
       </div>
@@ -333,11 +330,10 @@ export default function NutritionPage() {
                     <div className="absolute left-4 top-5 w-4 h-4 rounded-full border-4 border-white dark:border-zinc-950 bg-teal-500 shadow-sm"></div>
                     <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm hover:border-teal-500/30 transition-colors">
                       <CardHeader className="py-4 flex flex-row items-center justify-between">
-                        <div>
+                        <div className="flex items-center">
                           <CardTitle className="text-lg font-black dark:text-zinc-100">{lang === 'FR' ? info.labelFR : info.labelEN}</CardTitle>
-                          <CardDescription className="font-bold text-teal-600 dark:text-teal-400">Cible IA : ~{targetKcal} kcal</CardDescription>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => setActiveMealType(activeMealType === distKey ? null : distKey)} className="font-bold border-teal-500 text-teal-600 hover:bg-teal-50">
+                        <Button size="sm" onClick={() => setActiveMealType(activeMealType === distKey ? null : distKey)} className="font-bold border-teal-500 bg-teal-50 text-teal-600 hover:bg-teal-500 hover:text-white dark:bg-teal-500/10 dark:text-teal-400">
                           <Utensils className="w-4 h-4 mr-2" /> {txt.genMenu}
                         </Button>
                       </CardHeader>
@@ -376,7 +372,7 @@ export default function NutritionPage() {
                   <CardTitle className="text-lg font-black text-indigo-600 dark:text-indigo-400 flex items-center">
                     <Database className="w-5 h-5 mr-2" /> Base de Données
                   </CardTitle>
-                  <Button size="sm" onClick={() => setQuickAddModal(true)} variant="outline" className="font-bold border-indigo-500 text-indigo-600 dark:text-indigo-400">
+                  <Button size="sm" onClick={() => setQuickAddModal(true)} variant="outline" className="font-bold border-indigo-500 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20">
                     <Plus className="w-4 h-4 mr-1" /> Manuel
                   </Button>
                 </div>
@@ -384,15 +380,21 @@ export default function NutritionPage() {
                 <div className="pt-4 space-y-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-3 w-5 h-5 text-zinc-400" />
-                    <Input placeholder="Poulet, Avoine, Sriracha..." value={searchIng} onChange={(e) => setSearchIng(e.target.value)} className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-700 h-12 pl-10 font-bold" />
+                    <Input placeholder="Rechercher (ex: Poulet, Avoine, Nutella...)" value={searchIng} onChange={(e) => setSearchIng(e.target.value)} className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-700 h-12 pl-10 font-bold" />
                   </div>
                   
+                  {/* SÉLECTEUR DE CATÉGORIES (Basé sur la BDD) */}
                   <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
-                    <button onClick={() => setActiveCategory('all')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'all' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterAll}</button>
-                    <button onClick={() => setActiveCategory('prot')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'prot' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterProt}</button>
-                    <button onClick={() => setActiveCategory('carb')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'carb' ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterCarb}</button>
-                    <button onClick={() => setActiveCategory('fat')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'fat' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterFat}</button>
-                    <button onClick={() => setActiveCategory('veg')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'veg' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterVeg}</button>
+                    <button onClick={() => setActiveCategory('all')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'all' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Tous</button>
+                    <button onClick={() => setActiveCategory('protein')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'protein' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Viandes & Poissons</button>
+                    <button onClick={() => setActiveCategory('carb')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'carb' ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Féculents & Légumineuses</button>
+                    <button onClick={() => setActiveCategory('bakery')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'bakery' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Pains & Viennoiseries</button>
+                    <button onClick={() => setActiveCategory('dairy')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'dairy' ? 'bg-cyan-500 text-white border-cyan-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Laitages & Fromages</button>
+                    <button onClick={() => setActiveCategory('fruit')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'fruit' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Fruits</button>
+                    <button onClick={() => setActiveCategory('veg')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'veg' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Légumes</button>
+                    <button onClick={() => setActiveCategory('fat')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'fat' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Lipides & Noix</button>
+                    <button onClick={() => setActiveCategory('sauce_drink')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'sauce_drink' ? 'bg-purple-500 text-white border-purple-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Sauces, Boissons & Alcools</button>
+                    <button onClick={() => setActiveCategory('sugar')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'sugar' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Sucres & Confitures</button>
                   </div>
                   
                   <div className="flex items-center space-x-2">
