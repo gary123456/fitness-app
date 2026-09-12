@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Utensils, Plus, Flame, Play, Activity, ChevronRight, Trash2, History, Target, Search, Brain, XCircle } from "lucide-react";
+// 🛡️ CORRECTION : Imports de TOUTES les icônes nécessaires
+import { Utensils, Droplets, Plus, Flame, Play, Activity, ChevronRight, Trash2, History, Target, Search, Brain, XCircle, Database, Filter } from "lucide-react";
 import { calculateAge, calculateBMR, calculateTDEE, calculateTargetCalories, calculateMacros } from "@/lib/fitness";
 import { useLanguage } from "@/lib/useLanguage";
 import { calculateRecipePortions } from "@/lib/nutrition-engine";
@@ -54,11 +55,11 @@ const fetchNutritionData = async () => {
     supabase.from("nutrition_ingredients").select("*").order("name_fr", { ascending: true })
   ]);
 
-  const age = calculateAge(profile.birth_date);
-  const bmr = calculateBMR(profile.weight_kg, profile.height_cm, age, profile.gender, null);
-  const tdee = calculateTDEE(bmr, profile.activity_level);
-  const targetCals = calculateTargetCalories(tdee, profile.current_goal);
-  const targetMacros = calculateMacros(profile.weight_kg, targetCals, profile.current_goal, profile.training_frequency);
+  const age = calculateAge(profile?.birth_date);
+  const bmr = calculateBMR(profile?.weight_kg || 70, profile?.height_cm || 175, age, profile?.gender || 'homme', null);
+  const tdee = calculateTDEE(bmr, profile?.activity_level || 'sedentaire');
+  const targetCals = calculateTargetCalories(tdee, profile?.current_goal || 'maintien');
+  const targetMacros = calculateMacros(profile?.weight_kg || 70, targetCals, profile?.current_goal || 'maintien', profile?.training_frequency || 3);
 
   return { 
     profile, dailyLog: safeLog, 
@@ -72,7 +73,7 @@ export default function NutritionPage() {
   const router = useRouter();
   const { lang } = useLanguage();
   
-  // 1. TOUS LES HOOKS SONT APPELÉS ICI (AVANT LE RETURN EARLY)
+  // 🛡️ TOUS LES HOOKS SONT APPELÉS EN HAUT, AUCUN RETURN CONDITIONNEL AVANT
   const { data, isLoading, mutate } = useSWR('nutritionData', fetchNutritionData);
 
   const [activeTab, setActiveTab] = useState<"autopilot" | "tracker">("autopilot");
@@ -82,10 +83,13 @@ export default function NutritionPage() {
   const [isSolving, setIsSolving] = useState(false);
 
   const [searchIng, setSearchIng] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [qolFilter, setQolFilter] = useState<string>("none");
   const [selectedIng, setSelectedIng] = useState<any | null>(null);
   const [ingUnit, setIngUnit] = useState<string>("g");
   const [ingQty, setIngQty] = useState<string>("100");
   const [quickAddModal, setQuickAddModal] = useState(false);
+  
   const [qaName, setQaName] = useState("");
   const [qaKcal, setQaKcal] = useState("");
   const [qaProt, setQaProt] = useState("");
@@ -110,18 +114,42 @@ export default function NutritionPage() {
     };
   }, [selectedIng, ingQty, ingUnit]);
 
-  // 2. CONDITION DE CHARGEMENT *APRÈS* LES HOOKS
-  if (isLoading || !data) {
-    return <div className="p-8 text-center font-bold text-teal-500 animate-pulse">Chargement de l'Autopilote Métabolique...</div>;
-  }
+  const filteredIngredients = useMemo(() => {
+    if (!data?.ingredients) return [];
+    let list = data.ingredients;
 
-  const log = data.dailyLog;
-  const tgs = data.targets;
+    if (searchIng) {
+      const s = searchIng.toLowerCase();
+      list = list.filter((i: any) => i.name_fr.toLowerCase().includes(s) || i.name_en.toLowerCase().includes(s));
+    }
+
+    if (activeCategory !== 'all') {
+      list = list.filter((i: any) => {
+        const p = parseFloat(i.prot_per_100g)||0; const c = parseFloat(i.carb_per_100g)||0; 
+        const f = parseFloat(i.fat_per_100g)||0; const k = parseFloat(i.kcal_per_100g)||0;
+        if (activeCategory === 'prot') return p > 12 && p > c && p > f;
+        if (activeCategory === 'carb') return c > 15 && c > p && f < 15;
+        if (activeCategory === 'fat') return f > 15 && f > p;
+        if (activeCategory === 'veg') return k < 60 && c < 15 && p < 10;
+        return true;
+      });
+    }
+
+    if (qolFilter === 'high_prot') list = list.filter((i: any) => (parseFloat(i.prot_per_100g)||0) > 15);
+    if (qolFilter === 'low_cal') list = list.filter((i: any) => (parseFloat(i.kcal_per_100g)||0) < 100);
+    if (qolFilter === 'high_fiber') list = list.filter((i: any) => (parseFloat(i.fiber_per_100g)||0) > 5);
+
+    return list.slice(0, 50);
+  }, [data?.ingredients, searchIng, activeCategory, qolFilter]);
+
+  // VALEURS PAR DÉFAUT SÉCURISÉES POUR NE JAMAIS CRASHER
+  const log = data?.dailyLog || { total_kcal: 0, total_prot: 0, total_carbs: 0, total_fats: 0, total_fibers: 0, logged_meals: [] };
+  const tgs = data?.targets || { calories: 2000, protein: 150, carbs: 200, fat: 60, fibers: 30 };
   const loggedMealsList = log.logged_meals || [];
 
   const t = {
-    FR: { title: "Nutrition", sub: "Autopilote Métabolique & Chrononutrition.", cals: "Kcal", prot: "Prot", carb: "Gluc", fat: "Lip", fib: "Fibres", add: "Ajout Rapide", selectMeal: "Choisissez un protocole", solve: "Calculer mes portions", genMenu: "Générer", cook: "Cuisiner & Valider", history: "Repas Consommés", emptyHist: "Aucun repas enregistré aujourd'hui." },
-    EN: { title: "Nutrition", sub: "Metabolic Autopilot & Chrononutrition.", cals: "Kcal", prot: "Pro", carb: "Carbs", fat: "Fat", fib: "Fiber", add: "Quick Add", selectMeal: "Select a protocol", solve: "Calculate my portions", genMenu: "Generate", cook: "Cook & Log", history: "Consumed Meals", emptyHist: "No meals logged today." }
+    FR: { title: "Nutrition", sub: "Autopilote Métabolique & Chrononutrition.", cals: "Kcal", prot: "Prot", carb: "Gluc", fat: "Lip", fib: "Fibres", add: "Ajout Rapide", selectMeal: "Choisissez un protocole", solve: "Calculer mes portions", genMenu: "Générer", cook: "Cuisiner & Valider", history: "Repas Consommés", emptyHist: "Aucun repas enregistré aujourd'hui.", filterAll: "Tous", filterProt: "Protéines", filterCarb: "Glucides", filterFat: "Lipides", filterVeg: "Légumes", qolNone: "Sans filtre", qolHighProt: "High Protein (>15g)", qolLowCal: "Low Calorie (<100k)", qolFiber: "High Fiber (>5g)" },
+    EN: { title: "Nutrition", sub: "Metabolic Autopilot & Chrononutrition.", cals: "Kcal", prot: "Pro", carb: "Carbs", fat: "Fat", fib: "Fiber", add: "Quick Add", selectMeal: "Select a protocol", solve: "Calculate my portions", genMenu: "Generate", cook: "Cook & Log", history: "Consumed Meals", emptyHist: "No meals logged today.", filterAll: "All", filterProt: "Proteins", filterCarb: "Carbs", filterFat: "Fats", filterVeg: "Veggies", qolNone: "No filter", qolHighProt: "High Protein (>15g)", qolLowCal: "Low Calorie (<100k)", qolFiber: "High Fiber (>5g)" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -138,24 +166,19 @@ export default function NutritionPage() {
       snack2: { pct: 0.10, labelFR: "Collation A.M (10%)", labelEN: "PM Snack (10%)", type: "snack" },
       dinner: { pct: 0.30, labelFR: "Dîner (30%)", labelEN: "Dinner (30%)", type: "dinner" }
     };
-    return { 
+    return {
       breakfast: { pct: 0.20, labelFR: "Matin (20%)", labelEN: "Morning (20%)", type: "breakfast" },
       lunch: { pct: 0.30, labelFR: "Déjeuner (30%)", labelEN: "Lunch (30%)", type: "lunch" },
       snack: { pct: 0.20, labelFR: "Collation P.W (20%)", labelEN: "P.W Snack (20%)", type: "snack" },
       dinner: { pct: 0.30, labelFR: "Dîner (30%)", labelEN: "Dinner (30%)", type: "dinner" }
     };
   };
-
   const currentDistribution = getDistribution(mealCount);
-
-  const filteredIngredients = searchIng 
-    ? data.ingredients.filter((i: any) => i.name_fr.toLowerCase().includes(searchIng.toLowerCase()) || i.name_en.toLowerCase().includes(searchIng.toLowerCase())).slice(0, 10)
-    : data.ingredients.slice(0, 10);
 
   const handleAddTrackerMeal = async () => {
     if (!selectedIng || log.id === "temp_log") return;
     const m = calculatedTrackerMacros;
-    const title = `${parseFloat(ingQty)}${ingUnit} ${lang === 'FR' ? selectedIng.name_fr : selectedIng.name_en}`;
+    const title = `${parseFloat(ingQty)}${ingUnit.split(' ')[0]} ${lang === 'FR' ? selectedIng.name_fr : selectedIng.name_en}`;
     const newMeal = { id: Date.now().toString(), title, image_emoji: "⚖️", kcal: m.k, protein: m.p, carbs: m.c, fats: m.f, fiber: m.fib };
     
     await supabase.from("daily_nutrition_logs").update({
@@ -194,7 +217,7 @@ export default function NutritionPage() {
       const solved = await calculateRecipePortions(recipeId, mealTargets);
       setRecipeModal(solved);
     } catch (e: any) {
-      alert(e.message || "Erreur de calcul.");
+      alert(e.message || "Erreur de calcul. Assurez-vous d'avoir inséré le script SQL.");
     } finally {
       setIsSolving(false);
     }
@@ -232,28 +255,38 @@ export default function NutritionPage() {
     mutate();
   };
 
+  // 🛡️ L'ÉCRAN DE CHARGEMENT EST GÉRÉ ICI, À LA FIN, POUR NE PAS CASSER LES HOOKS
+  if (isLoading || !data) {
+    return (
+      <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-safe flex items-center justify-center min-h-[50vh]">
+        <div className="text-center font-bold text-teal-500 animate-pulse flex flex-col items-center">
+          <Activity className="w-12 h-12 mb-4 animate-bounce" />
+          Chargement de l'Autopilote Métabolique...
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
-      {/* HEADER & TABS */}
+    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-safe">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
             <Utensils className="w-8 h-8 mr-3 text-teal-500" /> Nutrition Élite
           </h2>
-          <p className="text-zinc-500 dark:text-zinc-400 font-medium">Contrôle Métabolique & Suivi Quotidien.</p>
+          <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
         </div>
         
         <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl shadow-inner border border-zinc-200 dark:border-zinc-800 w-full sm:w-auto">
           <button onClick={() => setActiveTab("autopilot")} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === "autopilot" ? "bg-white dark:bg-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
-            <Brain className="w-4 h-4 inline mr-2" /> Autopilote IA
+            <Brain className="w-4 h-4 inline mr-2" /> Autopilote
           </button>
           <button onClick={() => setActiveTab("tracker")} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === "tracker" ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
-            <Target className="w-4 h-4 inline mr-2" /> Tracker Libre
+            <Target className="w-4 h-4 inline mr-2" /> Tracker
           </button>
         </div>
       </div>
 
-      {/* JAUGE CENTRALE (Commune) */}
       <Card className="bg-zinc-950 border-none shadow-2xl overflow-hidden relative">
         <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Activity className="w-48 h-48 text-white" /></div>
         <CardContent className="p-6">
@@ -291,7 +324,7 @@ export default function NutritionPage() {
           </div>
 
           {activeTab === "autopilot" && (
-            <div className="relative">
+            <div className="relative animate-in fade-in">
               <div className="absolute left-6 top-6 bottom-4 w-0.5 bg-zinc-200 dark:bg-zinc-800"></div>
               {Object.entries(currentDistribution).map(([distKey, info]: any) => {
                 const targetKcal = Math.round(tgs.calories * info.pct);
@@ -305,23 +338,28 @@ export default function NutritionPage() {
                           <CardDescription className="font-bold text-teal-600 dark:text-teal-400">Cible IA : ~{targetKcal} kcal</CardDescription>
                         </div>
                         <Button variant="outline" size="sm" onClick={() => setActiveMealType(activeMealType === distKey ? null : distKey)} className="font-bold border-teal-500 text-teal-600 hover:bg-teal-50">
-                          <Utensils className="w-4 h-4 mr-2" /> Générer
+                          <Utensils className="w-4 h-4 mr-2" /> {txt.genMenu}
                         </Button>
                       </CardHeader>
                       {activeMealType === distKey && (
                         <CardContent className="pt-0 border-t border-zinc-100 dark:border-zinc-800 mt-4 py-4 bg-zinc-50 dark:bg-zinc-950/50">
-                          <div className="grid gap-3">
-                            {data.recipes.filter((r: any) => r.meal_type === info.type).slice(0, 8).map((recipe: any) => (
-                              <button key={recipe.id} onClick={() => openRecipeSolver(recipe.id, distKey)} disabled={isSolving} className="text-left flex items-center p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-teal-500 transition-all shadow-sm">
-                                <span className="text-3xl mr-4">{recipe.image_emoji}</span>
-                                <div className="flex-1">
-                                  <span className="block font-bold text-sm text-zinc-900 dark:text-zinc-100">{lang === 'FR' ? recipe.title_fr : recipe.title_en}</span>
-                                  <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-widest mt-1 block">{recipe.prep_time_min} min • IA Adaptative</span>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-zinc-400" />
-                              </button>
-                            ))}
-                          </div>
+                          <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest mb-3">{txt.selectMeal}</h4>
+                          {data.recipes.length === 0 ? (
+                            <p className="text-sm font-bold text-zinc-500">Base de données vide.</p>
+                          ) : (
+                            <div className="grid gap-3">
+                              {data.recipes.filter((r: any) => r.meal_type === info.type).slice(0, 8).map((recipe: any) => (
+                                <button key={recipe.id} onClick={() => openRecipeSolver(recipe.id, distKey)} disabled={isSolving} className="text-left flex items-center p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-teal-500 transition-all shadow-sm group">
+                                  <span className="text-3xl mr-4 group-hover:scale-110 transition-transform">{recipe.image_emoji}</span>
+                                  <div className="flex-1">
+                                    <span className="block font-bold text-sm text-zinc-900 dark:text-zinc-100">{lang === 'FR' ? recipe.title_fr : recipe.title_en}</span>
+                                    <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-widest mt-1 block">{recipe.prep_time_min} min • IA Adaptative</span>
+                                  </div>
+                                  <ChevronRight className="w-5 h-5 text-zinc-300 group-hover:text-teal-500 transition-colors" />
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </CardContent>
                       )}
                     </Card>
@@ -333,46 +371,78 @@ export default function NutritionPage() {
 
           {activeTab === "tracker" && (
             <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm animate-in fade-in zoom-in-95">
-              <CardHeader className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-t-xl border-b border-zinc-100 dark:border-zinc-800">
-                <CardTitle className="text-lg font-black text-indigo-600 dark:text-indigo-400 flex items-center">
-                  <Search className="w-5 h-5 mr-2" /> Base de Données (200+ Ingrédients)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <Input 
-                  placeholder="Rechercher un aliment (ex: Poulet, Avoine, Sriracha...)" 
-                  value={searchIng} onChange={(e) => setSearchIng(e.target.value)} 
-                  className="bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 h-12 font-bold" 
-                />
+              <CardHeader className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-t-xl border-b border-zinc-100 dark:border-zinc-800 pb-4">
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-lg font-black text-indigo-600 dark:text-indigo-400 flex items-center">
+                    <Database className="w-5 h-5 mr-2" /> Base de Données
+                  </CardTitle>
+                  <Button size="sm" onClick={() => setQuickAddModal(true)} variant="outline" className="font-bold border-indigo-500 text-indigo-600 dark:text-indigo-400">
+                    <Plus className="w-4 h-4 mr-1" /> Manuel
+                  </Button>
+                </div>
                 
+                <div className="pt-4 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 w-5 h-5 text-zinc-400" />
+                    <Input placeholder="Poulet, Avoine, Sriracha..." value={searchIng} onChange={(e) => setSearchIng(e.target.value)} className="bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-700 h-12 pl-10 font-bold" />
+                  </div>
+                  
+                  <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
+                    <button onClick={() => setActiveCategory('all')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'all' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterAll}</button>
+                    <button onClick={() => setActiveCategory('prot')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'prot' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterProt}</button>
+                    <button onClick={() => setActiveCategory('carb')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'carb' ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterCarb}</button>
+                    <button onClick={() => setActiveCategory('fat')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'fat' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterFat}</button>
+                    <button onClick={() => setActiveCategory('veg')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'veg' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterVeg}</button>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Filter className="w-4 h-4 text-zinc-400" />
+                    <Select value={qolFilter} onValueChange={setQolFilter}>
+                      <SelectTrigger className="h-8 text-xs font-bold dark:bg-zinc-900 border-dashed border-zinc-300 dark:border-zinc-700"><SelectValue /></SelectTrigger>
+                      <SelectContent className="font-bold dark:bg-zinc-900">
+                        <SelectItem value="none">{txt.qolNone}</SelectItem>
+                        <SelectItem value="high_prot">{txt.qolHighProt}</SelectItem>
+                        <SelectItem value="low_cal">{txt.qolLowCal}</SelectItem>
+                        <SelectItem value="high_fiber">{txt.qolFiber}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-4 space-y-4">
                 {!selectedIng ? (
-                  <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
+                  <div className="max-h-[400px] overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800">
                     {filteredIngredients.map((ing: any) => (
-                      <button key={ing.id} onClick={() => setSelectedIng(ing)} className="w-full text-left p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors flex justify-between items-center group">
+                      <button key={ing.id} onClick={() => setSelectedIng(ing)} className="w-full text-left p-3 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/30 hover:border-indigo-500 hover:bg-white dark:hover:bg-zinc-900 transition-all flex justify-between items-center group">
                         <div>
-                          <span className="block font-bold text-sm dark:text-zinc-100">{lang === 'FR' ? ing.name_fr : ing.name_en}</span>
-                          <span className="text-[10px] text-zinc-400 font-black tracking-widest uppercase">{ing.kcal_per_100g} kcal / 100g</span>
+                          <span className="block font-bold text-sm text-zinc-900 dark:text-zinc-100">{lang === 'FR' ? ing.name_fr : ing.name_en}</span>
+                          <div className="flex space-x-2 mt-1">
+                            <span className="text-[10px] text-zinc-400 font-black tracking-widest uppercase">{ing.kcal_per_100g} kcal / 100g</span>
+                            <span className="text-[10px] text-blue-500 font-black">P: {ing.prot_per_100g}</span>
+                          </div>
                         </div>
-                        <Plus className="w-5 h-5 text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+                        <Plus className="w-6 h-6 text-zinc-300 group-hover:text-indigo-500 group-hover:scale-110 transition-all" />
                       </button>
                     ))}
+                    {filteredIngredients.length === 0 && <div className="text-center text-zinc-500 py-8 font-bold">Aucun aliment trouvé.</div>}
                   </div>
                 ) : (
                   <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 space-y-4 animate-in fade-in slide-in-from-bottom-2">
                     <div className="flex justify-between items-center border-b border-zinc-200 dark:border-zinc-800 pb-3">
                       <h4 className="font-black text-lg dark:text-zinc-100">{lang === 'FR' ? selectedIng.name_fr : selectedIng.name_en}</h4>
-                      <button onClick={() => setSelectedIng(null)} className="text-zinc-400 hover:text-red-500"><XCircle className="w-5 h-5" /></button>
+                      <button onClick={() => setSelectedIng(null)} className="text-zinc-400 hover:text-red-500 bg-white dark:bg-zinc-900 rounded-full p-1"><XCircle className="w-5 h-5" /></button>
                     </div>
                     
                     <div className="flex space-x-3">
                       <div className="flex-1 space-y-2">
-                        <Label>Quantité</Label>
-                        <Input type="number" value={ingQty} onChange={(e) => setIngQty(e.target.value)} className="font-black text-lg h-12 dark:bg-zinc-900" />
+                        <Label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">Quantité</Label>
+                        <Input type="number" value={ingQty} onChange={(e) => setIngQty(e.target.value)} className="font-black text-lg h-12 bg-white dark:bg-zinc-900 shadow-sm" />
                       </div>
                       <div className="flex-1 space-y-2">
-                        <Label>Unité</Label>
+                        <Label className="font-bold text-zinc-500 uppercase tracking-wider text-[10px]">Unité</Label>
                         <Select value={ingUnit} onValueChange={setIngUnit}>
-                          <SelectTrigger className="h-12 font-bold dark:bg-zinc-900"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-12 font-bold bg-white dark:bg-zinc-900 shadow-sm"><SelectValue /></SelectTrigger>
                           <SelectContent className="font-bold dark:bg-zinc-900">
                             {Object.keys(units).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                           </SelectContent>
@@ -381,13 +451,13 @@ export default function NutritionPage() {
                     </div>
 
                     <div className="flex justify-between items-center bg-white dark:bg-zinc-900 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800 shadow-sm">
-                      <div className="text-center"><span className="block font-black text-orange-500">{Math.round(calculatedTrackerMacros.k)}</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Kcal</span></div>
-                      <div className="text-center"><span className="block font-black text-blue-500">{Math.round(calculatedTrackerMacros.p)}g</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Prot</span></div>
-                      <div className="text-center"><span className="block font-black text-green-500">{Math.round(calculatedTrackerMacros.c)}g</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Gluc</span></div>
-                      <div className="text-center"><span className="block font-black text-yellow-500">{Math.round(calculatedTrackerMacros.f)}g</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Lip</span></div>
+                      <div className="text-center"><span className="block font-black text-orange-500 text-lg">{Math.round(calculatedTrackerMacros.k)}</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Kcal</span></div>
+                      <div className="text-center"><span className="block font-black text-blue-500 text-lg">{Math.round(calculatedTrackerMacros.p)}g</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Prot</span></div>
+                      <div className="text-center"><span className="block font-black text-green-500 text-lg">{Math.round(calculatedTrackerMacros.c)}g</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Gluc</span></div>
+                      <div className="text-center"><span className="block font-black text-yellow-500 text-lg">{Math.round(calculatedTrackerMacros.f)}g</span><span className="text-[9px] font-bold text-zinc-400 uppercase">Lip</span></div>
                     </div>
 
-                    <Button onClick={handleAddTrackerMeal} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black h-12 shadow-lg shadow-indigo-500/20">
+                    <Button onClick={handleAddTrackerMeal} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black h-12 shadow-lg shadow-indigo-500/20 text-lg">
                       Ajouter au Journal
                     </Button>
                   </div>
@@ -395,19 +465,18 @@ export default function NutritionPage() {
               </CardContent>
             </Card>
           )}
-
         </div>
 
         {/* COLONNE DROITE : HISTORIQUE COMMUN */}
         <div>
           <h3 className="text-lg font-black text-zinc-900 dark:text-zinc-100 mb-4 flex items-center">
-            <History className="w-5 h-5 mr-2 text-indigo-500" /> Repas Consommés
+            <History className="w-5 h-5 mr-2 text-indigo-500" /> {txt.history}
           </h3>
           <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 min-h-[300px]">
             {loggedMealsList.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-zinc-400 opacity-60 pt-12">
                 <Utensils className="w-12 h-12 mb-2" />
-                <p className="font-bold">Aucun aliment enregistré aujourd'hui.</p>
+                <p className="font-bold">{txt.emptyHist}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -420,7 +489,7 @@ export default function NutritionPage() {
                       <div>
                         <h4 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm line-clamp-1">{meal.title}</h4>
                         <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-0.5">
-                          {Math.round(meal.kcal)} kcal • {Math.round(meal.protein)}g P • {Math.round(meal.carbs)}g G • {Math.round(meal.fats)}g L
+                          {Math.round(meal.kcal)} kcal • {Math.round(meal.protein)}g P • {Math.round(meal.carbs)}g G
                         </p>
                       </div>
                     </div>
@@ -483,6 +552,26 @@ export default function NutritionPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODALE D'AJOUT RAPIDE */}
+      <Dialog open={quickAddModal} onOpenChange={setQuickAddModal}>
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader><DialogTitle className="dark:text-zinc-100 flex items-center"><Plus className="w-5 h-5 mr-2 text-indigo-500" /> Ajout Manuel Libre</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nom de l'aliment / Repas</Label>
+              <Input value={qaName} onChange={(e) => setQaName(e.target.value)} placeholder="Ex: Cheat Meal Sushi" className="dark:bg-zinc-900 font-bold" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label className="text-orange-500">Calories</Label><Input type="number" value={qaKcal} onChange={(e) => setQaKcal(e.target.value)} className="dark:bg-zinc-900 font-black" /></div>
+              <div className="space-y-2"><Label className="text-blue-500">Protéines (g)</Label><Input type="number" value={qaProt} onChange={(e) => setQaProt(e.target.value)} className="dark:bg-zinc-900 font-black" /></div>
+              <div className="space-y-2"><Label className="text-green-500">Glucides (g)</Label><Input type="number" value={qaCarb} onChange={(e) => setQaCarb(e.target.value)} className="dark:bg-zinc-900 font-black" /></div>
+              <div className="space-y-2"><Label className="text-yellow-500">Lipides (g)</Label><Input type="number" value={qaFat} onChange={(e) => setQaFat(e.target.value)} className="dark:bg-zinc-900 font-black" /></div>
+            </div>
+          </div>
+          <DialogFooter><Button onClick={handleQuickAdd} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black h-12">Valider et Ajouter</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

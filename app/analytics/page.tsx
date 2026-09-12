@@ -7,9 +7,9 @@ import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ReferenceLine } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Activity, TrendingDown, Dumbbell, Target, Ruler, Radar as RadarIcon, CalendarDays, Database, Brain, Download, ShieldAlert, HeartPulse, Info, Battery } from "lucide-react";
+import { Activity, TrendingDown, Dumbbell, Target, Ruler, Radar as RadarIcon, CalendarDays, Database, Brain, Download, ShieldAlert, HeartPulse, Info, Battery, Utensils } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
-import { calculateAge, calculateBMI, calculateEstimatedBodyFat } from "@/lib/fitness";
+import { calculateAge, calculateBMI, calculateEstimatedBodyFat, calculateBMR, calculateTDEE, calculateTargetCalories } from "@/lib/fitness";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
@@ -22,6 +22,11 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const userGender = profile?.gender || 'homme';
   const userHeight = profile?.height_cm || 175;
   const sleepQuality = profile?.sleep_quality || 'moyen';
+
+  // Calcul du TDEE
+  const bmr = calculateBMR(profile?.weight_kg || 70, userHeight, userAge, userGender, null);
+  const tdee = calculateTDEE(bmr, profile?.activity_level || 'sedentaire');
+  const targetCals = calculateTargetCalories(tdee, profile?.current_goal || 'maintien');
 
   let startDate = new Date();
   let endDate = new Date();
@@ -50,13 +55,15 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     { data: library }, 
     { data: rpcData },
     { data: dashMetrics },
-    { data: sleepLogs }
+    { data: sleepLogs },
+    { data: nutritionLogs }
   ] = await Promise.all([
     supabase.from("measurements").select("created_at, weight_kg, body_fat_percentage, arms_cm, chest_cm, waist_cm, thighs_cm").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: true }),
     supabase.from("exercise_library").select("id, name, target_muscle"),
     supabase.rpc('get_analytics_payload', { p_user_id: user.id, p_start_date: startDateStr, p_end_date: endDateStr }),
     supabase.rpc('get_dashboard_metrics', { p_user_id: user.id }),
-    supabase.from('daily_metrics').select('date, readiness_score').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true })
+    supabase.from('daily_metrics').select('date, readiness_score').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true }),
+    supabase.from('daily_nutrition_logs').select('date, total_kcal').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true })
   ]);
 
   const acwrScore = dashMetrics?.acwr || 0;
@@ -86,6 +93,12 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     score: log.readiness_score
   }));
 
+  const formattedNutrition = (nutritionLogs || []).map((log: any) => ({
+    date: new Date(log.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }),
+    kcal: log.total_kcal,
+    target: targetCals
+  }));
+
   const volByDate: Record<string, number> = {};
   const exData: Record<string, any[]> = {};
   const exSet = new Set<string>();
@@ -93,7 +106,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   let availableList: {id: string, name: string}[] = [];
   const muscleDistribution: Record<string, number> = { Chest: 0, Back: 0, Legs: 0, Arms: 0, Shoulders: 0, Core: 0 };
 
-  // 🛡️ CORRECTION RADAR ANALYTICS : Utilisation de target_muscle
   const libMap: Record<string, any> = {};
   if (library) library.forEach((ex: any) => libMap[ex.id] = ex);
 
@@ -146,9 +158,9 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
 
   return { 
     profile, userAge, userHeight, userGender,
-    formattedWeight, formattedMeasurements, formattedVolume: Object.keys(volByDate).map(date => ({ date, volume: volByDate[date] })), 
+    formattedWeight, formattedMeasurements, formattedNutrition, formattedVolume: Object.keys(volByDate).map(date => ({ date, volume: volByDate[date] })), 
     exercisesData: exData, max1RMs: { "Squat": Number(best1RMs["Squat"].toFixed(1)), "Bench": Number(best1RMs["Bench"].toFixed(1)), "Deadlift": Number(best1RMs["Deadlift"].toFixed(1)) }, 
-    exerciseList: availableList, radarData, sleepQuality, acwrScore, readinessHistory
+    exerciseList: availableList, radarData, sleepQuality, acwrScore, readinessHistory, targetCals // 🛡️ SÉCURITÉ : Cible extraite ici
   };
 };
 
@@ -185,8 +197,8 @@ export default function AnalyticsPage() {
   }, [error, router]);
 
   const t = {
-    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Volume de travail par groupe (Tonnage)", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", readinessTrend: "Tendance SNC (Sommeil & Fatigue)", readinessTrendSub: "Évolution de votre capacité de récupération.", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses générées par cette application sont fournies à titre strictement informatif. Elles ne constituent en aucun cas un diagnostic médical. Consultez toujours un médecin avant de modifier votre régime ou programme." },
-    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Work volume by group (Tonnage)", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", readinessTrend: "CNS Trend (Sleep & Fatigue)", readinessTrendSub: "Evolution of your recovery capacity.", disclaimer: "MEDICAL DISCLAIMER: The data and analysis generated by this application are provided strictly for informational purposes. They do not constitute medical diagnosis. Always consult a physician before modifying your diet or training program." }
+    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Volume de travail par groupe (Tonnage)", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", readinessTrend: "Tendance SNC (Sommeil & Fatigue)", readinessTrendSub: "Évolution de votre capacité de récupération.", nutTrend: "Adhérence Calorique", nutTrendSub: "Calories consommées vs Cible TDEE", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses générées par cette application sont fournies à titre strictement informatif. Elles ne constituent en aucun cas un diagnostic médical. Consultez toujours un médecin avant de modifier votre régime ou programme." },
+    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Work volume by group (Tonnage)", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", readinessTrend: "CNS Trend (Sleep & Fatigue)", readinessTrendSub: "Evolution of your recovery capacity.", nutTrend: "Caloric Adherence", nutTrendSub: "Consumed Calories vs TDEE Target", disclaimer: "MEDICAL DISCLAIMER: The data and analysis generated by this application are provided strictly for informational purposes. They do not constitute medical diagnosis. Always consult a physician before modifying your diet or training program." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -197,6 +209,7 @@ export default function AnalyticsPage() {
       case 'tonnage': return { show: true, title: lang === 'FR' ? "Tonnage Global" : "Global Tonnage", desc: lang === 'FR' ? "Le Tonnage est le volume total de travail mécanique (Poids × Séries × Répétitions) déplacé au cours d'une séance.\n\nLa ligne en pointillé indique votre moyenne sur la période sélectionnée. Dépasser cette ligne indique que vous appliquez une surcharge progressive efficace." : "Tonnage is the total volume of mechanical work (Weight × Sets × Reps) moved during a session.\n\nThe dotted line indicates your average over the selected period. Exceeding this line indicates effective progressive overload." };
       case 'radar': return { show: true, title: lang === 'FR' ? "Répartition Musculaire" : "Muscle Distribution", desc: lang === 'FR' ? "Ce radar illustre la répartition de votre volume d'entraînement (tonnage cumulé) par groupe musculaire majeur.\n\nIl permet d'identifier visuellement d'éventuels déséquilibres structuraux (par exemple: trop de pecs, pas assez de dos) risquant de créer des blessures ou des asymétries." : "This radar illustrates the distribution of your training volume (accumulated tonnage) per major muscle group.\n\nIt visually helps identify structural imbalances (e.g., too much chest, not enough back) that could lead to injuries or asymmetries." };
       case 'readiness': return { show: true, title: lang === 'FR' ? "Tendance SNC" : "CNS Trend", desc: lang === 'FR' ? "L'évolution de votre Readiness Score au fil des jours. Ce graphique reflète l'impact direct de la qualité de vos nuits de sommeil et de l'accumulation de votre charge d'entraînement sur votre physiologie." : "The evolution of your Readiness Score over time. This chart reflects the direct impact of your sleep quality and accumulated training load on your physiology." };
+      case 'nutrition': return { show: true, title: lang === 'FR' ? "Adhérence Calorique" : "Caloric Adherence", desc: lang === 'FR' ? "L'évolution de vos calories consommées comparées à votre cible métabolique quotidienne (TDEE). Les barres dépassant la ligne pointillée indiquent un surplus calorique." : "The evolution of your consumed calories compared to your daily metabolic target (TDEE). Bars exceeding the dotted line indicate a caloric surplus." };
       default: return { show: false, title: "", desc: "" };
     }
   };
@@ -296,6 +309,9 @@ export default function AnalyticsPage() {
   if (data.acwrScore < 0.8) { acwrColor = "text-blue-500"; acwrLabel = txt.underZone; }
   else if (data.acwrScore > 1.5) { acwrColor = "text-red-500"; acwrLabel = txt.dangerZone; }
   else if (data.acwrScore === 0) { acwrColor = "text-zinc-500"; acwrLabel = "-"; }
+
+  // 🛡️ SÉCURITÉ MAXIMALE POUR LA LIGNE CIBLE
+  const targetCaloriesForChart = data?.targetCals || 2000;
 
   return (
     <>
@@ -481,7 +497,72 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {/* GRAPHIQUE 3 : BAR CHART TONNAGE */}
+          {/* GRAPHIQUE 3 : NUTRITION (ADHERENCE CALORIQUE) */}
+          <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 print-break-avoid relative">
+            <button onClick={() => setInfoModal(getInfoData('nutrition'))} className="absolute top-4 right-4 z-20 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden"><Info className="w-4 h-4" /></button>
+            <CardHeader><CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black"><Utensils className="h-5 w-5 text-orange-500 mr-2 print-hidden" /> {txt.nutTrend}</CardTitle><CardDescription className="font-medium text-zinc-500">{txt.nutTrendSub}</CardDescription></CardHeader>
+            <CardContent>
+              {data.formattedNutrition.length === 0 ? <EmptyState /> : (
+                <div className="h-[300px] w-full mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.formattedNutrition}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.15} vertical={false} />
+                      <XAxis dataKey="date" stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                      <YAxis stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #f97316', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} cursor={{ fill: '#27272a', opacity: 0.5 }} />
+                      
+                      {/* 🛡️ CORRECTION : Sécurisation de l'affichage de la cible calorique */}
+                      <ReferenceLine y={targetCaloriesForChart} stroke="#ea580c" strokeDasharray="5 5" label={{ position: 'top', value: `Cible (${targetCaloriesForChart} kcal)`, fill: '#ea580c', fontSize: 10, fontWeight: 'bold' }} />
+                      
+                      <Bar isAnimationActive={false} dataKey="kcal" name="Kcal Consommées" fill="url(#colorOrange)" radius={[6, 6, 0, 0]} />
+                      <defs>
+                        <linearGradient id="colorOrange" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f97316" stopOpacity={0.9}/>
+                          <stop offset="95%" stopColor="#ea580c" stopOpacity={0.7}/>
+                        </linearGradient>
+                      </defs>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* GRAPHIQUE 4 : TENDANCE DU SOMMEIL (READINESS) */}
+          <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 print-break-avoid relative">
+            <button onClick={() => setInfoModal(getInfoData('readiness'))} className="absolute top-4 right-4 z-20 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden"><Info className="w-4 h-4" /></button>
+            <CardHeader>
+              <CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black">
+                <Battery className="h-5 w-5 text-green-500 mr-2 print-hidden" /> {txt.readinessTrend}
+              </CardTitle>
+              <CardDescription className="font-medium text-zinc-500">{txt.readinessTrendSub}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {data.readinessHistory.length < 2 ? <EmptyState /> : (
+                <div className="h-[300px] w-full mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={data.readinessHistory}>
+                      <defs>
+                        <linearGradient id="colorReadiness" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.15} vertical={false} />
+                      <XAxis dataKey="date" stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                      <YAxis domain={[0, 100]} stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                      <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #10b981', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} />
+                      <Area isAnimationActive={false} type="monotone" dataKey="score" name="SNC Score" stroke="#10b981" strokeWidth={4} fill="url(#colorReadiness)" activeDot={{ r: 6 } as any} />
+                      <ReferenceLine y={60} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'insideBottomLeft', value: 'Risque', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} />
+                      <ReferenceLine y={85} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Zone PR', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* GRAPHIQUE 5 : BAR CHART TONNAGE */}
           <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 print-break-avoid relative">
             <button onClick={() => setInfoModal(getInfoData('tonnage'))} className="absolute top-4 right-4 z-20 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden"><Info className="w-4 h-4" /></button>
             <CardHeader><CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black"><Dumbbell className="h-5 w-5 text-teal-500 mr-2 print-hidden" /> {txt.volTitle}</CardTitle><CardDescription className="font-medium text-zinc-500">{txt.volSub}</CardDescription></CardHeader>
@@ -509,7 +590,7 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
 
-          {/* GRAPHIQUE 4 : 1RM */}
+          {/* GRAPHIQUE 6 : 1RM */}
           <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 print-break-avoid relative">
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between space-y-4 sm:space-y-0">
               <CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black"><Target className="h-5 w-5 text-indigo-500 mr-2 print-hidden" /> {txt.progEx}</CardTitle>
@@ -547,67 +628,33 @@ export default function AnalyticsPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* NOUVEAU GRAPHIQUE 5 : TENDANCE DU SOMMEIL (READINESS) */}
-          <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 md:col-span-2 print-break-avoid relative">
-            <button onClick={() => setInfoModal(getInfoData('readiness'))} className="absolute top-4 right-4 z-20 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden"><Info className="w-4 h-4" /></button>
-            <CardHeader>
-              <CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black">
-                <Battery className="h-5 w-5 text-green-500 mr-2 print-hidden" /> {txt.readinessTrend}
-              </CardTitle>
-              <CardDescription className="font-medium text-zinc-500">{txt.readinessTrendSub}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {data.readinessHistory.length < 2 ? <EmptyState /> : (
-                <div className="h-[300px] w-full mt-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data.readinessHistory}>
-                      <defs>
-                        <linearGradient id="colorReadiness" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.15} vertical={false} />
-                      <XAxis dataKey="date" stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
-                      <YAxis domain={[0, 100]} stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
-                      <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #10b981', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} />
-                      <Area isAnimationActive={false} type="monotone" dataKey="score" name="SNC Score" stroke="#10b981" strokeWidth={4} fill="url(#colorReadiness)" activeDot={{ r: 6 } as any} />
-                      <ReferenceLine y={60} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'insideBottomLeft', value: 'Risque', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} />
-                      <ReferenceLine y={85} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Zone PR', fill: '#10b981', fontSize: 10, fontWeight: 'bold' }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* GRAPHIQUE 6 : MENSURATIONS */}
-          <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 md:col-span-2 print-break-avoid">
-            <CardHeader><CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black"><Ruler className="h-5 w-5 text-purple-500 mr-2 print-hidden" /> {txt.measTitle}</CardTitle><CardDescription className="font-medium text-zinc-500">{txt.measSub}</CardDescription></CardHeader>
-            <CardContent>
-              {data.formattedMeasurements.length < 2 ? <EmptyState /> : (
-                <div className="h-[300px] w-full mt-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.formattedMeasurements}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.15} vertical={false} />
-                      <XAxis dataKey="date" stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
-                      <YAxis domain={['auto', 'auto']} stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
-                      <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #3f3f46', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} />
-                      <Legend onClick={handleLegendClick} formatter={renderLegendText} wrapperStyle={{ cursor: 'pointer', fontSize: '11px', paddingTop: '10px' }} />
-                      <Line isAnimationActive={false} hide={hiddenMeas.waist} type="monotone" dataKey="waist" name={lang==='FR'?"Taille":"Waist"} stroke="#ef4444" strokeWidth={4} dot={{ r: 4, fill: '#ef4444' } as any} />
-                      <Line isAnimationActive={false} hide={hiddenMeas.arms} type="monotone" dataKey="arms" name={lang==='FR'?"Bras":"Arms"} stroke="#f59e0b" strokeWidth={4} dot={{ r: 4, fill: '#f59e0b' } as any} />
-                      <Line isAnimationActive={false} hide={hiddenMeas.chest} type="monotone" dataKey="chest" name={lang==='FR'?"Poitrine":"Chest"} stroke="#10b981" strokeWidth={4} dot={{ r: 4, fill: '#10b981' } as any} />
-                      <Line isAnimationActive={false} hide={hiddenMeas.thighs} type="monotone" dataKey="thighs" name={lang==='FR'?"Cuisses":"Thighs"} stroke="#3b82f6" strokeWidth={4} dot={{ r: 4, fill: '#3b82f6' } as any} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
-        {/* ⚖️ AVIS LÉGAL (Medical Disclaimer) - Visible en bas de page et sur le PDF */}
+        {/* GRAPHIQUE 7 : MENSURATIONS */}
+        <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 print-break-avoid mt-6">
+          <CardHeader><CardTitle className="flex items-center text-lg font-black text-zinc-900 dark:text-zinc-100 print:text-black"><Ruler className="h-5 w-5 text-purple-500 mr-2 print-hidden" /> {txt.measTitle}</CardTitle><CardDescription className="font-medium text-zinc-500">{txt.measSub}</CardDescription></CardHeader>
+          <CardContent>
+            {data.formattedMeasurements.length < 2 ? <EmptyState /> : (
+              <div className="h-[300px] w-full mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.formattedMeasurements}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#52525b" opacity={0.15} vertical={false} />
+                    <XAxis dataKey="date" stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                    <YAxis domain={['auto', 'auto']} stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #3f3f46', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} />
+                    <Legend onClick={handleLegendClick} formatter={renderLegendText} wrapperStyle={{ cursor: 'pointer', fontSize: '11px', paddingTop: '10px' }} />
+                    <Line isAnimationActive={false} hide={hiddenMeas.waist} type="monotone" dataKey="waist" name={lang==='FR'?"Taille":"Waist"} stroke="#ef4444" strokeWidth={4} dot={{ r: 4, fill: '#ef4444' } as any} />
+                    <Line isAnimationActive={false} hide={hiddenMeas.arms} type="monotone" dataKey="arms" name={lang==='FR'?"Bras":"Arms"} stroke="#f59e0b" strokeWidth={4} dot={{ r: 4, fill: '#f59e0b' } as any} />
+                    <Line isAnimationActive={false} hide={hiddenMeas.chest} type="monotone" dataKey="chest" name={lang==='FR'?"Poitrine":"Chest"} stroke="#10b981" strokeWidth={4} dot={{ r: 4, fill: '#10b981' } as any} />
+                    <Line isAnimationActive={false} hide={hiddenMeas.thighs} type="monotone" dataKey="thighs" name={lang==='FR'?"Cuisses":"Thighs"} stroke="#3b82f6" strokeWidth={4} dot={{ r: 4, fill: '#3b82f6' } as any} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ⚖️ AVIS LÉGAL (Medical Disclaimer) */}
         <div className="pt-8 border-t border-zinc-200 dark:border-zinc-800 mt-12 flex items-start space-x-3 text-zinc-400 dark:text-zinc-600 print:mt-8 print-break-avoid">
           <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5 print-hidden" />
           <p className="text-xs font-medium text-justify leading-relaxed print:text-black print:font-bold">
