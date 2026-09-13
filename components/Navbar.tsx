@@ -71,13 +71,24 @@ export function Navbar() {
     </button>
   );
 
+  // 🛡️ NOUVEAU : Logique d'affichage intelligente de l'Avatar dans la Navbar
+  const isImage = profile?.avatar_url?.includes('/') || profile?.avatar_url?.includes('http');
+  let posX = '50', posY = '50';
+  if (isImage && profile?.avatar_url) {
+    try {
+      const u = new URL(profile.avatar_url);
+      posX = u.searchParams.get('px') || '50';
+      posY = u.searchParams.get('py') || '50';
+    } catch (e) {}
+  }
+
   const UserMenu = () => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="relative outline-none group focus:ring-2 focus:ring-teal-500 rounded-full shrink-0">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-tr from-teal-400 to-indigo-500 flex items-center justify-center text-white font-black shadow-sm group-hover:shadow-md transition-all">
-            {profile?.avatar_url && profile.avatar_url !== 'default' ? (
-              <span className="text-xl sm:text-2xl leading-none">{profile.avatar_url}</span>
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-tr from-teal-400 to-indigo-500 flex items-center justify-center overflow-hidden text-white font-black shadow-sm group-hover:shadow-md transition-all border-2 border-transparent group-hover:border-teal-500">
+            {isImage ? (
+              <img src={profile?.avatar_url} alt="User" className="w-full h-full object-cover" style={{ objectPosition: `${posX}% ${posY}%` }} />
             ) : (
               <span className="text-lg sm:text-xl leading-none">{profile?.first_name ? profile.first_name.charAt(0).toUpperCase() : <User className="w-5 h-5 sm:w-6 sm:h-6" />}</span>
             )}

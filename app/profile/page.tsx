@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-// 🛡️ CORRECTION : Ajout de Move et Trash2 pour le menu Avatar
-import { Trophy, Flame, Award, Star, Target, Zap, Loader2, Brain, BookOpen, GraduationCap, Camera, ChevronRight, Lock, CheckCircle2, Move, Trash2 } from "lucide-react";
+import { toPng } from "html-to-image";
+import { Trophy, Flame, Award, Star, Target, Zap, Loader2, Brain, BookOpen, GraduationCap, Camera, ChevronRight, Lock, CheckCircle2, Move, Trash2, Share2, Dumbbell } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -64,31 +64,40 @@ export default function ProfilePage() {
   const [showXpModal, setShowXpModal] = useState(false);
   const [showStreakModal, setShowStreakModal] = useState(false);
   
-  // 🛡️ ÉTATS POUR LE RECADRAGE DE L'AVATAR
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showCropModal, setShowCropModal] = useState(false);
   const [cropPos, setCropPos] = useState({ x: 50, y: 50 });
   const [isSavingCrop, setIsSavingCrop] = useState(false);
 
+  const playerCardRef = useRef<HTMLDivElement>(null);
+  const [isSharing, setIsSharing] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
 
-  // Extraction silencieuse des coordonnées CSS sauvées dans l'URL
+  // 🛡️ CORRECTION : Logique infaillible pour différencier URL et Emoji
+  const rawAvatar = profile?.avatar_url || "";
+  const isImage = rawAvatar.includes('/') || rawAvatar.includes('http');
+  const isEmoji = rawAvatar.trim().length > 0 && !isImage;
+
   useEffect(() => {
-    if (showCropModal && profile?.avatar_url && profile.avatar_url.startsWith('http')) {
+    if (showCropModal && isImage) {
       try {
-        const url = new URL(profile.avatar_url);
-        setCropPos({
-          x: parseInt(url.searchParams.get('px') || '50'),
-          y: parseInt(url.searchParams.get('py') || '50')
-        });
+        const urlParts = rawAvatar.split('?');
+        if (urlParts.length > 1) {
+          const params = new URLSearchParams(urlParts[1]);
+          setCropPos({
+            x: parseInt(params.get('px') || '50'),
+            y: parseInt(params.get('py') || '50')
+          });
+        }
       } catch (e) {
         setCropPos({ x: 50, y: 50 });
       }
     }
-  }, [showCropModal, profile?.avatar_url]);
+  }, [showCropModal, isImage, rawAvatar]);
 
   const loadData = async () => {
     try {
@@ -115,7 +124,6 @@ export default function ProfilePage() {
     }
   };
 
-  // 🛡️ NOUVEAU : FONCTION DE NETTOYAGE DU BUCKET SUPABASE
   const deleteOldAvatarFile = async (url: string | undefined) => {
     if (!url || !url.includes('avatars/')) return;
     try {
@@ -137,10 +145,8 @@ export default function ProfilePage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non connecté");
 
-      // 1. Suppression physique de l'ancienne photo du Bucket Supabase
       await deleteOldAvatarFile(profile?.avatar_url);
 
-      // 2. Upload de la nouvelle photo
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}-${Date.now()}.${fileExt}`;
       const filePath = `${user.id}/${fileName}`;
@@ -148,7 +154,6 @@ export default function ProfilePage() {
       const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // 3. Récupération URL + Injection des coordonnées CSS de centrage
       const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
       const newUrl = `${publicUrlData.publicUrl}?t=${Date.now()}&px=50&py=50`;
       
@@ -163,7 +168,6 @@ export default function ProfilePage() {
     }
   };
 
-  // 🛡️ NOUVEAU : FONCTION DE SUPPRESSION TOTALE
   const handleRemoveAvatar = async () => {
     try {
       setUploadingAvatar(true);
@@ -181,18 +185,18 @@ export default function ProfilePage() {
     }
   };
 
-  // 🛡️ NOUVEAU : FONCTION DE SAUVEGARDE DU CADRAGE
   const saveCropPosition = async () => {
     try {
       setIsSavingCrop(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || !profile?.avatar_url) return;
 
-      const url = new URL(profile.avatar_url);
-      url.searchParams.set('px', cropPos.x.toString());
-      url.searchParams.set('py', cropPos.y.toString());
-      url.searchParams.set('t', Date.now().toString()); // Cache busting pour forcer le rafraîchissement
-      const newUrl = url.toString();
+      const urlParts = profile.avatar_url.split('?');
+      const params = new URLSearchParams(urlParts[1] || '');
+      params.set('px', cropPos.x.toString());
+      params.set('py', cropPos.y.toString());
+      params.set('t', Date.now().toString()); 
+      const newUrl = `${urlParts[0]}?${params.toString()}`;
 
       await supabase.from('profiles').update({ avatar_url: newUrl }).eq('id', user.id);
       setProfile(prev => prev ? { ...prev, avatar_url: newUrl } : null);
@@ -201,6 +205,28 @@ export default function ProfilePage() {
       alert("Erreur d'ajustement : " + error.message);
     } finally {
       setIsSavingCrop(false);
+    }
+  };
+
+  const shareProfileCard = async () => {
+    if (!playerCardRef.current) return;
+    setIsSharing(true);
+    try {
+      const dataUrl = await toPng(playerCardRef.current, { cacheBust: true, quality: 1, pixelRatio: 3 });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], 'vivex-player-card.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: 'Profil Vivex', files: [file] });
+      } else {
+        const link = document.createElement('a');
+        link.download = 'vivex-player-card.png';
+        link.href = dataUrl;
+        link.click();
+      }
+    } catch (err) {
+      console.error('Erreur de partage', err);
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -222,15 +248,15 @@ export default function ProfilePage() {
   else if (totalQuiz >= 15) honorificTitle = lang === 'FR' ? "Érudit du Fitness 🧠" : "Fitness Scholar 🧠";
   else if (data.level >= 5) honorificTitle = lang === 'FR' ? "Guerrier Actif ⚔️" : "Active Warrior ⚔️";
 
-  const isAvatarUrl = profile.avatar_url?.startsWith('http') || profile.avatar_url?.startsWith('data:');
-  
-  // Lecture des coordonnées pour l'affichage principal
   let posX = '50', posY = '50';
-  if (isAvatarUrl && profile.avatar_url) {
+  if (isImage) {
     try {
-      const u = new URL(profile.avatar_url);
-      posX = u.searchParams.get('px') || '50';
-      posY = u.searchParams.get('py') || '50';
+      const urlParts = rawAvatar.split('?');
+      if (urlParts.length > 1) {
+        const params = new URLSearchParams(urlParts[1]);
+        posX = params.get('px') || '50';
+        posY = params.get('py') || '50';
+      }
     } catch (e) {}
   }
 
@@ -270,21 +296,31 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full pb-24">
+    <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full pb-24 relative">
       
+      {/* BOUTON DE PARTAGE EN HAUT À DROITE */}
+      <div className="absolute top-6 right-4 md:right-8 z-50">
+        <Button 
+          onClick={shareProfileCard} 
+          disabled={isSharing}
+          className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold shadow-lg shadow-indigo-500/30 rounded-xl"
+        >
+          {isSharing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Share2 className="w-4 h-4 sm:mr-2" />}
+          <span className="hidden sm:inline">{lang === 'FR' ? "Partager Profil" : "Share Profile"}</span>
+        </Button>
+      </div>
+
       <div className="flex flex-col items-center justify-center space-y-4 pt-4 pb-8 border-b border-zinc-200 dark:border-zinc-800">
-        
-        {/* 🛡️ NOUVEAU : DROPDOWN MENU SUR L'AVATAR */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="relative group cursor-pointer outline-none">
-              <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-teal-500 shadow-[0_0_30px_rgba(20,184,166,0.3)] bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center relative z-10">
+            <div className="relative group cursor-pointer outline-none mt-12 sm:mt-0">
+              <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-teal-500 shadow-[0_0_30px_rgba(20,184,166,0.3)] bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center relative z-10 shrink-0">
                 {uploadingAvatar ? (
                   <Loader2 className="w-8 h-8 animate-spin text-teal-500" />
-                ) : isAvatarUrl ? (
-                  <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: `${posX}% ${posY}%` }} />
-                ) : profile.avatar_url ? (
-                  <span className="text-6xl">{profile.avatar_url}</span>
+                ) : isImage ? (
+                  <img src={rawAvatar} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: `${posX}% ${posY}%` }} />
+                ) : isEmoji ? (
+                  <span className="text-6xl select-none">{rawAvatar}</span>
                 ) : (
                   <span className="text-4xl font-black text-zinc-300 dark:text-zinc-700 uppercase">{profile.first_name.charAt(0)}{profile.last_name.charAt(0)}</span>
                 )}
@@ -298,12 +334,12 @@ export default function ProfilePage() {
             <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="cursor-pointer font-bold rounded-xl p-3 focus:bg-zinc-100 dark:focus:bg-zinc-900 outline-none">
               <Camera className="w-4 h-4 mr-3 text-teal-500" /> {lang === 'FR' ? "Changer la photo" : "Change photo"}
             </DropdownMenuItem>
-            {isAvatarUrl && (
+            {isImage && (
               <DropdownMenuItem onClick={() => setShowCropModal(true)} className="cursor-pointer font-bold rounded-xl p-3 focus:bg-zinc-100 dark:focus:bg-zinc-900 outline-none">
                 <Move className="w-4 h-4 mr-3 text-indigo-500" /> {lang === 'FR' ? "Centrer l'image" : "Adjust position"}
               </DropdownMenuItem>
             )}
-            {profile.avatar_url && (
+            {rawAvatar && (
               <>
                 <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50" />
                 <DropdownMenuItem onClick={handleRemoveAvatar} className="cursor-pointer font-bold text-red-500 focus:text-red-500 focus:bg-red-50 dark:focus:bg-red-500/10 rounded-xl p-3 outline-none">
@@ -314,7 +350,6 @@ export default function ProfilePage() {
           </DropdownMenuContent>
         </DropdownMenu>
         
-        {/* Input fichier caché pour déclencher l'upload depuis le menu */}
         <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleAvatarUpload} />
         
         <div className="text-center">
@@ -323,7 +358,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* 🛡️ STATISTIQUES CLIQUABLES (QOL) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div onClick={() => setShowXpModal(true)} className="cursor-pointer p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-900/40 backdrop-blur-xl shadow-sm hover:shadow-md hover:border-teal-500/50 transition-all group relative overflow-hidden">
           <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-teal-500/10 to-transparent pointer-events-none"></div>
@@ -364,7 +398,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* 🛡️ SYSTÈME D'ONGLETS POUR LES BADGES */}
       <div className="pt-4">
         <div className="flex space-x-2 border-b border-zinc-200 dark:border-zinc-800 pb-px">
           <button 
@@ -395,15 +428,14 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* 📘 MODALE D'AJUSTEMENT DU RECADRAGE DE L'AVATAR */}
       <Dialog open={showCropModal} onOpenChange={setShowCropModal}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-3xl">
           <DialogHeader className="text-center pb-2">
             <DialogTitle className="text-xl font-black text-indigo-600 dark:text-indigo-400">{lang === 'FR' ? "Centrer la photo" : "Adjust photo"}</DialogTitle>
           </DialogHeader>
           <div className="py-4 space-y-8">
-            <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-teal-500 shadow-2xl bg-zinc-100 dark:bg-zinc-900">
-               <img src={profile?.avatar_url} style={{ objectPosition: `${cropPos.x}% ${cropPos.y}%` }} className="w-full h-full object-cover transition-all" alt="Preview" />
+            <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-teal-500 shadow-2xl bg-zinc-100 dark:bg-zinc-900 shrink-0">
+               <img src={rawAvatar} style={{ objectPosition: `${cropPos.x}% ${cropPos.y}%` }} className="w-full h-full object-cover transition-all" alt="Preview" />
             </div>
             <div className="space-y-6 px-4">
                <div className="space-y-3">
@@ -430,7 +462,6 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
 
-      {/* 📘 MODALE DÉTAILS D'UN BADGE */}
       <Dialog open={selectedBadge !== null} onOpenChange={(open) => !open && setSelectedBadge(null)}>
         <DialogContent className={`sm:max-w-[400px] border-none rounded-3xl overflow-hidden p-0 ${selectedBadge?.isUnlocked ? 'bg-gradient-to-b from-yellow-500/20 to-zinc-950' : 'bg-zinc-950'}`}>
           <div className="p-8 flex flex-col items-center justify-center text-center relative">
@@ -463,7 +494,6 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
 
-      {/* 📘 MODALE JAUGE XP */}
       <Dialog open={showXpModal} onOpenChange={setShowXpModal}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-3xl">
           <DialogHeader className="text-center pb-4">
@@ -491,7 +521,6 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
 
-      {/* 📘 MODALE STREAK CALENDAR */}
       <Dialog open={showStreakModal} onOpenChange={setShowStreakModal}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-3xl">
           <DialogHeader className="text-center pb-4">
@@ -511,6 +540,67 @@ export default function ProfilePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 🛡️ CORRECTION : Le template de la Player Card est encapsulé hermétiquement avec overflow-hidden w-0 h-0 */}
+      <div className="absolute top-0 left-[-20000px] w-[1080px] h-[1920px] overflow-hidden pointer-events-none">
+        <div ref={playerCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center py-24 px-16 text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
+          <img src="/strava-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-30 z-0" />
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-zinc-900/50 to-zinc-950 z-0"></div>
+          
+          <div className="relative z-10 w-full flex flex-col items-center mt-12 space-y-12">
+            <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-teal-500 shadow-[0_0_80px_rgba(20,184,166,0.6)] bg-zinc-900 flex items-center justify-center shrink-0">
+               {isImage ? (
+                 <img src={rawAvatar} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: `${posX}% ${posY}%` }} />
+               ) : isEmoji ? (
+                 <span className="text-8xl select-none">{rawAvatar}</span>
+               ) : (
+                 <span className="text-7xl font-black text-zinc-700 uppercase">{profile.first_name.charAt(0)}{profile.last_name.charAt(0)}</span>
+               )}
+            </div>
+            
+            <div className="text-center space-y-4">
+              <h1 className="text-[100px] font-black uppercase tracking-tighter leading-none drop-shadow-2xl">{profile.first_name} {profile.last_name}</h1>
+              <p className="text-4xl font-bold text-teal-400 uppercase tracking-widest">{honorificTitle}</p>
+            </div>
+
+            <div className="w-full grid grid-cols-2 gap-8 mt-16 px-8">
+              <div className="bg-zinc-900/80 backdrop-blur-xl border-4 border-zinc-800 rounded-[3rem] p-12 flex flex-col items-center justify-center space-y-4 shadow-2xl">
+                <span className="text-4xl font-bold text-zinc-400 uppercase tracking-widest">Niveau</span>
+                <span className="text-[100px] font-black text-white">{data.level}</span>
+              </div>
+              <div className="bg-zinc-900/80 backdrop-blur-xl border-4 border-zinc-800 rounded-[3rem] p-12 flex flex-col items-center justify-center space-y-4 shadow-2xl">
+                <span className="text-4xl font-bold text-zinc-400 uppercase tracking-widest">Série 🔥</span>
+                <span className="text-[100px] font-black text-orange-500">{data.streak_days}</span>
+              </div>
+            </div>
+
+            <div className="w-full mt-16 px-8">
+              <h3 className="text-3xl font-bold text-zinc-500 uppercase tracking-widest text-center mb-8">Trophées Récents</h3>
+              <div className="grid grid-cols-3 gap-8">
+                {data.unlocked_badges.slice(-3).map(badgeId => {
+                  const badge = [...FORGE_BADGES, ...ACADEMY_BADGES].find(b => b.id === badgeId);
+                  if (!badge) return null;
+                  const Icon = badge.icon;
+                  return (
+                    <div key={badge.id} className="bg-zinc-900/80 backdrop-blur-xl border-4 border-zinc-800 rounded-[2rem] p-8 flex flex-col items-center justify-center space-y-6">
+                      <div className="w-24 h-24 rounded-full bg-zinc-800 flex items-center justify-center shadow-lg">
+                        <Icon className={`w-12 h-12 ${badge.color}`} />
+                      </div>
+                      <span className="text-2xl font-black uppercase tracking-widest text-center leading-tight">{badge.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="relative z-10 flex items-center space-x-6 bg-zinc-950/80 px-16 py-8 rounded-full backdrop-blur-md mt-auto mb-12 border-2 border-zinc-800">
+            <Dumbbell className="w-12 h-12 text-teal-500" />
+            <span className="text-4xl font-black tracking-widest text-zinc-100 uppercase">Vivex Fitness</span>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

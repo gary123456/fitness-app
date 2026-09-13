@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Medal, Loader2, CheckCircle2 } from "lucide-react";
+import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Medal, Loader2, CheckCircle2, Image as ImageIcon } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,14 +26,6 @@ const EQUIPMENTS = [
   { id: "poids_corps", label: "Poids du corps (Bodyweight)" },
   { id: "salle", label: "Salle de sport (Machines, Barres)" },
   { id: "home_gym", label: "Home Gym (Haltères, Kettlebells)" }
-];
-
-const AVATAR_LIST = [
-  { id: "default", label: "Initial" },
-  { id: "🧑", label: "Gars 1" }, { id: "👦🏽", label: "Gars 2" }, { id: "👨🏿‍🦲", label: "Gars 3" }, { id: "👱‍♂️", label: "Gars 4" }, { id: "🧔🏾‍♂️", label: "Gars 5" },
-  { id: "👩", label: "Fille 1" }, { id: "👩🏽", label: "Fille 2" }, { id: "👩🏾‍🦱", label: "Fille 3" }, { id: "👱‍♀️", label: "Fille 4" }, { id: "👩🏿", label: "Fille 5" },
-  { id: "🦊", label: "Renard" }, { id: "🐯", label: "Tigre" }, { id: "🐺", label: "Loup" }, { id: "🦍", label: "Gorille" }, 
-  { id: "🐉", label: "Dragon" }, { id: "👽", label: "Alien" }, { id: "🤖", label: "Robot" }, { id: "👻", label: "Fantôme" }, { id: "🥷", label: "Ninja" }
 ];
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -77,7 +69,6 @@ export default function SettingsPage() {
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [editDisableQuiz, setEditDisableQuiz] = useState(false);
-  const [editAvatar, setEditAvatar] = useState("default");
   
   const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [recalibrateAI, setRecalibrateAI] = useState(false);
@@ -105,7 +96,6 @@ export default function SettingsPage() {
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
       setEditEquipment(data.profile.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : ['poids_corps']);
       setEditDisableQuiz(data.profile.disable_quiz || false);
-      setEditAvatar(data.profile.avatar_url || "default");
     }
 
     if (typeof window !== "undefined" && 'serviceWorker' in navigator && 'PushManager' in window) {
@@ -178,7 +168,7 @@ export default function SettingsPage() {
       const updatedProfileData = { 
         first_name: editFirstName, last_name: editLastName, height_cm: newHeight, weight_kg: newWeight, 
         current_goal: editGoal, experience_level: editExperience, weekly_schedule: editSchedule,
-        equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz, avatar_url: editAvatar
+        equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz
       };
 
       await supabase.from("profiles").update(updatedProfileData).eq("id", data.profile.id);
@@ -242,6 +232,12 @@ export default function SettingsPage() {
         const filePaths = files.map(file => `${userId}/${file.name}`);
         await supabase.storage.from('progress-photos').remove(filePaths);
       }
+      // 🛡️ NOUVEAU : Purge de l'avatar lors de la suppression du compte
+      const { data: avatarFiles } = await supabase.storage.from('avatars').list(userId);
+      if (avatarFiles && avatarFiles.length > 0) {
+        const avatarPaths = avatarFiles.map(file => `${userId}/${file.name}`);
+        await supabase.storage.from('avatars').remove(avatarPaths);
+      }
       await supabase.rpc('delete_account');
     } catch (error) { console.error("Erreur lors de la purge :", error); }
     await supabase.auth.signOut();
@@ -261,7 +257,7 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
         
-        {/* IDENTITÉ & AVATAR */}
+        {/* IDENTITÉ */}
         <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
           <CardHeader><CardTitle className="text-lg flex items-center"><User className="w-5 h-5 mr-2 text-indigo-500"/> Identité & Avatar</CardTitle></CardHeader>
           <CardContent className="space-y-6">
@@ -269,15 +265,15 @@ export default function SettingsPage() {
               <div className="space-y-2"><Label>Prénom</Label><Input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="font-bold dark:bg-zinc-950 dark:border-zinc-800" /></div>
               <div className="space-y-2"><Label>Nom</Label><Input value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="font-bold dark:bg-zinc-950 dark:border-zinc-800" /></div>
             </div>
-            <div className="space-y-2">
-              <Label>Avatar de profil</Label>
-              <div className="flex flex-wrap gap-2">
-                {AVATAR_LIST.map((av) => (
-                  <button key={av.id} type="button" onClick={() => setEditAvatar(av.id)} className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl transition-all ${editAvatar === av.id ? 'ring-2 ring-teal-500 scale-110 bg-teal-50 dark:bg-teal-900/30' : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 opacity-70 hover:opacity-100'}`} title={av.label}>
-                    {av.id === 'default' ? <User className="w-6 h-6 text-zinc-500" /> : av.id}
-                  </button>
-                ))}
+            {/* 🛡️ CORRECTION : Remplacement du champ Avatar */}
+            <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <div className="space-y-1">
+                <Label className="text-sm font-bold dark:text-zinc-100 flex items-center"><ImageIcon className="w-4 h-4 mr-2 text-teal-500" /> Photo de Profil</Label>
+                <p className="text-xs text-zinc-500 font-medium">Pour modifier votre avatar, rendez-vous sur votre page de profil.</p>
               </div>
+              <Button variant="outline" onClick={() => router.push('/profile')} className="font-bold border-teal-500/30 text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/30">
+                Ouvrir Profil
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -414,7 +410,6 @@ export default function SettingsPage() {
 
       </div>
 
-      {/* 🛡️ MODALE DE SUCCÈS (REMPLACE L'ALERT NATIF) */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl text-center p-6">
           <div className="flex flex-col items-center">
