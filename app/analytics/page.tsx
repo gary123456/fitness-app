@@ -23,7 +23,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const userHeight = profile?.height_cm || 175;
   const sleepQuality = profile?.sleep_quality || 'moyen';
 
-  // Calcul du TDEE
   const bmr = calculateBMR(profile?.weight_kg || 70, userHeight, userAge, userGender, null);
   const tdee = calculateTDEE(bmr, profile?.activity_level || 'sedentaire');
   const targetCals = calculateTargetCalories(tdee, profile?.current_goal || 'maintien');
@@ -68,6 +67,17 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
 
   const acwrScore = dashMetrics?.acwr || 0;
 
+  // Fonction utilitaire robuste pour formater les dates (évite les erreurs Invalid Date)
+  const safeFormatDate = (dateString: string) => {
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return dateString.split('T')[0]; // Fallback brutal
+      return d.toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
+    } catch {
+      return dateString.split('T')[0];
+    }
+  };
+
   let formattedWeight: any[] = [];
   let formattedMeasurements: any[] = [];
 
@@ -76,26 +86,27 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       const bmi = calculateBMI(m.weight_kg, userHeight);
       const img = calculateEstimatedBodyFat(bmi, userAge, userGender);
       return { 
-        date: new Date(m.created_at).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }), 
+        date: safeFormatDate(m.created_at), 
         poids: m.weight_kg, img: m.body_fat_percentage ? Number(m.body_fat_percentage) : Number(img)
       };
     });
     
     formattedMeasurements = measurements.map(m => ({
-      date: new Date(m.created_at).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }),
+      date: safeFormatDate(m.created_at),
       arms: m.arms_cm ? Number(m.arms_cm) : null, chest: m.chest_cm ? Number(m.chest_cm) : null, 
       waist: m.waist_cm ? Number(m.waist_cm) : null, thighs: m.thighs_cm ? Number(m.thighs_cm) : null
     })).filter(m => m.arms || m.chest || m.waist || m.thighs);
   }
 
+  // 🛡️ CORRECTION : Typage strict du Score SNC pour Recharts
   const readinessHistory = (sleepLogs || []).map((log: any) => ({
-    date: new Date(log.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }),
-    score: log.readiness_score
-  }));
+    date: safeFormatDate(log.date),
+    score: Number(log.readiness_score) || 0
+  })).filter(log => log.score > 0);
 
   const formattedNutrition = (nutritionLogs || []).map((log: any) => ({
-    date: new Date(log.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' }),
-    kcal: log.total_kcal,
+    date: safeFormatDate(log.date),
+    kcal: Number(log.total_kcal) || 0,
     target: targetCals
   }));
 
@@ -111,12 +122,11 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
 
   if (rpcData) {
     rpcData.volume_by_date?.forEach((v: any) => {
-      const d = new Date(v.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
-      volByDate[d] = v.volume;
+      volByDate[safeFormatDate(v.date)] = Number(v.volume) || 0;
     });
 
     rpcData.max_1rm?.forEach((r: any) => {
-      const d = new Date(r.date).toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
+      const d = safeFormatDate(r.date);
       if (!exData[r.exercise_id]) exData[r.exercise_id] = [];
       exData[r.exercise_id].push({ date: d, e1RM: Number(r.e1rm).toFixed(1), weight: r.weight, reps: r.reps });
       exSet.add(r.exercise_id);
@@ -160,7 +170,7 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     profile, userAge, userHeight, userGender,
     formattedWeight, formattedMeasurements, formattedNutrition, formattedVolume: Object.keys(volByDate).map(date => ({ date, volume: volByDate[date] })), 
     exercisesData: exData, max1RMs: { "Squat": Number(best1RMs["Squat"].toFixed(1)), "Bench": Number(best1RMs["Bench"].toFixed(1)), "Deadlift": Number(best1RMs["Deadlift"].toFixed(1)) }, 
-    exerciseList: availableList, radarData, sleepQuality, acwrScore, readinessHistory, targetCals // 🛡️ SÉCURITÉ : Cible extraite ici
+    exerciseList: availableList, radarData, sleepQuality, acwrScore, readinessHistory, targetCals
   };
 };
 
@@ -279,7 +289,7 @@ export default function AnalyticsPage() {
     </div>
   );
 
-  if (isLoading && !data) {
+  if (isLoading || !data) {
     return (
       <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24 animate-pulse">
         <div className="flex flex-col md:flex-row justify-between space-y-4 md:space-y-0">
@@ -297,8 +307,6 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (!data) return null;
-
   const avgVolume = data.formattedVolume.length > 0 
     ? Math.round(data.formattedVolume.reduce((acc, curr) => acc + curr.volume, 0) / data.formattedVolume.length)
     : 0;
@@ -310,7 +318,6 @@ export default function AnalyticsPage() {
   else if (data.acwrScore > 1.5) { acwrColor = "text-red-500"; acwrLabel = txt.dangerZone; }
   else if (data.acwrScore === 0) { acwrColor = "text-zinc-500"; acwrLabel = "-"; }
 
-  // 🛡️ SÉCURITÉ MAXIMALE POUR LA LIGNE CIBLE
   const targetCaloriesForChart = data?.targetCals || 2000;
 
   return (
@@ -511,8 +518,7 @@ export default function AnalyticsPage() {
                       <YAxis stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
                       <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #f97316', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} cursor={{ fill: '#27272a', opacity: 0.5 }} />
                       
-                      {/* 🛡️ CORRECTION : Sécurisation de l'affichage de la cible calorique */}
-                      <ReferenceLine y={targetCaloriesForChart} stroke="#ea580c" strokeDasharray="5 5" label={{ position: 'top', value: `Cible (${targetCaloriesForChart} kcal)`, fill: '#ea580c', fontSize: 10, fontWeight: 'bold' }} />
+                      <ReferenceLine y={data.targetCals} stroke="#ea580c" strokeDasharray="5 5" label={{ position: 'top', value: `Cible (${data.targetCals} kcal)`, fill: '#ea580c', fontSize: 10, fontWeight: 'bold' }} />
                       
                       <Bar isAnimationActive={false} dataKey="kcal" name="Kcal Consommées" fill="url(#colorOrange)" radius={[6, 6, 0, 0]} />
                       <defs>
@@ -528,7 +534,7 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
 
-          {/* GRAPHIQUE 4 : TENDANCE DU SOMMEIL (READINESS) */}
+          {/* 🛡️ CORRECTION : GRAPHIQUE 4 TENDANCE DU SOMMEIL (READINESS) */}
           <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 print-break-avoid relative">
             <button onClick={() => setInfoModal(getInfoData('readiness'))} className="absolute top-4 right-4 z-20 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden"><Info className="w-4 h-4" /></button>
             <CardHeader>
@@ -538,7 +544,7 @@ export default function AnalyticsPage() {
               <CardDescription className="font-medium text-zinc-500">{txt.readinessTrendSub}</CardDescription>
             </CardHeader>
             <CardContent>
-              {data.readinessHistory.length < 2 ? <EmptyState /> : (
+              {data.readinessHistory.length === 0 ? <EmptyState /> : (
                 <div className="h-[300px] w-full mt-4">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={data.readinessHistory}>
@@ -654,7 +660,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        {/* ⚖️ AVIS LÉGAL (Medical Disclaimer) */}
+        {/* ⚖️ AVIS LÉGAL */}
         <div className="pt-8 border-t border-zinc-200 dark:border-zinc-800 mt-12 flex items-start space-x-3 text-zinc-400 dark:text-zinc-600 print:mt-8 print-break-avoid">
           <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5 print-hidden" />
           <p className="text-xs font-medium text-justify leading-relaxed print:text-black print:font-bold">

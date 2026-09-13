@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, ArrowLeftRight, Check, User, Edit3, LogOut, Dumbbell } from "lucide-react";
+// 🛡️ CORRECTION : Ajout de l'icône "Check" ici
+import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, Edit3, ArrowLeftRight, Check } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, calculateWaterIntake, getCurrentWeekStreak, generateMealIdeas, getMicronutrients } from "@/lib/fitness";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/lib/useLanguage";
@@ -141,6 +142,8 @@ export default function DashboardPage() {
   const [mealModal, setMealModal] = useState<{show: boolean, type: 'protein'|'carbs'|'fat', target: number} | null>(null);
 
   const [showSleepPrompt, setShowSleepPrompt] = useState(false);
+  const [isSavingSleep, setIsSavingSleep] = useState(false);
+
   const [quizState, setQuizState] = useState<'playing' | 'success' | 'fail'>('playing');
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
 
@@ -212,11 +215,32 @@ export default function DashboardPage() {
   const rUI = getReadinessUI();
 
   const handleSleepCheckin = async (quality: 'excellent' | 'moyen' | 'mauvais') => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    await supabase.from("profiles").update({ sleep_quality: quality, last_sleep_check: todayStr }).eq("id", profile.id);
-    await supabase.from("daily_metrics").upsert({ user_id: profile.id, date: todayStr, sleep_quality: quality, readiness_score: rScore }, { onConflict: 'user_id, date' });
-    setShowSleepPrompt(false);
-    mutate(); 
+    if (isSavingSleep) return;
+    setIsSavingSleep(true);
+
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      const { error: profileError } = await supabase.from("profiles").update({ sleep_quality: quality, last_sleep_check: todayStr }).eq("id", profile.id);
+      if (profileError) throw profileError;
+
+      const { error: metricsError } = await supabase.from("daily_metrics").upsert({ 
+        user_id: profile.id, 
+        date: todayStr, 
+        sleep_quality: quality, 
+        readiness_score: rScore 
+      }, { onConflict: 'user_id, date' });
+
+      if (metricsError) throw metricsError;
+
+      setShowSleepPrompt(false);
+      mutate();
+    } catch (error: any) {
+      console.error("Erreur critique d'insertion :", error);
+      alert(`Erreur de base de données : ${error.message}. Vérifiez que le script SQL a bien été exécuté.`);
+    } finally {
+      setIsSavingSleep(false);
+    }
   };
 
   const submitQuiz = async () => {
@@ -283,7 +307,6 @@ export default function DashboardPage() {
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
       
-      {/* 🛡️ SEUL LE BLOC DE SALUTATION ET DE FLAMME EST CONSERVÉ ICI POUR RETIRER LE DOUBLON AVATAR */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <div className="flex items-center space-x-3 mb-1">
@@ -313,21 +336,21 @@ export default function DashboardPage() {
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <button onClick={() => handleSleepCheckin('excellent')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-green-500 hover:bg-green-50 dark:hover:border-green-500 dark:hover:bg-green-900/20 transition-all duration-300 active:scale-95 overflow-hidden">
+              <button disabled={isSavingSleep} onClick={() => handleSleepCheckin('excellent')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-green-500 hover:bg-green-50 dark:hover:border-green-500 dark:hover:bg-green-900/20 transition-all duration-300 active:scale-95 overflow-hidden disabled:opacity-50">
                 <div className="absolute inset-0 bg-gradient-to-b from-green-500/0 to-green-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <Smile className="w-10 h-10 text-zinc-400 group-hover:text-green-500 mb-3 transition-colors duration-300 group-hover:scale-110" />
                 <span className="font-black text-zinc-700 dark:text-zinc-200 group-hover:text-green-700 dark:group-hover:text-green-400 text-lg mb-1">{txt.sleepExc}</span>
                 <span className="text-xs font-bold text-zinc-400 group-hover:text-green-600/70 dark:group-hover:text-green-400/70 text-center px-2">{txt.sleepLegendExc}</span>
               </button>
 
-              <button onClick={() => handleSleepCheckin('moyen')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-yellow-500 hover:bg-yellow-50 dark:hover:border-yellow-500 dark:hover:bg-yellow-900/20 transition-all duration-300 active:scale-95 overflow-hidden">
+              <button disabled={isSavingSleep} onClick={() => handleSleepCheckin('moyen')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-yellow-500 hover:bg-yellow-50 dark:hover:border-yellow-500 dark:hover:bg-yellow-900/20 transition-all duration-300 active:scale-95 overflow-hidden disabled:opacity-50">
                 <div className="absolute inset-0 bg-gradient-to-b from-yellow-500/0 to-yellow-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <Meh className="w-10 h-10 text-zinc-400 group-hover:text-yellow-500 mb-3 transition-colors duration-300 group-hover:scale-110" />
                 <span className="font-black text-zinc-700 dark:text-zinc-200 group-hover:text-yellow-700 dark:group-hover:text-yellow-400 text-lg mb-1">{txt.sleepAvg}</span>
                 <span className="text-xs font-bold text-zinc-400 group-hover:text-yellow-600/70 dark:group-hover:text-yellow-400/70 text-center px-2">{txt.sleepLegendAvg}</span>
               </button>
 
-              <button onClick={() => handleSleepCheckin('mauvais')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-red-500 hover:bg-red-50 dark:hover:border-red-500 dark:hover:bg-red-900/20 transition-all duration-300 active:scale-95 overflow-hidden">
+              <button disabled={isSavingSleep} onClick={() => handleSleepCheckin('mauvais')} className="group relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:border-red-500 hover:bg-red-50 dark:hover:border-red-500 dark:hover:bg-red-900/20 transition-all duration-300 active:scale-95 overflow-hidden disabled:opacity-50">
                 <div className="absolute inset-0 bg-gradient-to-b from-red-500/0 to-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <Frown className="w-10 h-10 text-zinc-400 group-hover:text-red-500 mb-3 transition-colors duration-300 group-hover:scale-110" />
                 <span className="font-black text-zinc-700 dark:text-zinc-200 group-hover:text-red-700 dark:group-hover:text-red-400 text-lg mb-1">{txt.sleepBad}</span>
@@ -338,17 +361,25 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* 🛡️ POINT 2 QOL : BOUTON ÉDITION DU SOMMEIL */}
       <div className={`p-6 rounded-2xl border ${rUI.border} bg-white dark:bg-zinc-950 shadow-sm flex items-center justify-between relative`}>
-        <button onClick={() => setIsReadinessModalOpen(true)} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
-          <Info className="w-4 h-4" />
-        </button>
+        <div className="absolute top-3 right-3 flex space-x-1">
+          {!showSleepPrompt && (
+            <button onClick={() => setShowSleepPrompt(true)} className="p-1.5 text-zinc-400 hover:text-indigo-500 transition-colors" title="Éditer le sommeil du jour">
+              <Edit3 className="w-4 h-4" />
+            </button>
+          )}
+          <button onClick={() => setIsReadinessModalOpen(true)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
+            <Info className="w-4 h-4" />
+          </button>
+        </div>
         <div className="flex items-center space-x-4">
           <div className={`p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900 border ${rUI.border}`}>{rUI.icon}</div>
           <div>
             <h4 className="text-sm font-black text-zinc-400 uppercase tracking-widest mb-1 flex items-center">
               Readiness Score
             </h4>
-            <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200 pr-6">{rUI.text}</p>
+            <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200 pr-12">{rUI.text}</p>
           </div>
         </div>
         <div className={`text-4xl font-black ${rUI.color}`}>{rScore}</div>
@@ -525,7 +556,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* MODALES CONSERVÉES */}
       <Dialog open={isCalModalOpen} onOpenChange={setIsCalModalOpen}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
           <DialogHeader><DialogTitle className="text-2xl font-black text-orange-500 flex items-center"><Flame className="mr-2" /> {txt.calTitle}</DialogTitle><DialogDescription>{txt.calSub}</DialogDescription></DialogHeader>

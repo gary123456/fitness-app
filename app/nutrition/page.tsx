@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// 🛡️ CORRECTION : TOUTES les icônes sont importées ici
 import { Utensils, Plus, Flame, Play, Activity, ChevronRight, Trash2, History, Target, Search, Brain, XCircle, Filter, CalendarDays, Database } from "lucide-react";
 import { calculateAge, calculateBMR, calculateTDEE, calculateTargetCalories, calculateMacros } from "@/lib/fitness";
 import { useLanguage } from "@/lib/useLanguage";
@@ -143,7 +144,7 @@ export default function NutritionPage() {
       <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-safe flex items-center justify-center min-h-[50vh]">
         <div className="text-center font-bold text-teal-500 animate-pulse flex flex-col items-center">
           <Activity className="w-12 h-12 mb-4 animate-bounce" />
-          Chargement de l'Autopilote Métabolique...
+          {lang === 'FR' ? "Chargement de l'Autopilote Métabolique..." : "Loading Metabolic Autopilot..."}
         </div>
       </div>
     );
@@ -270,7 +271,7 @@ export default function NutritionPage() {
             <span className="font-bold text-sm uppercase tracking-widest">{getCurrentDateFormatted()}</span>
           </div>
           <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
-            <Utensils className="w-8 h-8 mr-3 text-teal-500" /> Nutrition Élite
+            <Utensils className="w-8 h-8 mr-3 text-teal-500" /> {txt.title}
           </h2>
         </div>
         
@@ -279,7 +280,7 @@ export default function NutritionPage() {
             <Brain className="w-4 h-4 inline mr-2" /> Autopilote
           </button>
           <button onClick={() => setActiveTab("tracker")} className={`flex-1 sm:flex-none px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === "tracker" ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
-            <Target className="w-4 h-4 inline mr-2" /> Tracker Libre
+            <Target className="w-4 h-4 inline mr-2" /> Tracker
           </button>
         </div>
       </div>
@@ -291,12 +292,12 @@ export default function NutritionPage() {
             <div className="col-span-2 md:col-span-1 flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-zinc-800 pb-4 md:pb-0">
               <Flame className="w-8 h-8 text-orange-500 mb-2" />
               <span className="text-3xl font-black text-white leading-none">{Math.round(log.total_kcal || 0)}</span>
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest mt-1">/ {tgs.calories} Kcal</span>
+              <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest mt-1">/ {tgs.calories} {txt.cals}</span>
             </div>
-            <MacroRing pct={((log.total_prot || 0)/tgs.protein)*100} color="#3b82f6" label="Protéines" value={Math.round(log.total_prot || 0)} />
-            <MacroRing pct={((log.total_carbs || 0)/tgs.carbs)*100} color="#10b981" label="Glucides" value={Math.round(log.total_carbs || 0)} />
-            <MacroRing pct={((log.total_fats || 0)/tgs.fat)*100} color="#f59e0b" label="Lipides" value={Math.round(log.total_fats || 0)} />
-            <MacroRing pct={((log.total_fibers || 0)/tgs.fibers)*100} color="#8b5cf6" label="Fibres" value={Math.round(log.total_fibers || 0)} />
+            <MacroRing pct={((log.total_prot || 0)/tgs.protein)*100} color="#3b82f6" label={txt.prot} value={Math.round(log.total_prot || 0)} />
+            <MacroRing pct={((log.total_carbs || 0)/tgs.carbs)*100} color="#10b981" label={txt.carb} value={Math.round(log.total_carbs || 0)} />
+            <MacroRing pct={((log.total_fats || 0)/tgs.fat)*100} color="#f59e0b" label={txt.fat} value={Math.round(log.total_fats || 0)} />
+            <MacroRing pct={((log.total_fibers || 0)/tgs.fibers)*100} color="#8b5cf6" label={txt.fib} value={Math.round(log.total_fibers || 0)} />
           </div>
         </CardContent>
       </Card>
@@ -385,16 +386,15 @@ export default function NutritionPage() {
                   
                   {/* SÉLECTEUR DE CATÉGORIES (Basé sur la BDD) */}
                   <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
-                    <button onClick={() => setActiveCategory('all')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'all' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Tous</button>
-                    <button onClick={() => setActiveCategory('protein')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'protein' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Viandes & Poissons</button>
-                    <button onClick={() => setActiveCategory('carb')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'carb' ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Féculents & Légumineuses</button>
-                    <button onClick={() => setActiveCategory('bakery')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'bakery' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Pains & Viennoiseries</button>
-                    <button onClick={() => setActiveCategory('dairy')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'dairy' ? 'bg-cyan-500 text-white border-cyan-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Laitages & Fromages</button>
-                    <button onClick={() => setActiveCategory('fruit')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'fruit' ? 'bg-pink-500 text-white border-pink-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Fruits</button>
-                    <button onClick={() => setActiveCategory('veg')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'veg' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Légumes</button>
-                    <button onClick={() => setActiveCategory('fat')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'fat' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Lipides & Noix</button>
-                    <button onClick={() => setActiveCategory('sauce_drink')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'sauce_drink' ? 'bg-purple-500 text-white border-purple-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Sauces, Boissons & Alcools</button>
-                    <button onClick={() => setActiveCategory('sugar')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'sugar' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Sucres & Confitures</button>
+                    <button onClick={() => setActiveCategory('all')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'all' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterAll}</button>
+                    <button onClick={() => setActiveCategory('protein')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'protein' ? 'bg-blue-500 text-white border-blue-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterProt}</button>
+                    <button onClick={() => setActiveCategory('carb')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'carb' ? 'bg-green-500 text-white border-green-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterCarb}</button>
+                    <button onClick={() => setActiveCategory('bakery')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'bakery' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Pains</button>
+                    <button onClick={() => setActiveCategory('dairy')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'dairy' ? 'bg-cyan-500 text-white border-cyan-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Laitages</button>
+                    <button onClick={() => setActiveCategory('veg')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'veg' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterVeg}</button>
+                    <button onClick={() => setActiveCategory('fat')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'fat' ? 'bg-yellow-500 text-white border-yellow-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>{txt.filterFat}</button>
+                    <button onClick={() => setActiveCategory('sauce_drink')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'sauce_drink' ? 'bg-purple-500 text-white border-purple-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Boissons & Sauces</button>
+                    <button onClick={() => setActiveCategory('sugar')} className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${activeCategory === 'sugar' ? 'bg-rose-500 text-white border-rose-500' : 'bg-white dark:bg-zinc-950 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}>Plaisir</button>
                   </div>
                   
                   <div className="flex items-center space-x-2">

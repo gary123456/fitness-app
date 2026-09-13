@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Dumbbell, Scale, Calculator, ArrowRightLeft, Target, Wrench, Timer, Play, Pause, RotateCcw, Volume2, VolumeX, Plus, Minus, Activity, Droplets, FlaskConical, X, Apple } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dumbbell, Scale, Calculator, ArrowRightLeft, Target, Wrench, Timer, Play, Pause, RotateCcw, Volume2, VolumeX, Plus, Minus, Activity, Droplets, FlaskConical, X, Apple, Nut } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
-// --- CONSTANTES ---
 const PLATES = [
   { weight: 25, color: "bg-red-500", h: "h-24", w: "w-6" },
   { weight: 20, color: "bg-blue-500", h: "h-24", w: "w-5" },
@@ -19,9 +19,19 @@ const PLATES = [
   { weight: 1.25, color: "bg-zinc-700", h: "h-8", w: "w-2" }
 ];
 
-// --- MOTEUR AUDIO ANTI-SILENCE (HACK iOS/SAFARI) ---
-let globalAudioCtx: AudioContext | null = null;
+const NUT_DATABASE = {
+  amandes: { nameFR: "Amandes", nameEN: "Almonds", kcalPer100: 579, gramsPerHandful: 30, gFats: 49, gProt: 21 },
+  cajou: { nameFR: "Noix de Cajou", nameEN: "Cashews", kcalPer100: 553, gramsPerHandful: 35, gFats: 43, gProt: 18 },
+  noix: { nameFR: "Noix (Cerneaux)", nameEN: "Walnuts", kcalPer100: 654, gramsPerHandful: 25, gFats: 65, gProt: 15 },
+  pecan: { nameFR: "Noix de Pécan", nameEN: "Pecans", kcalPer100: 691, gramsPerHandful: 30, gFats: 72, gProt: 9 },
+  macadamia: { nameFR: "Noix de Macadamia", nameEN: "Macadamia", kcalPer100: 718, gramsPerHandful: 35, gFats: 76, gProt: 8 },
+  pistaches: { nameFR: "Pistaches", nameEN: "Pistachios", kcalPer100: 562, gramsPerHandful: 30, gFats: 45, gProt: 20 },
+  cacahuetes: { nameFR: "Cacahuètes", nameEN: "Peanuts", kcalPer100: 567, gramsPerHandful: 35, gFats: 49, gProt: 25 },
+  bresil: { nameFR: "Noix du Brésil", nameEN: "Brazil Nuts", kcalPer100: 656, gramsPerHandful: 30, gFats: 66, gProt: 14 },
+  noisettes: { nameFR: "Noisettes", nameEN: "Hazelnuts", kcalPer100: 628, gramsPerHandful: 30, gFats: 60, gProt: 15 }
+};
 
+let globalAudioCtx: AudioContext | null = null;
 const getAudioCtx = () => {
   if (typeof window === "undefined") return null;
   if (!globalAudioCtx) {
@@ -30,67 +40,59 @@ const getAudioCtx = () => {
   }
   return globalAudioCtx;
 };
-
-// Fonction vitale pour iOS : Jouer un son silencieux sur une interaction utilisateur pour débloquer l'API
 const unlockAudioForIOS = () => {
   const ctx = getAudioCtx();
   if (!ctx) return;
   if (ctx.state === 'suspended') ctx.resume();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  gain.gain.value = 0; // Silencieux
+  gain.gain.value = 0;
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.start();
   osc.stop(ctx.currentTime + 0.01);
 };
-
 const playTone = (frequency: number, duration: number, type: OscillatorType = "sine") => {
   const ctx = getAudioCtx();
   if (!ctx) return;
-  
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  
   osc.type = type;
   osc.frequency.setValueAtTime(frequency, ctx.currentTime);
   gain.gain.setValueAtTime(1, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-  
   osc.connect(gain);
   gain.connect(ctx.destination);
-  
   osc.start();
   osc.stop(ctx.currentTime + duration);
 };
 
 export default function ToolsPage() {
   const { lang } = useLanguage();
-  const [activeTab, setActiveTab] = useState<"plates" | "predict" | "convert" | "timer" | "elite">("plates");
+  const [activeTab, setActiveTab] = useState<"plates" | "predict" | "convert" | "timer" | "elite" | "nuts">("plates");
   
-  // States - Plate Calculator
   const [targetWeight, setTargetWeight] = useState<string>("");
   const [barWeight, setBarWeight] = useState<string>("20");
   
-  // States - Converter
+  // 🛡️ CORRECTION : Restauration des variables de conversion Nutrition
   const [convKg, setConvKg] = useState<string>("");
   const [convLb, setConvLb] = useState<string>("");
   const [convOz, setConvOz] = useState<string>("");
   const [convGramsOz, setConvGramsOz] = useState<string>("");
   const [convCup, setConvCup] = useState<string>("");
   const [convGramsCup, setConvGramsCup] = useState<string>("");
-
-  // States - 1RM Predictor
+  
   const [liftWeight, setLiftWeight] = useState<string>("");
   const [liftReps, setLiftReps] = useState<string>("");
 
-  // States - Elite Metrics (Sweat Rate)
   const [weightBefore, setWeightBefore] = useState<string>("");
   const [weightAfter, setWeightAfter] = useState<string>("");
   const [fluidDrank, setFluidDrank] = useState<string>("");
   const [workoutDur, setWorkoutDur] = useState<string>("");
 
-  // States - Timer Classique
+  const [selectedNut, setSelectedNut] = useState<string>("amandes");
+  const [nutHandfuls, setNutHandfuls] = useState<string>("1");
+
   const [timerMode, setTimerMode] = useState<"classic" | "hiit">("hiit");
   const [classicTime, setClassicTime] = useState<number>(60);
   const [customMin, setCustomMin] = useState<string>("1");
@@ -98,27 +100,17 @@ export default function ToolsPage() {
   const [classicIsRunning, setClassicIsRunning] = useState(false);
   const classicRef = useRef<NodeJS.Timeout | null>(null);
 
-  // States - HIIT Pro Timer
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [hiitConfig, setHiitConfig] = useState({
-    prepare: 10, work: 20, rest: 10, cycles: 8, sets: 1, restBetweenSets: 60, coolDown: 0
-  });
-  const [hiitState, setHiitState] = useState({
-    isRunning: false,
-    phase: "PREPARE" as "PREPARE" | "WORK" | "REST" | "SET_REST" | "COOL_DOWN" | "DONE",
-    timeLeft: hiitConfig.prepare,
-    currentCycle: 1,
-    currentSet: 1
-  });
+  const [hiitConfig, setHiitConfig] = useState({ prepare: 10, work: 20, rest: 10, cycles: 8, sets: 1, restBetweenSets: 60, coolDown: 0 });
+  const [hiitState, setHiitState] = useState({ isRunning: false, phase: "PREPARE" as "PREPARE" | "WORK" | "REST" | "SET_REST" | "COOL_DOWN" | "DONE", timeLeft: hiitConfig.prepare, currentCycle: 1, currentSet: 1 });
   const hiitRef = useRef<NodeJS.Timeout | null>(null);
 
   const t = {
-    FR: { title: "Boîte à Outils", sub: "L'arsenal de la Silicon Valley pour votre entraînement.", plateCalc: "Disques", converter: "Convertir", predictor: "1RM", timer: "Chrono", elite: "Labo Pro", targetWeight: "Poids Cible (kg)", barWeight: "Poids de la Barre (kg)", eachSide: "Par côté :", totalSide: "Total par côté :", noPlates: "Entrez un poids cible supérieur à la barre.", kgToLb: "Kg vers Lbs", lbToKg: "Lbs vers Kg", weightLifted: "Poids soulevé (kg)", repsDone: "Reps réalisées", est1RM: "1RM Estimé", formula: "Basé sur la formule d'Epley", nutConv: "Nutrition (Solides & Liquides)", start: "Démarrer", pause: "Pause", reset: "Réinitialiser", classic: "Classique", prepare: "Préparation", work: "Travail", rest: "Repos", cycles: "Cycles", sets: "Séries", restBetween: "Repos (Séries)", coolDown: "Retour au calme", done: "Terminé !", soundOn: "Son Activé", soundOff: "Son Désactivé", sweatTitle: "Taux de Sudation (Hydratation)", sweatSub: "Protocole de pesée pour définir vos besoins hydriques intra-effort.", wBefore: "Poids avant (kg)", wAfter: "Poids après (kg)", fluid: "Liquide bu (ml)", dur: "Durée (min)", sweatRate: "Perte de sueur", sweatRec: "Buvez cette quantité par heure d'effort." },
-    EN: { title: "Toolbox", sub: "The Silicon Valley arsenal for your training.", plateCalc: "Plates", converter: "Convert", predictor: "1RM", timer: "Timer", elite: "Pro Lab", targetWeight: "Target Weight (kg)", barWeight: "Bar Weight (kg)", eachSide: "Per side:", totalSide: "Total per side:", noPlates: "Enter a target weight greater than the bar.", kgToLb: "Kg to Lbs", lbToKg: "Lbs to Kg", weightLifted: "Weight lifted (kg)", repsDone: "Reps performed", est1RM: "Estimated 1RM", formula: "Based on Epley's formula", nutConv: "Nutrition (Solids & Liquids)", start: "Start", pause: "Pause", reset: "Reset", classic: "Classic", prepare: "Prepare", work: "Work", rest: "Rest", cycles: "Cycles", sets: "Sets", restBetween: "Rest (Sets)", coolDown: "Cool Down", done: "Workout Done!", soundOn: "Sound On", soundOff: "Sound Off", sweatTitle: "Sweat Rate (Hydration)", sweatSub: "Weigh-in protocol to define your intra-workout fluid needs.", wBefore: "Weight before (kg)", wAfter: "Weight after (kg)", fluid: "Fluid drank (ml)", dur: "Duration (min)", sweatRate: "Sweat Loss", sweatRec: "Drink this amount per hour of exercise." }
+    FR: { title: "Boîte à Outils", sub: "L'arsenal de la Silicon Valley pour votre entraînement.", plateCalc: "Disques", converter: "Convertir", predictor: "1RM", timer: "Chrono", elite: "Labo Pro", nuts: "Oléagineux", targetWeight: "Poids Cible (kg)", barWeight: "Poids de la Barre (kg)", eachSide: "Par côté :", totalSide: "Total par côté :", noPlates: "Entrez un poids cible supérieur à la barre.", kgToLb: "Kg vers Lbs", lbToKg: "Lbs vers Kg", weightLifted: "Poids soulevé (kg)", repsDone: "Reps réalisées", est1RM: "1RM Estimé", formula: "Basé sur la formule d'Epley", start: "Démarrer", pause: "Pause", reset: "Réinit", classic: "Classique", prepare: "Préparation", work: "Travail", rest: "Repos", cycles: "Cycles", sets: "Séries", restBetween: "Repos (Séries)", coolDown: "Retour au calme", done: "Terminé !", soundOn: "Son On", soundOff: "Son Off", sweatTitle: "Taux de Sudation", sweatSub: "Protocole hydrique.", wBefore: "Poids avant (kg)", wAfter: "Poids après (kg)", fluid: "Liquide bu (ml)", dur: "Durée (min)", sweatRate: "Perte de sueur", sweatRec: "Buvez cette quantité par heure d'effort.", nutTitle: "Calculateur d'Oléagineux", nutSub: "Convertit les 'poignées' en grammes et calories réelles.", handfuls: "Nombre de poignées :", nutConv: "Nutrition (Solides & Liquides)" },
+    EN: { title: "Toolbox", sub: "The Silicon Valley arsenal for your training.", plateCalc: "Plates", converter: "Convert", predictor: "1RM", timer: "Timer", elite: "Pro Lab", nuts: "Nuts", targetWeight: "Target Weight (kg)", barWeight: "Bar Weight (kg)", eachSide: "Per side:", totalSide: "Total per side:", noPlates: "Enter a target weight greater than the bar.", kgToLb: "Kg to Lbs", lbToKg: "Lbs to Kg", weightLifted: "Weight lifted (kg)", repsDone: "Reps performed", est1RM: "Estimated 1RM", formula: "Based on Epley's formula", start: "Start", pause: "Pause", reset: "Reset", classic: "Classic", prepare: "Prepare", work: "Work", rest: "Rest", cycles: "Cycles", sets: "Sets", restBetween: "Rest (Sets)", coolDown: "Cool Down", done: "Workout Done!", soundOn: "Sound On", soundOff: "Sound Off", sweatTitle: "Sweat Rate", sweatSub: "Hydration protocol.", wBefore: "Weight before (kg)", wAfter: "Weight after (kg)", fluid: "Fluid drank (ml)", dur: "Duration (min)", sweatRate: "Sweat Loss", sweatRec: "Drink this amount per hour.", nutTitle: "Nuts Estimator", nutSub: "Converts 'handfuls' into real grams and calories.", handfuls: "Number of handfuls:", nutConv: "Nutrition (Solids & Liquids)" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
-  // Calcul Logique Plate Calculator
   const calculatePlates = () => {
     const target = parseFloat(targetWeight);
     const bar = parseFloat(barWeight);
@@ -139,17 +131,14 @@ export default function ToolsPage() {
   };
   const requiredPlates = calculatePlates();
 
-  // Convertisseurs Sport
+  // Handlers Sport & Nutrition
   const handleKgChange = (val: string) => { setConvKg(val); setConvLb(val ? (parseFloat(val) * 2.20462).toFixed(2) : ""); };
   const handleLbChange = (val: string) => { setConvLb(val); setConvKg(val ? (parseFloat(val) / 2.20462).toFixed(2) : ""); };
-
-  // Convertisseurs Nutrition
   const handleOzChange = (val: string) => { setConvOz(val); setConvGramsOz(val ? (parseFloat(val) * 28.3495).toFixed(0) : ""); };
   const handleGramsOzChange = (val: string) => { setConvGramsOz(val); setConvOz(val ? (parseFloat(val) / 28.3495).toFixed(2) : ""); };
   const handleCupChange = (val: string) => { setConvCup(val); setConvGramsCup(val ? (parseFloat(val) * 240).toFixed(0) : ""); };
   const handleGramsCupChange = (val: string) => { setConvGramsCup(val); setConvCup(val ? (parseFloat(val) / 240).toFixed(2) : ""); };
 
-  // 1RM
   const get1RM = () => {
     const w = parseFloat(liftWeight);
     const r = parseInt(liftReps);
@@ -158,7 +147,6 @@ export default function ToolsPage() {
     return Math.round(w * (1 + r / 30));
   };
 
-  // Sweat Rate
   const getSweatRate = () => {
     const w1 = parseFloat(weightBefore);
     const w2 = parseFloat(weightAfter);
@@ -172,7 +160,20 @@ export default function ToolsPage() {
     return Math.round(totalSweat / hours);
   };
 
-  // Timer Classique
+  const currentNut = NUT_DATABASE[selectedNut as keyof typeof NUT_DATABASE];
+  const calculateNutMacros = () => {
+    const qty = parseFloat(nutHandfuls) || 0;
+    const totalGrams = qty * currentNut.gramsPerHandful;
+    const ratio = totalGrams / 100;
+    return {
+      grams: totalGrams,
+      kcal: Math.round(currentNut.kcalPer100 * ratio),
+      fats: Math.round(currentNut.gFats * ratio),
+      prot: Math.round(currentNut.gProt * ratio)
+    };
+  };
+  const nutStats = calculateNutMacros();
+
   useEffect(() => {
     if (classicIsRunning && classicTime > 0) {
       classicRef.current = setInterval(() => setClassicTime(prev => prev - 1), 1000);
@@ -195,7 +196,6 @@ export default function ToolsPage() {
     setClassicTime(m * 60 + s);
   };
 
-  // HIIT Pro Timer
   const updateHiitConfig = (key: keyof typeof hiitConfig, val: number) => {
     if (val < 0) return;
     setHiitConfig(prev => ({ ...prev, [key]: val }));
@@ -214,19 +214,17 @@ export default function ToolsPage() {
           let newSet = prev.currentSet;
           let newIsRunning = prev.isRunning;
 
-          // Bips de fin de chrono (3, 2, 1)
           if (newTime > 0 && newTime <= 3 && audioEnabled) {
             playTone(800, 0.1);
             if (typeof window !== "undefined" && navigator.vibrate) navigator.vibrate(100);
           }
 
-          // Changement de phase
           if (newTime === 0) {
             if (audioEnabled) {
               if (prev.phase === "WORK" && prev.currentCycle === hiitConfig.cycles && prev.currentSet === hiitConfig.sets && hiitConfig.coolDown === 0) {
-                playTone(1500, 1.5, "square"); // Sifflet final
+                playTone(1500, 1.5, "square"); 
               } else {
-                playTone(1200, 0.5, "square"); // Sifflet changement de phase
+                playTone(1200, 0.5, "square"); 
               }
             }
             if (typeof window !== "undefined" && navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -261,9 +259,7 @@ export default function ToolsPage() {
   }, [hiitState.isRunning, hiitConfig, audioEnabled]);
 
   const toggleHiit = () => {
-    // 🛡️ Le Hack IOS Vital est déclenché ici
     if (!hiitState.isRunning && audioEnabled) unlockAudioForIOS();
-    
     if (hiitState.phase === "DONE") {
       setHiitState({ isRunning: true, phase: "PREPARE", timeLeft: hiitConfig.prepare, currentCycle: 1, currentSet: 1 });
     } else {
@@ -289,6 +285,29 @@ export default function ToolsPage() {
     }
   };
 
+  // 🛡️ Calcul des Pourcentages du 1RM (Phase 4)
+  const render1RMPercentages = () => {
+    const rm = get1RM();
+    if (rm <= 0) return null;
+    const pcts = [50, 60, 70, 80, 90, 95];
+    return (
+      <div className="pt-6 mt-4 border-t border-zinc-100 dark:border-zinc-800 animate-in fade-in">
+        <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-3">{lang === 'FR' ? 'Matrice de travail (Barre Olympique)' : 'Working Matrix (Olympic Bar)'}</h4>
+        <div className="grid grid-cols-3 gap-2">
+          {pcts.map(pct => {
+            const weight = Math.round((rm * (pct / 100)) / 2.5) * 2.5; // Arrondi au 2.5kg
+            return (
+              <div key={pct} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
+                <span className="text-[10px] font-bold text-zinc-400">{pct}%</span>
+                <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">{weight} kg</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full pb-24">
       <div className="flex flex-col space-y-2 mb-8">
@@ -298,29 +317,29 @@ export default function ToolsPage() {
         <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
       </div>
 
-      {/* UI DES ONGLETS ENTIÈREMENT REVUE POUR 5 ÉLÉMENTS */}
-      <div className="grid grid-cols-5 gap-2 mb-8 bg-zinc-200/50 dark:bg-zinc-900 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide">
-        <button onClick={() => setActiveTab("plates")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[70px] ${activeTab === 'plates' ? 'bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <Target className="w-5 h-5 mb-1" /><span className="text-[9px] uppercase tracking-wider">{txt.plateCalc}</span>
+      <div className="grid grid-cols-6 gap-2 mb-8 bg-zinc-200/50 dark:bg-zinc-900 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide">
+        <button onClick={() => setActiveTab("plates")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'plates' ? 'bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+          <Target className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.plateCalc}</span>
         </button>
-        <button onClick={() => setActiveTab("predict")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[70px] ${activeTab === 'predict' ? 'bg-white dark:bg-zinc-950 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <Calculator className="w-5 h-5 mb-1" /><span className="text-[9px] uppercase tracking-wider">{txt.predictor}</span>
+        <button onClick={() => setActiveTab("predict")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'predict' ? 'bg-white dark:bg-zinc-950 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+          <Calculator className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.predictor}</span>
         </button>
-        <button onClick={() => setActiveTab("convert")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[70px] ${activeTab === 'convert' ? 'bg-white dark:bg-zinc-950 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <ArrowRightLeft className="w-5 h-5 mb-1" /><span className="text-[9px] uppercase tracking-wider">{txt.converter}</span>
+        <button onClick={() => setActiveTab("convert")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'convert' ? 'bg-white dark:bg-zinc-950 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+          <ArrowRightLeft className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.converter}</span>
         </button>
-        <button onClick={() => setActiveTab("timer")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[70px] ${activeTab === 'timer' ? 'bg-white dark:bg-zinc-950 text-red-600 dark:text-red-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <Timer className="w-5 h-5 mb-1" /><span className="text-[9px] uppercase tracking-wider">{txt.timer}</span>
+        <button onClick={() => setActiveTab("nuts")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'nuts' ? 'bg-white dark:bg-zinc-950 text-yellow-600 dark:text-yellow-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+          <Nut className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.nuts}</span>
         </button>
-        {/* NOUVEL ONGLET ELITE */}
-        <button onClick={() => setActiveTab("elite")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[70px] ${activeTab === 'elite' ? 'bg-white dark:bg-zinc-950 text-fuchsia-600 dark:text-fuchsia-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <FlaskConical className="w-5 h-5 mb-1" /><span className="text-[9px] uppercase tracking-wider">{txt.elite}</span>
+        <button onClick={() => setActiveTab("timer")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'timer' ? 'bg-white dark:bg-zinc-950 text-red-600 dark:text-red-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+          <Timer className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.timer}</span>
+        </button>
+        <button onClick={() => setActiveTab("elite")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'elite' ? 'bg-white dark:bg-zinc-950 text-fuchsia-600 dark:text-fuchsia-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+          <FlaskConical className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.elite}</span>
         </button>
       </div>
 
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
         
-        {/* ONGLET 1 : PLATE CALCULATOR */}
         {activeTab === "plates" && (
           <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
             <CardHeader>
@@ -342,7 +361,6 @@ export default function ToolsPage() {
                 <h4 className="font-black text-sm uppercase tracking-widest text-zinc-400 mb-4">{txt.eachSide}</h4>
                 {requiredPlates.length > 0 ? (
                   <div className="space-y-8">
-                    {/* DESSIN DE LA BARRE (SILICON VALLEY UI) */}
                     <div className="flex items-center justify-center p-8 bg-zinc-100 dark:bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
                       <div className="w-32 h-6 bg-zinc-400 dark:bg-zinc-700 rounded-l-md border-r-2 border-zinc-500 dark:border-zinc-900 shadow-inner"></div>
                       <div className="w-8 h-10 bg-zinc-500 dark:bg-zinc-600 border-r-2 border-zinc-800"></div>
@@ -377,7 +395,7 @@ export default function ToolsPage() {
           </Card>
         )}
 
-        {/* ONGLET 2 : 1RM PREDICTOR */}
+        {/* ONGLET 1RM PREDICTOR avec Matrice des Pourcentages */}
         {activeTab === "predict" && (
           <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
             <CardHeader>
@@ -399,11 +417,13 @@ export default function ToolsPage() {
                 <span className="font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-widest">{txt.est1RM}</span>
                 <span className="text-5xl font-black text-indigo-500">{get1RM()} <span className="text-xl text-zinc-500">kg</span></span>
               </div>
+              {/* 🛡️ PHASE 4 QOL : Matrice des 1RM */}
+              {render1RMPercentages()}
             </CardContent>
           </Card>
         )}
 
-        {/* ONGLET 3 : CONVERTISSEURS */}
+        {/* ONGLET CONVERTISSEUR COMPLET (SPORT + NUTRITION RESTAURÉE) */}
         {activeTab === "convert" && (
           <div className="space-y-4">
             <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
@@ -441,10 +461,65 @@ export default function ToolsPage() {
           </div>
         )}
 
-        {/* ONGLET 4 : CHRONOMÈTRE PRO & HIIT */}
+        {/* ONGLET OLÉAGINEUX (NUTS ESTIMATOR) */}
+        {activeTab === "nuts" && (
+          <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center text-yellow-600 dark:text-yellow-500"><Nut className="w-5 h-5 mr-2" /> {txt.nutTitle}</CardTitle>
+              <CardDescription>{txt.nutSub}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-3">
+                <Label className="font-bold text-zinc-600 dark:text-zinc-400">Sélectionnez la noix :</Label>
+                <Select value={selectedNut} onValueChange={setSelectedNut}>
+                  <SelectTrigger className="h-14 font-black bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="font-bold">
+                    {Object.entries(NUT_DATABASE).map(([key, data]) => (
+                      <SelectItem key={key} value={key}>{lang === 'FR' ? data.nameFR : data.nameEN}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-3">
+                <Label className="font-bold text-zinc-600 dark:text-zinc-400">{txt.handfuls}</Label>
+                <div className="flex items-center space-x-4">
+                  <Input type="number" step="0.5" min="0" placeholder="Ex: 1" value={nutHandfuls} onChange={(e) => setNutHandfuls(e.target.value)} className="font-black text-3xl h-16 bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-yellow-600 dark:text-yellow-500 w-32 text-center" />
+                  <span className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Poignées <br/>(Handfuls)</span>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
+                <div className="bg-yellow-50 dark:bg-yellow-900/10 p-6 rounded-2xl border border-yellow-200 dark:border-yellow-900/30">
+                  <div className="flex justify-between items-center mb-4 pb-4 border-b border-yellow-200 dark:border-yellow-800/30">
+                    <span className="font-black text-yellow-700 dark:text-yellow-500 uppercase tracking-widest">Poids Réel</span>
+                    <span className="text-4xl font-black text-yellow-600">{nutStats.grams} <span className="text-xl">g</span></span>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <span className="block text-xl font-black text-orange-500">{nutStats.kcal}</span>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Kcal</span>
+                    </div>
+                    <div className="border-x border-yellow-200 dark:border-yellow-800/30">
+                      <span className="block text-xl font-black text-yellow-500">{nutStats.fats}g</span>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Lipides</span>
+                    </div>
+                    <div>
+                      <span className="block text-xl font-black text-blue-500">{nutStats.prot}g</span>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Protéines</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {activeTab === "timer" && (
           <div className="space-y-4">
-            
             <div className="flex justify-center mb-4">
               <div className="bg-zinc-200/50 dark:bg-zinc-900 p-1 rounded-xl flex space-x-1">
                 <button onClick={() => setTimerMode("hiit")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${timerMode === 'hiit' ? 'bg-white dark:bg-zinc-950 text-red-500 shadow-sm' : 'text-zinc-500'}`}>HIIT / Tabata</button>
@@ -488,25 +563,18 @@ export default function ToolsPage() {
 
             {timerMode === "hiit" && (
               hiitState.isRunning || hiitState.phase === "DONE" ? (
-                /* ÉCRAN D'EXÉCUTION DU HIIT (Plein Écran dans la Card) */
                 <Card className={`border-2 shadow-2xl transition-colors duration-500 overflow-hidden ${getPhaseColor()}`}>
                   <CardContent className="flex flex-col items-center justify-center py-20 relative">
-                    
-                    <button onClick={resetHiit} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20">
-                      <X className="w-6 h-6" />
-                    </button>
+                    <button onClick={resetHiit} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20"><X className="w-6 h-6" /></button>
                     <button onClick={() => setAudioEnabled(!audioEnabled)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20">
                       {audioEnabled ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
                     </button>
-
                     <h2 className="text-2xl sm:text-4xl font-black uppercase tracking-widest mb-2 opacity-90 drop-shadow-md">
                       {txt[hiitState.phase.toLowerCase() as keyof typeof txt] || hiitState.phase}
                     </h2>
-                    
                     <div className="text-[120px] sm:text-[160px] font-black tabular-nums leading-none drop-shadow-xl mb-8">
                       {hiitState.phase === "DONE" ? "✅" : formatTime(hiitState.timeLeft)}
                     </div>
-                    
                     {hiitState.phase !== "PREPARE" && hiitState.phase !== "DONE" && hiitState.phase !== "COOL_DOWN" && (
                       <div className="flex space-x-8 text-xl font-bold bg-black/20 px-6 py-3 rounded-2xl backdrop-blur-sm">
                         <div className="text-center"><span className="block text-xs uppercase opacity-70 mb-1">{txt.cycles}</span>{hiitState.currentCycle} / {hiitConfig.cycles}</div>
@@ -514,7 +582,6 @@ export default function ToolsPage() {
                         <div className="text-center"><span className="block text-xs uppercase opacity-70 mb-1">{txt.sets}</span>{hiitState.currentSet} / {hiitConfig.sets}</div>
                       </div>
                     )}
-                    
                     <Button onClick={toggleHiit} className="mt-12 bg-white text-black hover:bg-zinc-200 h-16 px-12 text-xl font-black shadow-xl">
                       {hiitState.phase === "DONE" ? <RotateCcw className="w-6 h-6 mr-2" /> : (hiitState.isRunning ? <Pause className="w-6 h-6 mr-2" /> : <Play className="w-6 h-6 mr-2" />)}
                       {hiitState.phase === "DONE" ? txt.reset : (hiitState.isRunning ? txt.pause : "Reprendre")}
@@ -522,7 +589,6 @@ export default function ToolsPage() {
                   </CardContent>
                 </Card>
               ) : (
-                /* ÉCRAN DE CONFIGURATION DU HIIT */
                 <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
                   <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-zinc-100 dark:border-zinc-800">
                     <CardTitle className="text-red-500 font-black tracking-widest uppercase flex items-center">
@@ -566,7 +632,6 @@ export default function ToolsPage() {
           </div>
         )}
 
-        {/* NOUVEL ONGLET 5 : ELITE METRICS (SWEAT RATE) */}
         {activeTab === "elite" && (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
             <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg border-t-4 border-t-fuchsia-500">
