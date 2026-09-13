@@ -101,7 +101,6 @@ export function generateSmartWorkoutPlan(
       if (!basePatterns.includes("Pull Horizontal")) basePatterns.push("Pull Horizontal");
     }
     
-    // Impact SNC maximum selon le niveau d'expérience et les sports
     let maxCnsAllowed = expLevel === 'debutant' ? 3 : expLevel === 'intermediaire' ? 4 : 5;
     if (daySports.some(s => ["jjb", "boxe"].includes(s))) maxCnsAllowed -= 2; 
     if (daySports.includes("randonnee")) maxCnsAllowed -= 1;
@@ -134,7 +133,6 @@ export function generateSmartWorkoutPlan(
           lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps); 
           const bestSet = lastSessionLogs[0];
           
-          // 🛡️ L'IA prend en compte le RPE lors de la création d'un nouveau cycle
           const rpe = bestSet.rpe || 8;
           const maxTargetRep = parseInt(defaultReps.split('-')[1] || "12");
           const minTargetRep = parseInt(defaultReps.split('-')[0] || "8");
@@ -161,20 +159,24 @@ export function generateSmartWorkoutPlan(
             recommendedWeight = bestSet.weight > 0 ? Number((bestSet.weight * 0.9).toFixed(1)) : 0;
             defaultReps = `Viser > ${bestSet.reps + 2} reps`; 
           } 
-          else if (bestSet.reps >= maxTargetRep) {
-            // 🛡️ LOGIQUE RPE
+          else if (bestSet.reps >= maxTargetRep || (bestSet.weight === 0 && bestSet.reps >= 14)) {
             if (rpe === 10) {
               recommendedWeight = bestSet.weight;
               defaultReps = `Maintenir (RPE 10)`;
-            } else {
+            } else if (bestSet.weight === 0 && bestSet.reps >= 14) {
+               recommendedWeight = 2.5;
+               defaultReps = `8-12 (Lesté)`;
+            } else if (bestSet.weight > 0) {
               const multiplier = rpe <= 6 ? 2 : 1;
               const increment = (ex.cns_impact >= 4 ? 2.5 : 1.25) * multiplier;
-              recommendedWeight = bestSet.weight > 0 ? bestSet.weight + increment : 2.5;
+              recommendedWeight = bestSet.weight + increment;
               defaultReps = `${parseInt(defaultReps.split('-')[0])}-${maxTargetRep}`; 
+            } else {
+              // 🛡️ CORRECTION : Utilisation de defaultReps ici
+              defaultReps = `Viser > ${bestSet.reps + 2} reps`;
             }
           } 
           else if (bestSet.reps < minTargetRep || (rpe === 10 && bestSet.weight > 0)) {
-            // 🛡️ DELOAD forcé si RPE 10 avant d'avoir atteint les reps
             recommendedWeight = bestSet.weight > 0 ? Number((bestSet.weight * 0.9).toFixed(1)) : 0;
             defaultReps = "8-10 (Deload)";
           }

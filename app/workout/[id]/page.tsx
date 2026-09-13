@@ -5,7 +5,6 @@ import useSWR from "swr";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-// 🛡️ CORRECTION : Ajout de TOUTES les icônes manquantes (Flame, ArrowUp, ArrowDown, etc.)
 import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight, Scale, Filter, Activity, ArrowUp, ArrowDown, Flame } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -74,6 +73,12 @@ const getRecommendedReps = (str: string) => {
   if (str.includes("-")) return str.split("-")[0].trim(); 
   const match = str.match(/\d+/); 
   return match ? match[0] : "";
+};
+
+const getImageUrl = (ex: any, frame: 0 | 1) => {
+  if (!ex) return "";
+  if (ex.gif_url && ex.gif_url.includes('github')) return `${ex.gif_url}/${frame}.jpg`;
+  return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
 };
 
 const fetchActiveSession = async (id: string) => {
@@ -317,45 +322,31 @@ export default function ActiveWorkoutSession() {
     return platesToUse;
   };
 
-  // 🛡️ PHASE 4 : Logique de Réorganisation Mobile Safe avec Sauvegarde BD
   const moveExercise = async (index: number, direction: 'up' | 'down') => {
+    if (!data?.sessionData) return; 
     if ((direction === 'up' && index === 0) || (direction === 'down' && index === localExercises.length - 1)) return;
     
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     const newArray = [...localExercises];
-    
-    // Échange des éléments dans le tableau
     const temp = newArray[index];
     newArray[index] = newArray[newIndex];
     newArray[newIndex] = temp;
     
-    // Mise à jour de l'UI immédiate (Optimistic)
     setLocalExercises(newArray); 
 
-    // Mise à jour asynchrone en base de données de TOUS les exercices pour préserver l'ordre
     try {
       const updates = newArray.map((ex, i) => ({
         id: ex.id,
-        session_id: data?.sessionData.id,
+        session_id: data.sessionData.id,
         exercise_id: ex.exercise_id,
-        sets: ex.sets,
-        target_reps: ex.target_reps,
-        rest_seconds: ex.rest_seconds,
-        recommended_weight: ex.recommended_weight,
-        order_index: i // L'ordre est recréé de 0 à X
+        order_index: i
       }));
-      
-      const { error } = await supabase.from("workout_exercises").upsert(updates);
-      if (error) throw error;
-      
-      // On force la revalidation des données
-      mutate();
+      await supabase.from("workout_exercises").upsert(updates);
     } catch (err) {
-      console.error("Erreur de sauvegarde lors de la réorganisation :", err);
+      console.error("Erreur réorganisation:", err);
     }
   };
 
-  // 🛡️ PHASE 4 : Logique de Séries de Chauffe Dynamiques
   const renderWarmupSets = (we: any, index: number) => {
     if (showWarmupFor !== we.id) return null;
     
@@ -583,11 +574,6 @@ export default function ActiveWorkoutSession() {
   const session = data.sessionData;
   const insights = getSessionInsights(localExercises, lang);
 
-  const getImageUrl = (ex: any, frame: 0 | 1) => {
-    if (ex.gif_url && ex.gif_url.includes('github')) return `${ex.gif_url}/${frame}.jpg`;
-    return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
-  };
-
   const renderStars = (impact: number) => {
     const safeImpact = impact || 1;
     return (
@@ -660,7 +646,7 @@ export default function ActiveWorkoutSession() {
               const ex = we.exercise_library;
               const identifier = we.id || we.exercise_id;
               const uniqueKey = we.id || `we-${session.id}-${index}`;
-              const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
+              const thumbnailUrl = getImageUrl(ex, 0);
               
               const ghost = data.ghostData[identifier];
 
@@ -688,7 +674,6 @@ export default function ActiveWorkoutSession() {
                       </div>
                     </div>
                     <div className="flex flex-col space-y-1 ml-2 shrink-0">
-                      {/* 🛡️ PHASE 4 : Drag & Drop Boutons Mobile-Safe */}
                       <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
                         <button onClick={() => moveExercise(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-zinc-900 rounded disabled:opacity-30 disabled:hover:bg-transparent"><ArrowUp className="w-4 h-4" /></button>
                         <button onClick={() => moveExercise(index, 'down')} disabled={index === localExercises.length - 1} className="p-1 text-zinc-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-zinc-900 rounded disabled:opacity-30 disabled:hover:bg-transparent"><ArrowDown className="w-4 h-4" /></button>
@@ -722,7 +707,6 @@ export default function ActiveWorkoutSession() {
                         <Info className="w-4 h-4" />
                       </button>
 
-                      {/* 🛡️ PHASE 4 : Bouton Ramp-up Sets */}
                       {(index === 0 || we.recommended_weight > 20) && (
                         <button onClick={() => setShowWarmupFor(showWarmupFor === we.id ? null : we.id)} className={`flex items-center px-2 py-1 text-xs font-bold rounded-md transition-colors ${showWarmupFor === we.id ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/60'}`}>
                           <Flame className="w-3 h-3 mr-1" /> {txt.generateWarmup}
@@ -770,7 +754,6 @@ export default function ActiveWorkoutSession() {
 
       <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
 
-      {/* MODALES DIVERSES RESTANT INCHANGÉES */}
       <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
         <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">

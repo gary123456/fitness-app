@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, 
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const SPORT_LABELS: Record<string, string> = { jjb: "JJB / MMA", football: "Football", basketball: "Basketball", running: "Running", natation: "Natation", cyclisme: "Cyclisme", randonnee: "Randonnée", padel_tennis: "Padel / Tennis" };
 
@@ -27,6 +27,7 @@ const fetchProgramData = async () => {
 
   let weeklyPlan = [];
   let isDeloadWeek = false;
+  let completedSessionIds: string[] = [];
 
   if (existingProgram) {
     const { data: sessions } = await supabase.from("workout_sessions").select(`*, workout_exercises (*, exercise_library (*))`).eq("program_id", existingProgram.id).order("order_index", { ascending: true });
@@ -34,13 +35,25 @@ const fetchProgramData = async () => {
       sessions.forEach(session => { if (session.workout_exercises) session.workout_exercises.sort((a: any, b: any) => a.order_index - b.order_index); });
       weeklyPlan = sessions;
       isDeloadWeek = sessions.some(s => s.workout_exercises?.some((we:any) => we.target_reps?.includes("Léger")));
+      
+      const today = new Date();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay() + 1); 
+      startOfWeek.setHours(0,0,0,0);
+      
+      const { data: recentLogs } = await supabase.from("workout_logs").select("session_id").eq("user_id", user.id).gte("created_at", startOfWeek.toISOString());
+      if (recentLogs) {
+        completedSessionIds = Array.from(new Set(recentLogs.map(l => l.session_id)));
+      }
     }
   }
-  return { profile, weeklyPlan, isDeloadWeek, existingProgram, allPrograms: allPrograms || [] };
+  return { profile, weeklyPlan, isDeloadWeek, existingProgram, allPrograms: allPrograms || [], completedSessionIds };
 };
 
 export default function WorkoutPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const justFinished = searchParams?.get('finished') === 'true'; 
   const { lang } = useLanguage();
   const { data, error, mutate, isLoading } = useSWR('workoutData', fetchProgramData);
 
@@ -69,8 +82,8 @@ export default function WorkoutPage() {
   const dynamicDaysOrder = [...DAYS_ORDER.slice(todayOrderedIndex), ...DAYS_ORDER.slice(0, todayOrderedIndex)];
 
   const t: Record<string, Record<string, string>> = {
-    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser vos dernières performances et le RPE pour appliquer la Loi de la Double Progression.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va générer de nouveaux exercices pour casser la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 2 Perso / 2 Algo.", deleteErr: "Impossible de supprimer ce programme.", search: "Rechercher..." },
-    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your past performances and RPE to apply Double Progression Law.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will generate new exercises to break plateaus.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 2 Custom / 2 Algo.", deleteErr: "Cannot delete this program.", search: "Search..." }
+    FR: { title: "Mon Programme", sub: "Hybride, auto-régulé et adapté à votre calendrier.", genNext: "Surcharge Progressive", manage: "Mes Programmes", createCustom: "Créer un programme", newCycle: "Nouveau Cycle", rest: "Repos Total", start: "Démarrer", locked: "Prévu le", sets: "séries", target: "Objectif", bw: "Poids du corps", progTitle: "Ajuster les charges ?", progSub: "L'algorithme va analyser vos dernières performances et le RPE pour appliquer la Loi de la Double Progression.", cycleTitle: "Générer un Nouveau Cycle ?", cycleSub: "L'algorithme va générer de nouveaux exercices pour casser la stagnation.", cancel: "Annuler", confirm: "Confirmer", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", today: "Aujourd'hui", deloadBadge: "Semaine de Délestage", deloadSub: "Volume réduit de 20% pour dissiper la fatigue.", noProg: "Aucun programme actif.", limitReached: "Limite atteinte.", limitSub: "Limites : 2 Perso / 2 Algo.", deleteErr: "Impossible de supprimer ce programme.", search: "Rechercher...", waitOverload: "En attente d'adaptation" },
+    EN: { title: "My Program", sub: "Hybrid, auto-regulated and adapted to your schedule.", genNext: "Progressive Overload", manage: "My Programs", createCustom: "Create Custom", newCycle: "New Cycle", rest: "Total Rest", start: "Start", locked: "Scheduled", sets: "sets", target: "Target", bw: "Bodyweight", progTitle: "Adjust Weights?", progSub: "The algorithm will analyze your past performances and RPE to apply Double Progression Law.", cycleTitle: "Generate New Cycle?", cycleSub: "The algorithm will generate new exercises to break plateaus.", cancel: "Cancel", confirm: "Confirm", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", today: "Today", deloadBadge: "Deload Week", deloadSub: "Volume reduced by 20% to dissipate fatigue.", noProg: "No active program.", limitReached: "Limit reached.", limitSub: "Limits: 2 Custom / 2 Algo.", deleteErr: "Cannot delete this program.", search: "Search...", waitOverload: "Awaiting adaptation" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
@@ -83,8 +96,7 @@ export default function WorkoutPage() {
   const algoProgs = data?.allPrograms?.filter((p: any) => p.program_type === 'ai') || [];
 
   const handleCreateCustomClick = () => {
-    if (customProgs.length >= 2) setShowManagerModal(true);
-    else router.push("/workout/builder");
+    router.push("/workout/builder");
   };
 
   const handleNewCycleClick = () => {
@@ -127,10 +139,13 @@ export default function WorkoutPage() {
             let newWeight = bestSet.weight;
             let newTargetReps = we.target_reps;
 
-            if (bestSet.reps >= ceiling || (isRange && bestSet.reps >= maxTargetRep)) {
+            if (bestSet.reps >= ceiling || (isRange && bestSet.reps >= maxTargetRep) || (bestSet.weight === 0 && bestSet.reps >= 14)) {
               if (rpe === 10) {
                 newWeight = bestSet.weight;
                 newTargetReps = `Viser > ${bestSet.reps} (RPE 10)`;
+              } else if (bestSet.weight === 0 && bestSet.reps >= 14) {
+                 newWeight = 2.5;
+                 newTargetReps = `8-12 (Lesté)`;
               } else if (bestSet.weight > 0) {
                 const multiplier = rpe <= 6 ? 2 : 1;
                 const increment = (we.exercise_library?.cns_impact >= 4 ? 2.5 : 1.25) * multiplier;
@@ -143,7 +158,7 @@ export default function WorkoutPage() {
             else if (bestSet.reps < floor || (rpe === 10 && bestSet.weight > 0)) {
               const rawDeload = bestSet.weight * 0.9;
               newWeight = Math.round(rawDeload / 1.25) * 1.25;
-              newTargetReps = "8-12 (Deload)";
+              newTargetReps = "8-10 (Deload)";
             } 
             else {
               newWeight = bestSet.weight;
@@ -163,6 +178,7 @@ export default function WorkoutPage() {
       
       await mutate();
       setShowProgressModal(false);
+      if (justFinished) router.replace('/workout');
     } catch (error: any) {
       console.error("Overload error:", error);
       alert("Erreur de surcharge: " + error.message);
@@ -171,7 +187,6 @@ export default function WorkoutPage() {
     }
   };
 
-  // 🛡️ LISSAGE ANTI-SPAM
   const generateProgram = async (isNewCycle: boolean = false) => {
     if (!data?.profile) return;
     setGenerating(true);
@@ -189,7 +204,6 @@ export default function WorkoutPage() {
 
       const isFirstProgram = data.allPrograms.length === 0;
 
-      // Purge stricte des anciens programmes IA non-défaut
       if (!isFirstProgram) {
         const oldAlgoProgs = data.allPrograms.filter((p: any) => p.program_type === 'ai' && !p.is_default);
         for (const p of oldAlgoProgs) {
@@ -329,7 +343,6 @@ export default function WorkoutPage() {
     return matchSearch && matchMuscle && matchStars && matchPattern && matchEquipment;
   });
 
-  // 🛡️ SWR MUTATION PURE - PLUS DE RECHARGEMENT ABRUPT
   const confirmSwap = async (newEx: any) => {
     try {
       const { error } = await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
@@ -358,6 +371,14 @@ export default function WorkoutPage() {
       </div>
     );
   };
+
+  const getImageUrl = (ex: any, frame: 0 | 1) => {
+    if (ex.gif_url && ex.gif_url.includes('github')) return `${ex.gif_url}/${frame}.jpg`;
+    return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
+  };
+
+  const liftingSessionsCount = data?.weeklyPlan?.filter(s => s.workout_exercises?.length > 0).length || 0;
+  const allSessionsCompleted = liftingSessionsCount > 0 && (data?.completedSessionIds?.length || 0) >= liftingSessionsCount;
 
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
@@ -388,7 +409,10 @@ export default function WorkoutPage() {
           </Button>
 
           {data?.existingProgram && (
-            <Button onClick={() => setShowProgressModal(true)} className="w-full sm:w-auto bg-teal-500 text-white hover:bg-teal-600 font-bold">
+            <Button 
+              onClick={() => setShowProgressModal(true)} 
+              className={`w-full sm:w-auto font-bold transition-all ${allSessionsCompleted ? 'bg-orange-500 text-white hover:bg-orange-600 animate-pulse shadow-[0_0_15px_rgba(249,115,22,0.6)] border border-orange-400' : 'bg-teal-500 text-white hover:bg-teal-600'}`}
+            >
               <Zap className="w-4 h-4 mr-2" /> {txt.genNext}
             </Button>
           )}
@@ -423,9 +447,16 @@ export default function WorkoutPage() {
           const isRestDay = !hasLifting && externalSports.length === 0;
           const isToday = dayKey === todayKey;
 
+          const isCompletedToday = isToday && data?.completedSessionIds?.includes(session.id);
+          const isCompletedPast = !isToday && !isFuture && data?.completedSessionIds?.includes(session.id);
+          const isCompleted = isCompletedToday || isCompletedPast;
+
           return (
             <Card key={session.id} className={`transition-all duration-300 relative overflow-hidden ${isToday ? 'border-teal-500 shadow-[0_10px_40px_-10px_rgba(20,184,166,0.4)] ring-2 ring-teal-500/50 bg-gradient-to-b from-white to-teal-50/20 dark:from-zinc-950 dark:to-teal-950/20 scale-[1.02] z-10' : isRestDay ? 'shadow-sm border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/20 opacity-80 hover:opacity-100' : 'shadow-sm border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'}`}>
-              {isToday && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[10px] font-black uppercase px-3 py-1 rounded-bl-lg flex items-center shadow-sm"><span className="flex h-1.5 w-1.5 rounded-full bg-white mr-2 animate-pulse"></span><CalendarCheck className="w-3 h-3 mr-1" /> {txt.today}</div>}
+              
+              {isToday && !isCompleted && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[10px] font-black uppercase px-3 py-1 rounded-bl-lg flex items-center shadow-sm"><span className="flex h-1.5 w-1.5 rounded-full bg-white mr-2 animate-pulse"></span><CalendarCheck className="w-3 h-3 mr-1" /> {txt.today}</div>}
+              {isCompleted && <div className="absolute top-0 right-0 bg-orange-500 text-white text-[10px] font-black uppercase px-3 py-1 rounded-bl-lg flex items-center shadow-sm"><Zap className="w-3 h-3 mr-1" /> {txt.waitOverload}</div>}
+              
               <CardHeader className="pb-3 border-b border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
                 <div className="flex items-center space-x-3">
                   <CardTitle className={`text-lg font-bold w-28 ${isToday ? 'text-teal-700 dark:text-teal-400' : 'text-zinc-800 dark:text-zinc-100'}`}>{DAYS[dayKey as keyof typeof DAYS]}</CardTitle>
@@ -435,9 +466,10 @@ export default function WorkoutPage() {
                   </div>
                 </div>
                 {hasLifting && (
-                  isFuture ? (
+                  isFuture || isCompleted ? (
                     <Button size="sm" disabled className="font-bold bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600 border-none">
-                      <Lock className="w-4 h-4 mr-2" /> {txt.locked}
+                      {isCompleted ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <Lock className="w-4 h-4 mr-2" />} 
+                      {isCompleted ? "Terminée" : txt.locked}
                     </Button>
                   ) : (
                     <Link href={`/workout/${session.id}`}>
@@ -451,21 +483,21 @@ export default function WorkoutPage() {
               
               {hasLifting && (
                 <CardContent className="pt-4">
-                  <div className={`space-y-3 ${isFuture ? 'opacity-60 grayscale' : ''}`}>
+                  <div className={`space-y-3 ${isFuture || isCompleted ? 'opacity-60 grayscale' : ''}`}>
                     {session.workout_exercises.map((we: any, index: number) => {
                       const ex = we.exercise_library;
                       const uniqueKey = we.id || `we-${session.id}-${index}`;
                       const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
 
                       return (
-                        <div key={uniqueKey} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors ${isToday ? 'border-teal-100 dark:border-teal-900/50 bg-white/50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-900' : 'border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'}`}>
+                        <div key={uniqueKey} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors ${isToday && !isCompleted ? 'border-teal-100 dark:border-teal-900/50 bg-white/50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-900' : 'border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'}`}>
                           <div className="flex items-center space-x-4 mb-2 sm:mb-0">
                             <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative p-1">
                               {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0 opacity-50" />}
                             </div>
                             <div className="flex items-start">
                               <div>
-                                <h4 className={`font-bold text-sm ${isToday ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4>
+                                <h4 className={`font-bold text-sm ${isToday && !isCompleted ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4>
                                 <div className="flex items-center space-x-2 mt-0.5">
                                   <p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p>
                                   <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
@@ -482,7 +514,6 @@ export default function WorkoutPage() {
                             {we.recommended_weight !== null && we.recommended_weight !== undefined && (
                               <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
                                 <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
-                                {/* Convertisseur Interactif Lbs */}
                                 {we.recommended_weight > 0 && (
                                   <button onClick={(e) => { 
                                     e.stopPropagation(); 
@@ -496,7 +527,7 @@ export default function WorkoutPage() {
                             )}
                             <div className="flex items-center text-zinc-700 dark:text-zinc-300 font-bold bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded"><Repeat className="w-4 h-4 mr-2 text-zinc-500" /> {we.sets} {txt.sets} × {we.target_reps}</div>
                             <div className="flex items-center text-zinc-500 font-medium"><Clock className="w-4 h-4 mr-1.5" />{we.rest_seconds}s</div>
-                            <button onClick={() => !isFuture && openSwapModal(we.id, ex)} disabled={swapLoading || isFuture} className={`p-1.5 ml-2 rounded-md transition-colors ${isFuture ? 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed' : 'text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30'}`} title={txt.swapTitle}>
+                            <button onClick={() => !(isFuture || isCompleted) && openSwapModal(we.id, ex)} disabled={swapLoading || isFuture || isCompleted} className={`p-1.5 ml-2 rounded-md transition-colors ${isFuture || isCompleted ? 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed' : 'text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30'}`} title={txt.swapTitle}>
                               <ArrowLeftRight className="w-5 h-5" />
                             </button>
                           </div>
@@ -511,6 +542,7 @@ export default function WorkoutPage() {
         })}
       </div>
 
+      {/* 🛡️ INJECTION DU BOUTON ÉDITION DANS LE MANAGER */}
       <Dialog open={showManagerModal} onOpenChange={setShowManagerModal}>
         <DialogContent className="sm:max-w-sm w-[90vw] mx-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
@@ -545,6 +577,12 @@ export default function WorkoutPage() {
                   </div>
                 </div>
                 <div className="flex space-x-2">
+                  {/* 🛡️ BOUTON ÉDITION POUR LES PROGRAMMES PERSO */}
+                  {prog.program_type === 'custom' && (
+                    <Button size="sm" onClick={() => router.push(`/workout/builder?edit=${prog.id}`)} variant="outline" className="px-3" title="Éditer le programme">
+                      <PenTool className="w-4 h-4" />
+                    </Button>
+                  )}
                   {!prog.is_active && (
                     <Button size="sm" onClick={() => activateProgram(prog.id)} variant="outline" className="font-bold border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">Charger</Button>
                   )}
@@ -566,13 +604,12 @@ export default function WorkoutPage() {
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
-              {infoModal.exercise.gif_url ? (
-                <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center">
-                  <img src={infoModal.exercise.gif_url.endsWith('.jpg') ? infoModal.exercise.gif_url : `${infoModal.exercise.gif_url}/0.jpg`} className="max-h-full object-contain" alt="Aperçu" />
-                </div>
-              ) : (
-                <div className="h-32 flex items-center justify-center bg-zinc-100 dark:bg-zinc-900 rounded-xl"><Dumbbell className="w-8 h-8 text-zinc-400" /></div>
-              )}
+              <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
+                {infoModal.exercise.gif_url ? (
+                  <img src={getImageUrl(infoModal.exercise, 0)} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : null}
+                <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
+              </div>
               <div className="flex flex-col items-center space-y-2">
                 <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
                 <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -585,7 +622,6 @@ export default function WorkoutPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ POINT 2 : MODALE DE CONVERSION INTERACTIVE KG <-> LBS */}
       <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
         <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
@@ -627,7 +663,6 @@ export default function WorkoutPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ POINT 3 : LE SUPER-SWAP (Modale étendue avec UI Builder) */}
       <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
         <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">

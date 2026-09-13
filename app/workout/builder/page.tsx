@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Search, Plus, Dumbbell, Save, Trash2, Info, CalendarCheck, Loader2, Star, Filter, ChevronUp, ChevronDown, Activity, BookOpen } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2 } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -26,24 +28,32 @@ interface PlannedExercise {
   sets: number;
   target_reps: string;
   rest_seconds: number;
+  uid: string;
 }
 
 const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const MUSCLE_GROUPS = ["Tous", "Pectoraux", "Dos", "Jambes", "Épaules", "Biceps", "Triceps", "Abdos"];
 
+const fetchLibrary = async () => {
+  const { data, error } = await supabase.from("exercise_library").select("*").order("name", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data;
+};
+
 export default function CustomBuilderPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams?.get('edit'); 
   const { lang } = useLanguage();
 
-  const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [loadingEx, setLoadingEx] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const { data: library, isLoading: loadingEx } = useSWR('exerciseLibrary', fetchLibrary);
 
+  const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("Tous");
   const [selectedStarFilter, setSelectedStarFilter] = useState<number | null>(null);
   const [selectedPatternFilter, setSelectedPatternFilter] = useState<string | null>(null);
-  const [selectedEquipmentFilter, setSelectedEquipmentFilter] = useState<string | null>(null); // NOUVEAU FILTRE EQUIPEMENT
+  const [selectedEquipmentFilter, setSelectedEquipmentFilter] = useState<string | null>(null);
   
   const [programName, setProgramName] = useState("");
   const [activeDay, setActiveDay] = useState("monday");
@@ -54,9 +64,10 @@ export default function CustomBuilderPage() {
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   const [guideModal, setGuideModal] = useState(false);
 
+  // 🛡️ CORRECTION : Ajout de noRes dans le dictionnaire
   const t = {
     FR: { 
-      title: "Constructeur de Programme", sub: "Créez votre routine sur-mesure", catalog: "Bibliothèque", search: "Rechercher...", myPlan: "Ma Semaine", save: "Sauvegarder", empty: "Aucun exercice pour ce jour.", reps: "Reps", sets: "Séries", rest: "Repos (s)", progName: "Nom du programme", progPlaceholder: "Ex: Routine Hybride", error: "Erreur lors de la sauvegarde.",
+      title: editId ? "Modifier le Programme" : "Création de Programme", sub: "Forgez votre routine sur-mesure", catalog: "Bibliothèque", search: "Rechercher...", myPlan: "Ma Semaine", save: editId ? "Mettre à jour" : "Sauvegarder", empty: "Aucun exercice pour ce jour.", reps: "Reps", sets: "Séries", rest: "Repos (s)", progName: "Nom du programme", progPlaceholder: "Ex: Routine Hybride", error: "Erreur lors de la sauvegarde.", noRes: "Aucun exercice trouvé.",
       pattern: "Mouvement", allPatterns: "Tous les mouvements", push: "Poussée (Push)", pull: "Tirage (Pull)", squat: "Genou (Squat)", hinge: "Hanche (Hinge)", core: "Gainage (Core)",
       equipment: "Matériel", allEquipment: "Tout le matériel", bodyweight: "Poids de Corps", gym: "Salle (Machines)", homeGym: "Haltères / Léger",
       guideTitle: "Structure Scientifique", guideSub: "Comment construire une séance optimale.",
@@ -66,7 +77,7 @@ export default function CustomBuilderPage() {
       g4: "L'Équilibre Full-Body", g4d: "Une séance athlétique complète doit croiser ces patrons de mouvements : Poussée (Push), Tirage (Pull), Dominante Genou (Squat), Dominante Hanche (Hinge) et Gainage (Core)."
     },
     EN: { 
-      title: "Program Builder", sub: "Create your custom routine", catalog: "Library", search: "Search...", myPlan: "My Week", save: "Save", empty: "No exercises for this day.", reps: "Reps", sets: "Sets", rest: "Rest (s)", progName: "Program Name", progPlaceholder: "E.g. Hybrid Routine", error: "Error during save.",
+      title: editId ? "Edit Program" : "Program Builder", sub: "Forge your custom routine", catalog: "Library", search: "Search...", myPlan: "My Week", save: editId ? "Update Program" : "Save", empty: "No exercises for this day.", reps: "Reps", sets: "Sets", rest: "Rest (s)", progName: "Program Name", progPlaceholder: "E.g. Hybrid Routine", error: "Error during save.", noRes: "No exercises found.",
       pattern: "Movement", allPatterns: "All movements", push: "Push", pull: "Pull", squat: "Squat (Knee)", hinge: "Hinge (Hip)", core: "Core",
       equipment: "Equipment", allEquipment: "All equipment", bodyweight: "Bodyweight", gym: "Gym (Machines)", homeGym: "Dumbbells / Light",
       guideTitle: "Scientific Structure", guideSub: "How to build an optimal session.",
@@ -82,21 +93,44 @@ export default function CustomBuilderPage() {
     : { monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun" };
 
   useEffect(() => {
-    const fetchLib = async () => {
-      const { data, error } = await supabase.from("exercise_library").select("*").order("name");
-      if (data && !error) setExercises(data);
-      setLoadingEx(false);
-    };
-    fetchLib();
-  }, []);
+    if (editId && library) {
+      const loadProgram = async () => {
+        const { data: progData } = await supabase.from('user_programs').select('*').eq('id', editId).single();
+        if (progData) setProgramName(progData.name);
 
-  const filteredExercises = exercises.filter(ex => {
+        const { data: sessions } = await supabase.from('workout_sessions').select('*, workout_exercises(*)').eq('program_id', editId);
+
+        if (sessions) {
+          const newPlan: Record<string, PlannedExercise[]> = { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] };
+          sessions.forEach(session => {
+            const day = session.day_name;
+            const exes = session.workout_exercises || [];
+            exes.sort((a: any, b: any) => a.order_index - b.order_index);
+            
+            newPlan[day] = exes.map((we: any) => {
+              const libEx = library.find((l: any) => l.id === we.exercise_id);
+              return {
+                exercise: libEx,
+                sets: we.sets,
+                target_reps: we.target_reps,
+                rest_seconds: we.rest_seconds,
+                uid: we.id || (Date.now().toString() + Math.random().toString(36).substr(2, 5))
+              };
+            }).filter((item: any) => item.exercise); 
+          });
+          setPlan(newPlan);
+        }
+      };
+      loadProgram();
+    }
+  }, [editId, library]);
+
+  const filteredExercises = (library || []).filter((ex: any) => {
     const matchSearch = ex.name.toLowerCase().includes(searchQuery.toLowerCase());
     let matchMuscle = false;
     const target = ex.target_muscle.toLowerCase();
     const filter = selectedMuscle.toLowerCase();
 
-    // Filtre Muscle
     if (filter === "tous") matchMuscle = true;
     else if (filter === "jambes") matchMuscle = target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe");
     else if (filter === "abdos") matchMuscle = target.includes("sangle abdominale") || target.includes("abdo") || target.includes("core");
@@ -104,10 +138,8 @@ export default function CustomBuilderPage() {
     else if (filter === "dos") matchMuscle = target.includes("dos") || target.includes("lombaire") || target.includes("dorsal");
     else matchMuscle = target.includes(filter);
 
-    // Filtre Étoiles (SNC)
     const matchStars = selectedStarFilter === null || ex.cns_impact === selectedStarFilter;
 
-    // Filtre Patrons de Mouvements
     const patternLow = ex.movement_pattern?.toLowerCase() || "";
     let matchPattern = true;
     if (selectedPatternFilter) {
@@ -118,7 +150,6 @@ export default function CustomBuilderPage() {
       else if (selectedPatternFilter === "core") matchPattern = patternLow.includes("core");
     }
 
-    // NOUVEAU Filtre Équipement
     const eqLow = ex.equipment_required?.toLowerCase() || "";
     let matchEquipment = true;
     if (selectedEquipmentFilter) {
@@ -156,7 +187,7 @@ export default function CustomBuilderPage() {
       ...prev,
       [activeDay]: [
         ...prev[activeDay],
-        { exercise: ex, sets: 3, target_reps: "8-12", rest_seconds: ex.cns_impact >= 4 ? 120 : 90 }
+        { exercise: ex, sets: 3, target_reps: "8-12", rest_seconds: ex.cns_impact >= 4 ? 120 : 90, uid: Date.now().toString() + Math.random().toString(36).substr(2, 5) }
       ]
     }));
   };
@@ -187,32 +218,39 @@ export default function CustomBuilderPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user logged in");
 
-      const { data: existingCustoms } = await supabase.from("user_programs").select("id").eq("user_id", user.id).eq("program_type", "custom");
-      if (existingCustoms && existingCustoms.length >= 3) {
-        alert(lang === 'FR' ? "Limite atteinte (3 programmes perso max). Supprimez-en un dans l'onglet Programme." : "Limit reached (3 custom max). Delete one in the Workout tab.");
-        setIsSaving(false);
-        return;
-      }
-
-      await supabase.from("user_programs").update({ is_active: false }).eq("user_id", user.id);
-
       const finalName = programName.trim() !== "" ? programName.trim() : (lang === 'FR' ? "Programme Personnalisé" : "Custom Program");
+      let activeProgramId = editId;
 
-      const { data: newProgram, error: progErr } = await supabase.from("user_programs").insert([{
-        user_id: user.id,
-        name: finalName,
-        is_active: true,
-        program_type: "custom"
-      }]).select().single();
+      if (editId) {
+        await supabase.from("user_programs").update({ name: finalName, is_active: true }).eq("id", editId);
+        await supabase.from("workout_sessions").delete().eq("program_id", editId);
+      } else {
+        const { data: existingCustoms } = await supabase.from("user_programs").select("id").eq("user_id", user.id).eq("program_type", "custom");
+        if (existingCustoms && existingCustoms.length >= 3) {
+          alert(lang === 'FR' ? "Limite atteinte (3 programmes perso max). Supprimez-en un dans l'onglet Programme." : "Limit reached (3 custom max). Delete one in the Workout tab.");
+          setIsSaving(false);
+          return;
+        }
 
-      if (progErr || !newProgram) throw progErr;
+        await supabase.from("user_programs").update({ is_active: false }).eq("user_id", user.id);
+
+        const { data: newProgram, error: progErr } = await supabase.from("user_programs").insert([{
+          user_id: user.id,
+          name: finalName,
+          is_active: true,
+          program_type: "custom"
+        }]).select().single();
+
+        if (progErr || !newProgram) throw progErr;
+        activeProgramId = newProgram.id;
+      }
 
       let orderIndex = 0;
       for (const day of DAYS_ORDER) {
         const dailyExercises = plan[day];
         if (dailyExercises.length > 0) {
           const { data: newSession } = await supabase.from("workout_sessions").insert([{
-            program_id: newProgram.id,
+            program_id: activeProgramId,
             day_name: day,
             order_index: orderIndex
           }]).select().single();
@@ -253,6 +291,8 @@ export default function CustomBuilderPage() {
       </div>
     );
   };
+
+  if (loadingEx) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">Chargement...</div>;
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-32 relative">
@@ -311,7 +351,6 @@ export default function CustomBuilderPage() {
               />
             </div>
             
-            {/* LIGNE DES DROPDOWNS FILTRES CROISÉS */}
             <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide">
               
               <DropdownMenu>
@@ -363,28 +402,17 @@ export default function CustomBuilderPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* NOUVEAU DROPDOWN ÉQUIPEMENT */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className={`shrink-0 flex items-center px-3 border transition-colors outline-none ${selectedEquipmentFilter !== null ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/50' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>
-                    <Dumbbell className="w-4 h-4 sm:mr-2" />
-                    <span className="hidden sm:inline font-bold">{getEquipmentLabel()}</span>
-                    {selectedEquipmentFilter !== null && (
-                      <span className="ml-1 sm:hidden w-2 h-2 rounded-full bg-purple-500"></span>
-                    )}
-                  </Button>
+                  <Button variant="outline" className={`shrink-0 flex items-center px-3 border transition-colors outline-none ${selectedEquipmentFilter !== null ? 'border-purple-500 text-purple-600' : ''}`}><Dumbbell className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Matériel</span></Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="bg-white/95 dark:bg-zinc-950/95 backdrop-blur-2xl border-zinc-200 dark:border-zinc-800 rounded-2xl p-2 w-56 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)]">
-                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter(null)} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-zinc-100 dark:focus:bg-zinc-900 outline-none">
-                    {txt.allEquipment}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-zinc-100 dark:bg-zinc-800/50" />
-                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("poids_corps")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-purple-50 dark:focus:bg-purple-500/10 outline-none">{txt.bodyweight}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("salle")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-purple-50 dark:focus:bg-purple-500/10 outline-none">{txt.gym}</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("home_gym")} className="font-bold cursor-pointer rounded-xl p-3 focus:bg-purple-50 dark:focus:bg-purple-500/10 outline-none">{txt.homeGym}</DropdownMenuItem>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter(null)}>Tous</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("poids_corps")}>Poids de corps</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("salle")}>Machine/Salle</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSelectedEquipmentFilter("home_gym")}>Haltères/Léger</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
             </div>
 
             <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
@@ -405,9 +433,7 @@ export default function CustomBuilderPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
-            {loadingEx ? (
-              <div className="flex justify-center items-center h-32"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
-            ) : filteredExercises.length > 0 ? (
+            {filteredExercises.length > 0 ? (
               filteredExercises.map(ex => {
                 const thumbnailUrl = getImageUrl(ex, 0);
                 return (
@@ -436,7 +462,7 @@ export default function CustomBuilderPage() {
                 );
               })
             ) : (
-              <div className="text-center py-12 text-zinc-500 text-sm font-bold">Aucun exercice trouvé.</div>
+              <div className="text-center py-12 text-zinc-500 text-sm font-bold">{txt.noRes}</div>
             )}
           </div>
         </div>
@@ -446,7 +472,7 @@ export default function CustomBuilderPage() {
           
           <div className="relative z-10 flex flex-col space-y-3 mb-2">
             <h3 className="text-xl font-black text-white flex items-center">
-              <CalendarCheck className="w-5 h-5 mr-2 text-indigo-400" /> {txt.myPlan}
+              <CalendarDays className="w-5 h-5 mr-2 text-indigo-400" /> {txt.myPlan}
             </h3>
             
             <div className="space-y-1">
@@ -493,7 +519,7 @@ export default function CustomBuilderPage() {
               </div>
             ) : (
               plan[activeDay].map((item, idx) => (
-                <div key={idx} className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3 shadow-sm group hover:border-indigo-500/50 transition-colors">
+                <div key={item.uid} className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3 shadow-sm group hover:border-indigo-500/50 transition-colors">
                   
                   <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                     <h4 className="font-bold text-zinc-100 text-sm line-clamp-1">{item.exercise.name}</h4>
@@ -544,7 +570,9 @@ export default function CustomBuilderPage() {
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
               <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
-                <img src={getImageUrl(infoModal.exercise, 0)} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                {infoModal.exercise.gif_url ? (
+                  <img src={getImageUrl(infoModal.exercise, 0)} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : null}
                 <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
               </div>
               <div className="flex flex-col items-center space-y-2">
@@ -559,7 +587,6 @@ export default function CustomBuilderPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ MODALE DU GUIDE SCIENTIFIQUE */}
       <Dialog open={guideModal} onOpenChange={setGuideModal}>
         <DialogContent className="sm:max-w-[500px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
