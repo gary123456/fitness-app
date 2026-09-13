@@ -77,7 +77,6 @@ export default function ProfilePage() {
     loadData();
   }, []);
 
-  // 🛡️ CORRECTION : Logique infaillible pour différencier URL et Emoji
   const rawAvatar = profile?.avatar_url || "";
   const isImage = rawAvatar.includes('/') || rawAvatar.includes('http');
   const isEmoji = rawAvatar.trim().length > 0 && !isImage;
@@ -313,7 +312,7 @@ export default function ProfilePage() {
       <div className="flex flex-col items-center justify-center space-y-4 pt-4 pb-8 border-b border-zinc-200 dark:border-zinc-800">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className="relative group cursor-pointer outline-none mt-12 sm:mt-0">
+            <div className="relative group cursor-pointer outline-none mt-10 sm:mt-0">
               <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-teal-500 shadow-[0_0_30px_rgba(20,184,166,0.3)] bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center relative z-10 shrink-0">
                 {uploadingAvatar ? (
                   <Loader2 className="w-8 h-8 animate-spin text-teal-500" />
@@ -541,16 +540,17 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ CORRECTION : Le template de la Player Card est encapsulé hermétiquement avec overflow-hidden w-0 h-0 */}
+      {/* 🛡️ TEMPLATE CACHÉ DE LA PLAYER CARD */}
       <div className="absolute top-0 left-[-20000px] w-[1080px] h-[1920px] overflow-hidden pointer-events-none">
         <div ref={playerCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center py-24 px-16 text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
-          <img src="/strava-bg.jpg" alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-30 z-0" />
+          
+          <div className="absolute inset-0 w-full h-full opacity-30 z-0" style={{ backgroundImage: "url('/strava-bg.jpg')", backgroundSize: "cover", backgroundPosition: "center" }} />
           <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-zinc-900/50 to-zinc-950 z-0"></div>
           
           <div className="relative z-10 w-full flex flex-col items-center mt-12 space-y-12">
             <div className="w-64 h-64 rounded-full overflow-hidden border-8 border-teal-500 shadow-[0_0_80px_rgba(20,184,166,0.6)] bg-zinc-900 flex items-center justify-center shrink-0">
                {isImage ? (
-                 <img src={rawAvatar} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: `${posX}% ${posY}%` }} />
+                 <div className="w-full h-full rounded-full" style={{ backgroundImage: `url("${rawAvatar}")`, backgroundSize: "cover", backgroundPosition: `${posX}% ${posY}%`, backgroundRepeat: "no-repeat" }} />
                ) : isEmoji ? (
                  <span className="text-8xl select-none">{rawAvatar}</span>
                ) : (
