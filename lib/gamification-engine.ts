@@ -1,5 +1,36 @@
 import { supabase } from "@/lib/supabase";
 
+// 🛡️ NOUVEAU SYSTÈME DE TIERS (Fer, Bronze, Argent, Or, Diamant)
+const checkStreakBadges = (streak: number, badges: string[]) => {
+  const newBadges: string[] = [];
+  if (streak >= 3 && !badges.includes("streak_fer")) newBadges.push("streak_fer");
+  if (streak >= 7 && !badges.includes("streak_bronze")) newBadges.push("streak_bronze");
+  if (streak >= 21 && !badges.includes("streak_argent")) newBadges.push("streak_argent");
+  if (streak >= 90 && !badges.includes("streak_or")) newBadges.push("streak_or");
+  if (streak >= 365 && !badges.includes("streak_diamant")) newBadges.push("streak_diamant");
+  return newBadges;
+};
+
+const checkLevelBadges = (level: number, badges: string[]) => {
+  const newBadges: string[] = [];
+  if (level >= 5 && !badges.includes("level_fer")) newBadges.push("level_fer");
+  if (level >= 10 && !badges.includes("level_bronze")) newBadges.push("level_bronze");
+  if (level >= 25 && !badges.includes("level_argent")) newBadges.push("level_argent");
+  if (level >= 50 && !badges.includes("level_or")) newBadges.push("level_or");
+  if (level >= 100 && !badges.includes("level_diamant")) newBadges.push("level_diamant");
+  return newBadges;
+};
+
+const checkQuizBadges = (totalAnswered: number, badges: string[]) => {
+  const newBadges: string[] = [];
+  if (totalAnswered >= 5 && !badges.includes("quiz_fer")) newBadges.push("quiz_fer");
+  if (totalAnswered >= 15 && !badges.includes("quiz_bronze")) newBadges.push("quiz_bronze");
+  if (totalAnswered >= 30 && !badges.includes("quiz_argent")) newBadges.push("quiz_argent");
+  if (totalAnswered >= 60 && !badges.includes("quiz_or")) newBadges.push("quiz_or");
+  if (totalAnswered >= 100 && !badges.includes("quiz_diamant")) newBadges.push("quiz_diamant");
+  return newBadges;
+};
+
 export async function awardWorkoutXP(userId: string, sessionTonnage: number, isReplay: boolean = false) {
   try {
     let { data: gamification } = await supabase.from("user_gamification").select("*").eq("user_id", userId).maybeSingle();
@@ -9,22 +40,18 @@ export async function awardWorkoutXP(userId: string, sessionTonnage: number, isR
       gamification = newGamification;
     }
 
-    // 🛡️ SÉCURITÉ ANTI-TRICHE
     if (isReplay) {
       return { success: true, xpEarned: 0, leveledUp: false, newLevel: gamification.level || 1, newBadges: [], isReplay: true };
     }
 
-    // 🎯 COURBE D'XP LOGARITHMIQUE (QOL AMÉLIORÉ)
-    // Au lieu d'une courbe plate, les premiers kilos rapportent plus (encouragement), puis la récompense diminue (anti-abus des powerlifters).
     const baseXP = 150;
-    const diminishingTonnageXP = Math.floor(Math.sqrt(sessionTonnage) * 2.5); // Récompense log pour le tonnage
-    const earnedXP = Math.min(baseXP + diminishingTonnageXP, 800); // Plafond absolu
+    const diminishingTonnageXP = Math.floor(Math.sqrt(sessionTonnage) * 2.5); 
+    const earnedXP = Math.min(baseXP + diminishingTonnageXP, 800); 
 
     let newLevel = gamification.level || 1;
     let newXp = (gamification.current_xp || 0) + earnedXP;
     let leveledUp = false;
 
-    // Échelle exponentielle pour les niveaux (Exigences plus dures au fil du temps)
     let nextLevelXP = Math.floor(1000 * Math.pow(1.15, newLevel - 1));
     while (newXp >= nextLevelXP) {
       newXp -= nextLevelXP;
@@ -33,7 +60,6 @@ export async function awardWorkoutXP(userId: string, sessionTonnage: number, isR
       nextLevelXP = Math.floor(1000 * Math.pow(1.15, newLevel - 1));
     }
 
-    // STREAK LOGIC
     const today = new Date().toISOString().split('T')[0];
     let newStreak = gamification.streak_days || 0;
     let lastActive = gamification.last_active_date;
@@ -48,18 +74,19 @@ export async function awardWorkoutXP(userId: string, sessionTonnage: number, isR
       lastActive = today;
     }
 
+    // 🛡️ VÉRIFICATION DES BADGES TIERÉS
     let badges: string[] = gamification.unlocked_badges || [];
     const newBadges: string[] = [];
 
-    const unlockBadge = (id: string) => {
-      if (!badges.includes(id)) { badges.push(id); newBadges.push(id); }
-    };
+    if (!badges.includes("first_step")) { badges.push("first_step"); newBadges.push("first_step"); }
+    
+    // Check Levels
+    const leveledBadges = checkLevelBadges(newLevel, badges);
+    if (leveledBadges.length > 0) { badges.push(...leveledBadges); newBadges.push(...leveledBadges); }
 
-    unlockBadge("first_step");
-    if (newLevel >= 5) unlockBadge("warrior");
-    if (newStreak >= 7) unlockBadge("constance");
-    if (newLevel >= 10) unlockBadge("titan");
-    if (newStreak >= 30) unlockBadge("legend");
+    // Check Streaks
+    const streakedBadges = checkStreakBadges(newStreak, badges);
+    if (streakedBadges.length > 0) { badges.push(...streakedBadges); newBadges.push(...streakedBadges); }
 
     await supabase.from("user_gamification").update({
       level: newLevel, current_xp: Math.round(newXp), streak_days: newStreak, last_active_date: lastActive, unlocked_badges: badges
@@ -95,14 +122,16 @@ export async function awardQuizXP(userId: string, difficulty: string) {
     const totalAnswered = (gamification.answered_quizzes || []).length + 1;
     let badges: string[] = gamification.unlocked_badges || [];
     
-    if (totalAnswered >= 5 && !badges.includes("quiz_initie")) badges.push("quiz_initie");
-    if (totalAnswered >= 15 && !badges.includes("quiz_erudit")) badges.push("quiz_erudit");
-    if (totalAnswered >= 30 && !badges.includes("quiz_genie")) badges.push("quiz_genie");
+    // 🛡️ VÉRIFICATION DES BADGES TIERÉS POUR LES QUIZ
+    const newQuizBadges = checkQuizBadges(totalAnswered, badges);
+    if (newQuizBadges.length > 0) badges.push(...newQuizBadges);
 
-    const isMilestone = totalAnswered === 5 || totalAnswered === 15 || totalAnswered === 30 || totalAnswered === 60;
+    const isMilestone = newQuizBadges.length > 0;
     
+    // CALCUL DYNAMIQUE DU TITRE
     let rankName = "Initié 📘";
-    if (totalAnswered >= 60) rankName = "Génie Ultime 🌌";
+    if (totalAnswered >= 100) rankName = "Sage de l'Olympe 🏛️";
+    else if (totalAnswered >= 60) rankName = "Génie Ultime 🌌";
     else if (totalAnswered >= 30) rankName = "Maître Biomécanique 🧬";
     else if (totalAnswered >= 15) rankName = "Érudit 🧠";
 

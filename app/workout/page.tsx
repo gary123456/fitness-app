@@ -1,7 +1,7 @@
 "use client";
 
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
 import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -9,11 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale } from "lucide-react";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale, Loader2 } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 const SPORT_LABELS: Record<string, string> = { jjb: "JJB / MMA", football: "Football", basketball: "Basketball", running: "Running", natation: "Natation", cyclisme: "Cyclisme", randonnee: "Randonnée", padel_tennis: "Padel / Tennis" };
 
@@ -50,7 +50,7 @@ const fetchProgramData = async () => {
   return { profile, weeklyPlan, isDeloadWeek, existingProgram, allPrograms: allPrograms || [], completedSessionIds };
 };
 
-export default function WorkoutPage() {
+function WorkoutPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const justFinished = searchParams?.get('finished') === 'true'; 
@@ -542,7 +542,6 @@ export default function WorkoutPage() {
         })}
       </div>
 
-      {/* 🛡️ INJECTION DU BOUTON ÉDITION DANS LE MANAGER */}
       <Dialog open={showManagerModal} onOpenChange={setShowManagerModal}>
         <DialogContent className="sm:max-w-sm w-[90vw] mx-auto bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>
@@ -766,5 +765,14 @@ export default function WorkoutPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// 🛡️ CORRECTION : Le composant principal est enveloppé dans Suspense
+export default function WorkoutPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950"><Loader2 className="w-12 h-12 text-teal-500 animate-spin" /></div>}>
+      <WorkoutPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+// 🛡️ CORRECTION : Ajout de Suspense dans l'import React
+import { useState, useEffect, Suspense } from "react";
 import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -40,7 +41,8 @@ const fetchLibrary = async () => {
   return data;
 };
 
-export default function CustomBuilderPage() {
+// 🛡️ CORRECTION : On renomme le composant principal en BuilderContent
+function BuilderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams?.get('edit'); 
@@ -64,7 +66,6 @@ export default function CustomBuilderPage() {
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   const [guideModal, setGuideModal] = useState(false);
 
-  // 🛡️ CORRECTION : Ajout de noRes dans le dictionnaire
   const t = {
     FR: { 
       title: editId ? "Modifier le Programme" : "Création de Programme", sub: "Forgez votre routine sur-mesure", catalog: "Bibliothèque", search: "Rechercher...", myPlan: "Ma Semaine", save: editId ? "Mettre à jour" : "Sauvegarder", empty: "Aucun exercice pour ce jour.", reps: "Reps", sets: "Séries", rest: "Repos (s)", progName: "Nom du programme", progPlaceholder: "Ex: Routine Hybride", error: "Erreur lors de la sauvegarde.", noRes: "Aucun exercice trouvé.",
@@ -599,35 +600,30 @@ export default function CustomBuilderPage() {
           </DialogHeader>
           
           <div className="space-y-5 py-4 max-h-[60vh] overflow-y-auto pr-2">
-            
             <div className="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900 p-4 rounded-xl">
               <h4 className="font-black text-red-700 dark:text-red-400 mb-1 flex items-center">
                 {txt.g1}
               </h4>
               <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g1d}</p>
             </div>
-
             <div className="bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900 p-4 rounded-xl">
               <h4 className="font-black text-orange-700 dark:text-orange-400 mb-1 flex items-center">
                 {txt.g2}
               </h4>
               <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g2d}</p>
             </div>
-
             <div className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-xl">
               <h4 className="font-black text-zinc-700 dark:text-zinc-300 mb-1 flex items-center">
                 {txt.g3}
               </h4>
               <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g3d}</p>
             </div>
-
             <div className="bg-teal-50 dark:bg-teal-900/10 border border-teal-100 dark:border-teal-900 p-4 rounded-xl">
               <h4 className="font-black text-teal-700 dark:text-teal-400 mb-1 flex items-center">
                 <Activity className="w-4 h-4 mr-2" /> {txt.g4}
               </h4>
               <p className="text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">{txt.g4d}</p>
             </div>
-
           </div>
           <DialogFooter>
             <Button className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold" onClick={() => setGuideModal(false)}>
@@ -637,5 +633,14 @@ export default function CustomBuilderPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// 🛡️ CORRECTION : Le composant principal est enveloppé dans Suspense
+export default function BuilderPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950"><Loader2 className="w-12 h-12 text-teal-500 animate-spin" /></div>}>
+      <BuilderContent />
+    </Suspense>
   );
 }
