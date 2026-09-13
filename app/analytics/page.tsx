@@ -21,9 +21,10 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const userAge = profile ? calculateAge(profile.birth_date) : 25;
   const userGender = profile?.gender || 'homme';
   const userHeight = profile?.height_cm || 175;
+  const userWeightKg = profile?.weight_kg || 70;
   const sleepQuality = profile?.sleep_quality || 'moyen';
 
-  const bmr = calculateBMR(profile?.weight_kg || 70, userHeight, userAge, userGender, null);
+  const bmr = calculateBMR(userWeightKg, userHeight, userAge, userGender, null);
   const tdee = calculateTDEE(bmr, profile?.activity_level || 'sedentaire');
   const targetCals = calculateTargetCalories(tdee, profile?.current_goal || 'maintien');
 
@@ -52,111 +53,101 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const [
     { data: measurements }, 
     { data: library }, 
-    { data: rpcData },
-    { data: dashMetrics },
     { data: sleepLogs },
-    { data: nutritionLogs }
+    { data: nutritionLogs },
+    { data: dashMetrics },
+    { data: rawLogs } 
   ] = await Promise.all([
-    supabase.from("measurements").select("created_at, weight_kg, body_fat_percentage, arms_cm, chest_cm, waist_cm, thighs_cm").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: true }),
-    supabase.from("exercise_library").select("id, name, target_muscle"),
-    supabase.rpc('get_analytics_payload', { p_user_id: user.id, p_start_date: startDateStr, p_end_date: endDateStr }),
-    supabase.rpc('get_dashboard_metrics', { p_user_id: user.id }),
+    supabase.from("measurements").select("*").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: true }),
+    supabase.from("exercise_library").select("id, name, target_muscle, movement_pattern"),
     supabase.from('daily_metrics').select('date, readiness_score').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true }),
-    supabase.from('daily_nutrition_logs').select('date, total_kcal').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true })
+    supabase.from('daily_nutrition_logs').select('date, total_kcal').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true }),
+    supabase.rpc('get_dashboard_metrics', { p_user_id: user.id }),
+    supabase.from('workout_logs').select('*').eq('user_id', user.id).gte('created_at', startDate.toISOString())
   ]);
 
-  const acwrScore = dashMetrics?.acwr || 0;
-
-  // Fonction utilitaire robuste pour formater les dates (évite les erreurs Invalid Date)
   const safeFormatDate = (dateString: string) => {
     try {
       const d = new Date(dateString);
-      if (isNaN(d.getTime())) return dateString.split('T')[0]; // Fallback brutal
+      if (isNaN(d.getTime())) return dateString.split('T')[0];
       return d.toLocaleDateString(lang === 'FR' ? 'fr-FR' : 'en-US', { day: '2-digit', month: 'short' });
     } catch {
       return dateString.split('T')[0];
     }
   };
 
-  let formattedWeight: any[] = [];
-  let formattedMeasurements: any[] = [];
-
-  if (measurements) {
-    formattedWeight = measurements.map(m => {
-      const bmi = calculateBMI(m.weight_kg, userHeight);
-      const img = calculateEstimatedBodyFat(bmi, userAge, userGender);
-      return { 
-        date: safeFormatDate(m.created_at), 
-        poids: m.weight_kg, img: m.body_fat_percentage ? Number(m.body_fat_percentage) : Number(img)
-      };
-    });
-    
-    formattedMeasurements = measurements.map(m => ({
-      date: safeFormatDate(m.created_at),
-      arms: m.arms_cm ? Number(m.arms_cm) : null, chest: m.chest_cm ? Number(m.chest_cm) : null, 
-      waist: m.waist_cm ? Number(m.waist_cm) : null, thighs: m.thighs_cm ? Number(m.thighs_cm) : null
-    })).filter(m => m.arms || m.chest || m.waist || m.thighs);
-  }
-
-  // 🛡️ CORRECTION : Typage strict du Score SNC pour Recharts
-  const readinessHistory = (sleepLogs || []).map((log: any) => ({
-    date: safeFormatDate(log.date),
-    score: Number(log.readiness_score) || 0
-  })).filter(log => log.score > 0);
-
-  const formattedNutrition = (nutritionLogs || []).map((log: any) => ({
-    date: safeFormatDate(log.date),
-    kcal: Number(log.total_kcal) || 0,
-    target: targetCals
-  }));
+  const libMap: Record<string, any> = {};
+  if (library) library.forEach((ex: any) => libMap[ex.id] = ex);
 
   const volByDate: Record<string, number> = {};
   const exData: Record<string, any[]> = {};
   const exSet = new Set<string>();
   const best1RMs: Record<string, number> = { "Squat": 0, "Bench": 0, "Deadlift": 0 };
-  let availableList: {id: string, name: string}[] = [];
   const muscleDistribution: Record<string, number> = { Chest: 0, Back: 0, Legs: 0, Arms: 0, Shoulders: 0, Core: 0 };
 
-  const libMap: Record<string, any> = {};
-  if (library) library.forEach((ex: any) => libMap[ex.id] = ex);
-
-  if (rpcData) {
-    rpcData.volume_by_date?.forEach((v: any) => {
-      volByDate[safeFormatDate(v.date)] = Number(v.volume) || 0;
-    });
-
-    rpcData.max_1rm?.forEach((r: any) => {
-      const d = safeFormatDate(r.date);
-      if (!exData[r.exercise_id]) exData[r.exercise_id] = [];
-      exData[r.exercise_id].push({ date: d, e1RM: Number(r.e1rm).toFixed(1), weight: r.weight, reps: r.reps });
-      exSet.add(r.exercise_id);
-
-      const exObj = libMap[r.exercise_id];
-      if (exObj) {
-        const nameLower = exObj.name.toLowerCase();
-        if (nameLower.includes("squat barre")) best1RMs["Squat"] = Math.max(best1RMs["Squat"], r.e1rm);
-        else if (nameLower.includes("couché barre") || nameLower.includes("bench press")) best1RMs["Bench"] = Math.max(best1RMs["Bench"], r.e1rm);
-        else if (nameLower.includes("terre classique") || nameLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], r.e1rm);
+  // 🛡️ NOUVEAU MOTEUR D'ANALYSE BIOMÉCANIQUE
+  rawLogs?.forEach((log: any) => {
+    const d = safeFormatDate(log.created_at);
+    const exObj = libMap[log.exercise_id];
+    
+    let effectiveWeight = log.weight;
+    
+    // Si l'exercice est à 0kg (Poids de corps), on utilise 65% du poids de l'athlète
+    if (log.weight === 0 || !log.weight) {
+      if (exObj && (exObj.movement_pattern.includes("Push") || exObj.movement_pattern.includes("Pull") || exObj.movement_pattern.includes("Squat") || exObj.movement_pattern.includes("Hinge"))) {
+          effectiveWeight = userWeightKg * 0.65; 
+      } else {
+          effectiveWeight = userWeightKg * 0.20; 
       }
-    });
+    }
 
-    rpcData.muscle_distribution?.forEach((m: any) => {
-      const exObj = libMap[m.exercise_id];
-      if (exObj && exObj.target_muscle) {
-        const target = exObj.target_muscle.toLowerCase();
-        if (target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe")) muscleDistribution.Legs += m.tonnage;
-        else if (target.includes("pec")) muscleDistribution.Chest += m.tonnage;
-        else if (target.includes("dos") || target.includes("dorsal") || target.includes("rhomboïde") || target.includes("trapèze") || target.includes("lombaire")) muscleDistribution.Back += m.tonnage;
-        else if (target.includes("épaule") || target.includes("delto")) muscleDistribution.Shoulders += m.tonnage;
-        else if (target.includes("biceps") || target.includes("triceps") || target.includes("bras")) muscleDistribution.Arms += m.tonnage;
-        else if (target.includes("abdo") || target.includes("core") || target.includes("gainage") || target.includes("transverse") || target.includes("oblique") || target.includes("sangle")) muscleDistribution.Core += m.tonnage;
-      }
-    });
+    const tonnage = effectiveWeight * log.reps;
+    volByDate[d] = (volByDate[d] || 0) + tonnage;
 
-    availableList = Array.from(exSet).map(id => ({ id, name: libMap[id]?.name || "Exercice" }));
-    availableList.sort((a, b) => a.name.localeCompare(b.name));
+    const e1rm = effectiveWeight * (1 + log.reps / 30);
+    
+    if (!exData[log.exercise_id]) exData[log.exercise_id] = [];
+    exData[log.exercise_id].push({ date: d, e1RM: Number(e1rm).toFixed(1), weight: effectiveWeight, reps: log.reps });
+    exSet.add(log.exercise_id);
+
+    if (exObj && exObj.target_muscle) {
+      const target = exObj.target_muscle.toLowerCase();
+      const nameLower = exObj.name.toLowerCase();
+      
+      if (nameLower.includes("squat barre")) best1RMs["Squat"] = Math.max(best1RMs["Squat"], e1rm);
+      else if (nameLower.includes("couché barre") || nameLower.includes("bench press")) best1RMs["Bench"] = Math.max(best1RMs["Bench"], e1rm);
+      else if (nameLower.includes("terre classique") || nameLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], e1rm);
+
+      // 🛡️ RÉPARTITION MULTI-MUSCLES (Sans les 'else' : un exercice peut impacter 3 muscles !)
+      if (target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe") || target.includes("glute") || target.includes("leg")) muscleDistribution.Legs += tonnage;
+      if (target.includes("pec") || target.includes("poitrine") || target.includes("chest")) muscleDistribution.Chest += tonnage;
+      if (target.includes("dos") || target.includes("dorsal") || target.includes("rhomboïde") || target.includes("trapèze") || target.includes("lombaire") || target.includes("lats") || target.includes("row") || target.includes("back")) muscleDistribution.Back += tonnage;
+      if (target.includes("épaule") || target.includes("epaule") || target.includes("delto") || target.includes("shoulder")) muscleDistribution.Shoulders += tonnage;
+      if (target.includes("biceps") || target.includes("triceps") || target.includes("bras") || target.includes("arm")) muscleDistribution.Arms += tonnage;
+      if (target.includes("abdo") || target.includes("core") || target.includes("gainage") || target.includes("transverse") || target.includes("oblique") || target.includes("sangle")) muscleDistribution.Core += tonnage;
+    }
+  });
+
+  const availableList = Array.from(exSet).map(id => ({ id, name: libMap[id]?.name || "Exercice" })).sort((a, b) => a.name.localeCompare(b.name));
+  const formattedVolume = Object.keys(volByDate).map(date => ({ date, volume: Math.round(volByDate[date]) }));
+
+  let formattedWeight: any[] = [];
+  let formattedMeasurements: any[] = [];
+
+  if (measurements) {
+    formattedWeight = measurements.map((m: any) => {
+      const bmi = calculateBMI(m.weight_kg, userHeight);
+      const img = calculateEstimatedBodyFat(bmi, userAge, userGender);
+      return { date: safeFormatDate(m.created_at), poids: m.weight_kg, img: m.body_fat_percentage ? Number(m.body_fat_percentage) : Number(img) };
+    });
+    formattedMeasurements = measurements.map((m: any) => ({
+      date: safeFormatDate(m.created_at), arms: m.arms_cm ? Number(m.arms_cm) : null, chest: m.chest_cm ? Number(m.chest_cm) : null, waist: m.waist_cm ? Number(m.waist_cm) : null, thighs: m.thighs_cm ? Number(m.thighs_cm) : null
+    })).filter((m: any) => m.arms || m.chest || m.waist || m.thighs);
   }
-  
+
+  const readinessHistory = (sleepLogs || []).map((log: any) => ({ date: safeFormatDate(log.date), score: Number(log.readiness_score) || 0 })).filter((log: any) => log.score > 0);
+  const formattedNutrition = (nutritionLogs || []).map((log: any) => ({ date: safeFormatDate(log.date), kcal: Number(log.total_kcal) || 0, target: targetCals }));
+
   const radarData = [
     { subject: lang === 'FR' ? 'Pecs' : 'Chest', A: muscleDistribution.Chest, fullMark: 100 },
     { subject: lang === 'FR' ? 'Dos' : 'Back', A: muscleDistribution.Back, fullMark: 100 },
@@ -168,9 +159,9 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
 
   return { 
     profile, userAge, userHeight, userGender,
-    formattedWeight, formattedMeasurements, formattedNutrition, formattedVolume: Object.keys(volByDate).map(date => ({ date, volume: volByDate[date] })), 
+    formattedWeight, formattedMeasurements, formattedNutrition, formattedVolume, 
     exercisesData: exData, max1RMs: { "Squat": Number(best1RMs["Squat"].toFixed(1)), "Bench": Number(best1RMs["Bench"].toFixed(1)), "Deadlift": Number(best1RMs["Deadlift"].toFixed(1)) }, 
-    exerciseList: availableList, radarData, sleepQuality, acwrScore, readinessHistory, targetCals
+    exerciseList: availableList, radarData, sleepQuality, acwrScore: dashMetrics?.acwr || 0, readinessHistory, targetCals
   };
 };
 
@@ -214,12 +205,12 @@ export default function AnalyticsPage() {
 
   const getInfoData = (type: string) => {
     switch (type) {
-      case 'acwr': return { show: true, title: lang === 'FR' ? "Comprendre l'ACWR" : "Understanding ACWR", desc: lang === 'FR' ? "L'ACWR (Acute-to-Chronic Workload Ratio) compare la fatigue immédiate (charge des 7 derniers jours) à la fatigue chronique (moyenne des 28 derniers jours).\n\n• < 0.8 (Désentraînement) : Vous perdez vos acquis.\n• 0.8 à 1.3 (Sweet Spot) : Zone idéale pour progresser sans se blesser.\n• > 1.5 (Zone de Danger) : Le risque de blessure est décuplé. Le volume d'entraînement doit être réduit." : "The ACWR compares your acute fatigue (last 7 days) to your chronic fatigue (average of last 28 days).\n\n• < 0.8 (Undertraining): You are losing fitness.\n• 0.8 to 1.3 (Sweet Spot): Ideal zone to progress without injury.\n• > 1.5 (Danger Zone): High injury risk. Reduce training volume." };
-      case '1rm': return { show: true, title: lang === 'FR' ? "Progression Force (1RM)" : "Strength Progression (1RM)", desc: lang === 'FR' ? "Le 1RM (1 Répétition Maximale) affiché ici est une estimation calculée avec la formule scientifique d'Epley, basée sur les charges et répétitions validées lors de vos séances.\n\nIl représente le poids théorique maximal que vous pourriez soulever une seule fois." : "The 1RM displayed here is an estimation calculated using Epley's formula based on the weights and reps logged in your sessions.\n\nIt represents the theoretical maximum weight you could lift for a single repetition." };
-      case 'tonnage': return { show: true, title: lang === 'FR' ? "Tonnage Global" : "Global Tonnage", desc: lang === 'FR' ? "Le Tonnage est le volume total de travail mécanique (Poids × Séries × Répétitions) déplacé au cours d'une séance.\n\nLa ligne en pointillé indique votre moyenne sur la période sélectionnée. Dépasser cette ligne indique que vous appliquez une surcharge progressive efficace." : "Tonnage is the total volume of mechanical work (Weight × Sets × Reps) moved during a session.\n\nThe dotted line indicates your average over the selected period. Exceeding this line indicates effective progressive overload." };
-      case 'radar': return { show: true, title: lang === 'FR' ? "Répartition Musculaire" : "Muscle Distribution", desc: lang === 'FR' ? "Ce radar illustre la répartition de votre volume d'entraînement (tonnage cumulé) par groupe musculaire majeur.\n\nIl permet d'identifier visuellement d'éventuels déséquilibres structuraux (par exemple: trop de pecs, pas assez de dos) risquant de créer des blessures ou des asymétries." : "This radar illustrates the distribution of your training volume (accumulated tonnage) per major muscle group.\n\nIt visually helps identify structural imbalances (e.g., too much chest, not enough back) that could lead to injuries or asymmetries." };
-      case 'readiness': return { show: true, title: lang === 'FR' ? "Tendance SNC" : "CNS Trend", desc: lang === 'FR' ? "L'évolution de votre Readiness Score au fil des jours. Ce graphique reflète l'impact direct de la qualité de vos nuits de sommeil et de l'accumulation de votre charge d'entraînement sur votre physiologie." : "The evolution of your Readiness Score over time. This chart reflects the direct impact of your sleep quality and accumulated training load on your physiology." };
-      case 'nutrition': return { show: true, title: lang === 'FR' ? "Adhérence Calorique" : "Caloric Adherence", desc: lang === 'FR' ? "L'évolution de vos calories consommées comparées à votre cible métabolique quotidienne (TDEE). Les barres dépassant la ligne pointillée indiquent un surplus calorique." : "The evolution of your consumed calories compared to your daily metabolic target (TDEE). Bars exceeding the dotted line indicate a caloric surplus." };
+      case 'acwr': return { show: true, title: lang === 'FR' ? "Comprendre l'ACWR" : "Understanding ACWR", desc: lang === 'FR' ? "L'ACWR compare la fatigue immédiate (7 derniers jours) à la fatigue chronique (28 derniers jours).\n\n• < 0.8 (Désentraînement)\n• 0.8 à 1.3 (Sweet Spot)\n• > 1.5 (Zone de Danger)" : "ACWR compares acute fatigue to chronic fatigue.\n\n• < 0.8 (Undertraining)\n• 0.8 to 1.3 (Sweet Spot)\n• > 1.5 (Danger Zone)" };
+      case '1rm': return { show: true, title: lang === 'FR' ? "Progression Force" : "Strength Progression", desc: lang === 'FR' ? "Le 1RM affiché est une estimation via la formule d'Epley." : "1RM is estimated via Epley's formula." };
+      case 'tonnage': return { show: true, title: lang === 'FR' ? "Tonnage Global" : "Global Tonnage", desc: lang === 'FR' ? "Le Tonnage (Poids × Séries × Reps). La ligne en pointillé est votre moyenne." : "Tonnage is Weight × Sets × Reps. Dotted line is your average." };
+      case 'radar': return { show: true, title: lang === 'FR' ? "Répartition Musculaire" : "Muscle Distribution", desc: lang === 'FR' ? "La répartition de votre volume d'entraînement. Note : Le poids de corps est estimé à 65% de votre masse totale pour le calcul." : "Volume distribution. Note: Bodyweight is estimated at 65% of your total mass." };
+      case 'readiness': return { show: true, title: lang === 'FR' ? "Tendance SNC" : "CNS Trend", desc: lang === 'FR' ? "L'évolution de votre Readiness Score." : "Evolution of your Readiness Score." };
+      case 'nutrition': return { show: true, title: lang === 'FR' ? "Adhérence Calorique" : "Caloric Adherence", desc: lang === 'FR' ? "Calories consommées vs Cible TDEE." : "Consumed Calories vs TDEE Target." };
       default: return { show: false, title: "", desc: "" };
     }
   };
@@ -317,8 +308,6 @@ export default function AnalyticsPage() {
   if (data.acwrScore < 0.8) { acwrColor = "text-blue-500"; acwrLabel = txt.underZone; }
   else if (data.acwrScore > 1.5) { acwrColor = "text-red-500"; acwrLabel = txt.dangerZone; }
   else if (data.acwrScore === 0) { acwrColor = "text-zinc-500"; acwrLabel = "-"; }
-
-  const targetCaloriesForChart = data?.targetCals || 2000;
 
   return (
     <>
@@ -517,9 +506,7 @@ export default function AnalyticsPage() {
                       <XAxis dataKey="date" stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
                       <YAxis stroke="#71717a" fontSize={11} fontWeight="bold" tickLine={false} axisLine={false} />
                       <Tooltip contentStyle={{ backgroundColor: 'rgba(24, 24, 27, 0.95)', border: '1px solid #f97316', borderRadius: '12px', color: '#fff', fontWeight: 'bold' }} cursor={{ fill: '#27272a', opacity: 0.5 }} />
-                      
                       <ReferenceLine y={data.targetCals} stroke="#ea580c" strokeDasharray="5 5" label={{ position: 'top', value: `Cible (${data.targetCals} kcal)`, fill: '#ea580c', fontSize: 10, fontWeight: 'bold' }} />
-                      
                       <Bar isAnimationActive={false} dataKey="kcal" name="Kcal Consommées" fill="url(#colorOrange)" radius={[6, 6, 0, 0]} />
                       <defs>
                         <linearGradient id="colorOrange" x1="0" y1="0" x2="0" y2="1">
@@ -534,7 +521,6 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
 
-          {/* 🛡️ CORRECTION : GRAPHIQUE 4 TENDANCE DU SOMMEIL (READINESS) */}
           <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 print-break-avoid relative">
             <button onClick={() => setInfoModal(getInfoData('readiness'))} className="absolute top-4 right-4 z-20 p-1.5 text-zinc-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-md transition-colors print-hidden"><Info className="w-4 h-4" /></button>
             <CardHeader>
