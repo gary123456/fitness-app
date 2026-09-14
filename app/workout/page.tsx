@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale, Loader2 } from "lucide-react";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale, Loader2, PlayCircle } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -48,6 +48,12 @@ const fetchProgramData = async () => {
     }
   }
   return { profile, weeklyPlan, isDeloadWeek, existingProgram, allPrograms: allPrograms || [], completedSessionIds };
+};
+
+// 🛡️ NOUVEAU : Récupère la miniature YouTube
+const getYoutubeThumbnail = (youtubeId?: string) => {
+  if (!youtubeId) return null;
+  return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
 };
 
 function WorkoutPageContent() {
@@ -372,11 +378,6 @@ function WorkoutPageContent() {
     );
   };
 
-  const getImageUrl = (ex: any, frame: 0 | 1) => {
-    if (ex.gif_url && ex.gif_url.includes('github')) return `${ex.gif_url}/${frame}.jpg`;
-    return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
-  };
-
   const liftingSessionsCount = data?.weeklyPlan?.filter(s => s.workout_exercises?.length > 0).length || 0;
   const allSessionsCompleted = liftingSessionsCount > 0 && (data?.completedSessionIds?.length || 0) >= liftingSessionsCount;
 
@@ -497,13 +498,14 @@ function WorkoutPageContent() {
                     {session.workout_exercises.map((we: any, index: number) => {
                       const ex = we.exercise_library;
                       const uniqueKey = we.id || `we-${session.id}-${index}`;
-                      const thumbnailUrl = ex.gif_url ? (ex.gif_url.endsWith('.jpg') ? ex.gif_url : `${ex.gif_url}/0.jpg`) : null;
+                      const thumbnailUrl = getYoutubeThumbnail(ex.youtube_id);
 
                       return (
                         <div key={uniqueKey} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors ${isToday && !isCompleted ? 'border-teal-100 dark:border-teal-900/50 bg-white/50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-900' : 'border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'}`}>
                           <div className="flex items-center space-x-4 mb-2 sm:mb-0">
-                            <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative p-1">
-                              {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute inset-0 z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0 opacity-50" />}
+                            {/* 🛡️ MINIATURE VERTICALE POUR LA LISTE DE LA PAGE WORKOUT */}
+                            <div className="h-12 w-12 bg-black rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative">
+                              {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-cover absolute inset-0 z-10 opacity-70" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0 opacity-50" />}
                             </div>
                             <div className="flex items-start">
                               <div>
@@ -607,18 +609,28 @@ function WorkoutPageContent() {
         </DialogContent>
       </Dialog>
 
+      {/* 🛡️ MODALE INFO FORMAT VERTICAL */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
-              <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
-                {infoModal.exercise.gif_url ? (
-                  <img src={getImageUrl(infoModal.exercise, 0)} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                ) : null}
-                <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
+              <div className="w-full max-w-[250px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-xl overflow-hidden shadow-lg border border-zinc-200 dark:border-zinc-800">
+                {infoModal.exercise.youtube_id ? (
+                  <iframe 
+                    src={`https://www.youtube.com/embed/${infoModal.exercise.youtube_id}?autoplay=1&mute=0&rel=0&modestbranding=1&loop=1&playlist=${infoModal.exercise.youtube_id}`}
+                    className="absolute inset-0 w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-zinc-600">
+                    <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
+                    <span className="text-sm font-bold text-zinc-500">Vidéo non disponible</span>
+                  </div>
+                )}
               </div>
-              <div className="flex flex-col items-center space-y-2">
+              <div className="flex flex-col items-center space-y-2 mt-4">
                 <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
                 <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
                   <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
@@ -677,15 +689,11 @@ function WorkoutPageContent() {
             <DialogTitle className="flex items-center text-indigo-600 dark:text-indigo-400">
               <ArrowLeftRight className="mr-2 h-5 w-5"/> {txt.swapTitle}
             </DialogTitle>
-            <DialogDescription className="font-medium text-zinc-500">
-              Remplacer : <span className="font-bold text-zinc-900 dark:text-zinc-100">{swapModal.currentEx?.name}</span>
-            </DialogDescription>
           </DialogHeader>
           
           <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 space-y-3 shrink-0">
             <div className="flex items-center space-x-2">
               <Input placeholder={txt.search} value={searchSwapQuery} onChange={(e) => setSearchSwapQuery(e.target.value)} className="bg-white dark:bg-zinc-950 font-medium flex-1" />
-              
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapStar !== null ? 'border-orange-500 text-orange-600' : ''}`}><Filter className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">SNC</span></Button>
@@ -695,7 +703,6 @@ function WorkoutPageContent() {
                   {[5, 4, 3, 2, 1].map(s => <DropdownMenuItem key={s} onClick={() => setSelectedSwapStar(s)}>{s} Étoiles</DropdownMenuItem>)}
                 </DropdownMenuContent>
               </DropdownMenu>
-
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapPattern !== null ? 'border-teal-500 text-teal-600' : ''}`}><Activity className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Mouv.</span></Button>
@@ -709,7 +716,6 @@ function WorkoutPageContent() {
                   <DropdownMenuItem onClick={() => setSelectedSwapPattern("core")}>Core</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapEquipment !== null ? 'border-purple-500 text-purple-600' : ''}`}><Dumbbell className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Matériel</span></Button>
@@ -722,7 +728,6 @@ function WorkoutPageContent() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-
             <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide">
               {["Tous", "Pectoraux", "Dos", "Jambes", "Épaules", "Biceps", "Triceps", "Abdos"].map(muscle => (
                 <button key={muscle} onClick={() => setSelectedSwapMuscle(muscle)} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold border ${selectedSwapMuscle === muscle ? 'bg-indigo-500 text-white' : 'text-zinc-600 dark:text-zinc-400'}`}>

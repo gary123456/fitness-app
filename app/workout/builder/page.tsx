@@ -40,7 +40,7 @@ const fetchLibrary = async () => {
   return data;
 };
 
-// 🛡️ NOUVEAU : Récupère la miniature YouTube pour le Builder
+// 🛡️ NOUVEAU : Récupère la miniature YouTube
 const getYoutubeThumbnail = (youtubeId?: string) => {
   if (!youtubeId) return null;
   return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
@@ -563,19 +563,29 @@ function BuilderContent() {
         </div>
       </div>
 
+      {/* 🛡️ MODALE INFO FORMAT YOUTUBE SHORTS (VERTICAL) */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
-              <div className="bg-zinc-900 rounded-xl shadow-sm border border-zinc-800 p-0 h-48 flex justify-center items-center relative overflow-hidden">
+              
+              <div className="w-full max-w-[250px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-xl overflow-hidden shadow-lg border border-zinc-200 dark:border-zinc-800">
                 {infoModal.exercise.youtube_id ? (
-                  <>
-                    <img src={`https://img.youtube.com/vi/${infoModal.exercise.youtube_id}/hqdefault.jpg`} className="w-full h-full object-cover opacity-50" alt="Aperçu" />
-                    <PlayCircle className="w-12 h-12 text-white absolute z-10 drop-shadow-md" />
-                  </>
-                ) : <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />}
+                  <iframe 
+                    src={`https://www.youtube.com/embed/${infoModal.exercise.youtube_id}?autoplay=1&mute=0&rel=0&modestbranding=1&loop=1&playlist=${infoModal.exercise.youtube_id}`}
+                    className="absolute inset-0 w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-zinc-600">
+                    <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
+                    <span className="text-sm font-bold text-zinc-500">Vidéo non disponible</span>
+                  </div>
+                )}
               </div>
+
               <div className="flex flex-col items-center space-y-2 mt-4">
                 <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
                 <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">

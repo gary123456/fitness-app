@@ -126,25 +126,21 @@ export default function ExerciseFullPage() {
           </div>
         ) : (
           <>
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-              <div className="bg-zinc-100/80 dark:bg-zinc-800/80 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-xs font-black text-zinc-500 text-center uppercase tracking-widest flex items-center justify-center">
-                <PlayCircle className="w-4 h-4 mr-2 text-red-500" /> {lang === 'FR' ? "Démonstration Vidéo" : "Video Demonstration"}
-              </div>
-              <div className="w-full aspect-video bg-black flex items-center justify-center relative">
-                {exercise.youtube_id ? (
-                  <iframe 
-                    src={`https://www.youtube.com/embed/${exercise.youtube_id}?autoplay=0&rel=0&modestbranding=1`}
-                    className="absolute inset-0 w-full h-full border-0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-zinc-600">
-                    <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
-                    <span className="text-sm font-bold">Vidéo non disponible</span>
-                  </div>
-                )}
-              </div>
+            {/* LECTEUR VERTICAL POUR YOUTUBE SHORTS */}
+            <div className="w-full max-w-[360px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-2xl overflow-hidden shadow-2xl border border-zinc-800">
+              {exercise.youtube_id ? (
+                <iframe 
+                  src={`https://www.youtube.com/embed/${exercise.youtube_id}?autoplay=0&rel=0&modestbranding=1`}
+                  className="absolute inset-0 w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-zinc-600">
+                  <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
+                  <span className="text-sm font-bold">Vidéo non disponible</span>
+                </div>
+              )}
             </div>
 
             <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-md relative">

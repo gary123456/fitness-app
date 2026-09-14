@@ -389,7 +389,7 @@ function ActiveWorkoutSessionContent() {
       }));
       await supabase.from("workout_exercises").upsert(updates);
     } catch (err) {
-      console.error("Erreur réorganisation:", err);
+      console.error("Erreur:", err);
     }
   };
 
@@ -398,7 +398,7 @@ function ActiveWorkoutSessionContent() {
     const identifier = we.id || we.exercise_id;
     const ghost = data?.ghostData?.[identifier];
     const target = we.recommended_weight > 0 ? we.recommended_weight : (ghost ? parseFloat(ghost.weight) : 0);
-    if (target <= 20) return <div className="px-2 pb-2 text-xs text-zinc-500 italic">Pas de chauffe requise pour ce poids.</div>;
+    if (target <= 20) return <div className="px-2 pb-2 text-xs text-zinc-500 italic">Pas de chauffe requise.</div>;
 
     const set2Weight = Math.round((target * 0.5) / 2.5) * 2.5;
     const set3Weight = Math.round((target * 0.75) / 2.5) * 2.5;
@@ -493,7 +493,7 @@ function ActiveWorkoutSessionContent() {
       leveledUp = gamification.leveledUp || false;
 
     } catch (err: any) {
-      console.warn("Réseau indisponible. Sauvegarde locale activée.");
+      console.warn("Réseau indisponible.");
       const offlineQueue = JSON.parse(localStorage.getItem('vivex_offline_queue') || '[]');
       offlineQueue.push(...logsToInsert);
       localStorage.setItem('vivex_offline_queue', JSON.stringify(offlineQueue));
@@ -507,7 +507,6 @@ function ActiveWorkoutSessionContent() {
     setIsSaving(false);
   };
 
-  // 🛡️ CORRECTION : Ajout de la fonction getBreathingState manquante
   const getBreathingState = () => {
     const cycle = (30 - breatheTime) % 16;
     if (cycle < 4) return { text: txt.inhale, scale: "scale-150" };
@@ -820,21 +819,19 @@ function ActiveWorkoutSessionContent() {
 
       <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
 
+      {/* 🛡️ LECTEUR VIDEO POP-UP VERTICAL */}
       <Dialog open={videoModal.show} onOpenChange={(open) => !open && setVideoModal({show: false, youtubeId: null})}>
-        <DialogContent className="sm:max-w-[500px] bg-black border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
-          <div className="w-full aspect-video bg-black flex items-center justify-center relative">
+        <DialogContent className="sm:max-w-[380px] bg-transparent border-none p-0 overflow-hidden w-full flex items-center justify-center shadow-none">
+          <div className="w-full max-w-[360px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-zinc-800">
             {videoModal.youtubeId && (
               <iframe 
-                src={`https://www.youtube.com/embed/${videoModal.youtubeId}?autoplay=1&mute=1&rel=0&modestbranding=1`}
+                src={`https://www.youtube.com/embed/${videoModal.youtubeId}?autoplay=1&mute=0&rel=0&modestbranding=1&loop=1&playlist=${videoModal.youtubeId}`}
                 className="absolute inset-0 w-full h-full border-0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
             )}
           </div>
-          <DialogFooter className="p-4 bg-zinc-950">
-            <Button variant="outline" className="w-full font-bold border-zinc-800 text-zinc-300" onClick={() => setVideoModal({ show: false, youtubeId: null })}>Fermer la vidéo</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1028,7 +1025,8 @@ function ActiveWorkoutSessionContent() {
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
-              <div className="bg-zinc-900 rounded-xl shadow-sm border border-zinc-800 p-0 h-48 flex justify-center items-center relative overflow-hidden">
+              {/* 🛡️ MINIATURE VERTICALE POUR LA MODALE INFO */}
+              <div className="bg-zinc-900 rounded-xl shadow-sm border border-zinc-800 p-0 w-full max-w-[200px] aspect-[9/16] mx-auto flex justify-center items-center relative overflow-hidden">
                 {infoModal.exercise.youtube_id ? (
                   <>
                     <img src={`https://img.youtube.com/vi/${infoModal.exercise.youtube_id}/hqdefault.jpg`} className="w-full h-full object-cover opacity-50" alt="Aperçu" />
