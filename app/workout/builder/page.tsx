@@ -1,6 +1,5 @@
 "use client";
 
-// 🛡️ CORRECTION : Ajout de Suspense dans l'import React
 import { useState, useEffect, Suspense } from "react";
 import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -9,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2 } from "lucide-react";
+import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2, PlayCircle } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -21,7 +20,7 @@ interface Exercise {
   equipment_required: string;
   cns_impact: number;
   movement_pattern: string;
-  gif_url?: string;
+  youtube_id?: string;
 }
 
 interface PlannedExercise {
@@ -41,7 +40,12 @@ const fetchLibrary = async () => {
   return data;
 };
 
-// 🛡️ CORRECTION : On renomme le composant principal en BuilderContent
+// 🛡️ NOUVEAU : Récupère la miniature YouTube pour le Builder
+const getYoutubeThumbnail = (youtubeId?: string) => {
+  if (!youtubeId) return null;
+  return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+};
+
 function BuilderContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -176,11 +180,6 @@ function BuilderContent() {
     if (selectedEquipmentFilter === "salle") return txt.gym;
     if (selectedEquipmentFilter === "home_gym") return txt.homeGym;
     return txt.equipment;
-  };
-
-  const getImageUrl = (ex: any, frame: 0 | 1) => {
-    if (ex.gif_url && ex.gif_url.includes('github')) return `${ex.gif_url}/${frame}.jpg`;
-    return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
   };
 
   const addExercise = (ex: Exercise) => {
@@ -436,13 +435,12 @@ function BuilderContent() {
           <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
             {filteredExercises.length > 0 ? (
               filteredExercises.map(ex => {
-                const thumbnailUrl = getImageUrl(ex, 0);
+                const thumbnailUrl = getYoutubeThumbnail(ex.youtube_id);
                 return (
                   <div key={ex.id} className="flex items-center justify-between p-2 lg:p-3 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors group">
                     <div className="flex items-center space-x-3">
                       <div className="h-10 w-10 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-zinc-200 dark:border-zinc-700 relative">
-                        <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-contain absolute z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                        <Dumbbell className="h-5 w-5 text-zinc-400 opacity-50 absolute z-0" />
+                        {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-cover absolute z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-5 w-5 text-zinc-400 opacity-50 absolute z-0" />}
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 line-clamp-1">{ex.name}</h4>
@@ -570,13 +568,15 @@ function BuilderContent() {
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
-              <div className="bg-white rounded-xl shadow-sm border border-zinc-200 p-2 h-48 flex justify-center items-center relative">
-                {infoModal.exercise.gif_url ? (
-                  <img src={getImageUrl(infoModal.exercise, 0)} className="max-h-full object-contain absolute inset-0 z-10 mx-auto" alt="Aperçu" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                ) : null}
-                <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />
+              <div className="bg-zinc-900 rounded-xl shadow-sm border border-zinc-800 p-0 h-48 flex justify-center items-center relative overflow-hidden">
+                {infoModal.exercise.youtube_id ? (
+                  <>
+                    <img src={`https://img.youtube.com/vi/${infoModal.exercise.youtube_id}/hqdefault.jpg`} className="w-full h-full object-cover opacity-50" alt="Aperçu" />
+                    <PlayCircle className="w-12 h-12 text-white absolute z-10 drop-shadow-md" />
+                  </>
+                ) : <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />}
               </div>
-              <div className="flex flex-col items-center space-y-2">
+              <div className="flex flex-col items-center space-y-2 mt-4">
                 <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
                 <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
                   <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
@@ -636,7 +636,6 @@ function BuilderContent() {
   );
 }
 
-// 🛡️ CORRECTION : Le composant principal est enveloppé dans Suspense
 export default function BuilderPageWrapper() {
   return (
     <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950"><Loader2 className="w-12 h-12 text-teal-500 animate-spin" /></div>}>
