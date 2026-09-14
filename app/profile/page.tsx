@@ -24,33 +24,34 @@ interface ProfileData {
   avatar_url?: string;
 }
 
+// 🛡️ PROGRESSIVE DISCLOSURE : Ajout des cibles (target) et types
 const FORGE_BADGES = [
-  { id: "first_step", name: "Premier Pas", icon: Star, color: "text-yellow-400", req: "Terminer votre première séance." },
-  { id: "streak_fer", name: "Régularité : Fer", icon: Flame, color: "text-zinc-400", req: "Atteindre 3 jours de série." },
-  { id: "streak_bronze", name: "Régularité : Bronze", icon: Flame, color: "text-amber-600", req: "Atteindre 7 jours de série." },
-  { id: "streak_argent", name: "Régularité : Argent", icon: Flame, color: "text-slate-300", req: "Atteindre 21 jours de série." },
-  { id: "streak_or", name: "Régularité : Or", icon: Flame, color: "text-yellow-500", req: "Atteindre 90 jours de série." },
-  { id: "streak_diamant", name: "Régularité : Diamant", icon: Flame, color: "text-cyan-300", req: "Atteindre 365 jours de série." },
-  { id: "level_fer", name: "Niveau : Fer", icon: Zap, color: "text-zinc-400", req: "Atteindre le Niveau 5." },
-  { id: "level_bronze", name: "Niveau : Bronze", icon: Zap, color: "text-amber-600", req: "Atteindre le Niveau 10." },
-  { id: "level_argent", name: "Niveau : Argent", icon: Zap, color: "text-slate-300", req: "Atteindre le Niveau 25." },
-  { id: "level_or", name: "Niveau : Or", icon: Zap, color: "text-yellow-500", req: "Atteindre le Niveau 50." },
-  { id: "level_diamant", name: "Niveau : Diamant", icon: Zap, color: "text-cyan-300", req: "Atteindre le Niveau 100." },
-  { id: "warrior", name: "Warrior", icon: Trophy, color: "text-teal-400", req: "Ancien Badge Niveau 5." },
-  { id: "constance", name: "Constance", icon: Flame, color: "text-orange-500", req: "Ancien Badge 7 Jours." },
-  { id: "titan", name: "Titan", icon: Zap, color: "text-blue-400", req: "Ancien Badge Niveau 10." },
-  { id: "legend", name: "Légende", icon: Award, color: "text-purple-400", req: "Ancien Badge 30 Jours." },
+  { id: "first_step", name: "Premier Pas", icon: Star, color: "text-yellow-400", req: "Terminer votre première séance.", type: "first", target: 1 },
+  { id: "streak_fer", name: "Régularité : Fer", icon: Flame, color: "text-zinc-400", req: "Atteindre 3 jours de série.", type: "streak", target: 3 },
+  { id: "streak_bronze", name: "Régularité : Bronze", icon: Flame, color: "text-amber-600", req: "Atteindre 7 jours de série.", type: "streak", target: 7 },
+  { id: "streak_argent", name: "Régularité : Argent", icon: Flame, color: "text-slate-300", req: "Atteindre 21 jours de série.", type: "streak", target: 21 },
+  { id: "streak_or", name: "Régularité : Or", icon: Flame, color: "text-yellow-500", req: "Atteindre 90 jours de série.", type: "streak", target: 90 },
+  { id: "streak_diamant", name: "Régularité : Diamant", icon: Flame, color: "text-cyan-300", req: "Atteindre 365 jours de série.", type: "streak", target: 365 },
+  { id: "level_fer", name: "Niveau : Fer", icon: Zap, color: "text-zinc-400", req: "Atteindre le Niveau 5.", type: "level", target: 5 },
+  { id: "level_bronze", name: "Niveau : Bronze", icon: Zap, color: "text-amber-600", req: "Atteindre le Niveau 10.", type: "level", target: 10 },
+  { id: "level_argent", name: "Niveau : Argent", icon: Zap, color: "text-slate-300", req: "Atteindre le Niveau 25.", type: "level", target: 25 },
+  { id: "level_or", name: "Niveau : Or", icon: Zap, color: "text-yellow-500", req: "Atteindre le Niveau 50.", type: "level", target: 50 },
+  { id: "level_diamant", name: "Niveau : Diamant", icon: Zap, color: "text-cyan-300", req: "Atteindre le Niveau 100.", type: "level", target: 100 },
+  { id: "warrior", name: "Warrior", icon: Trophy, color: "text-teal-400", req: "Ancien Badge Niveau 5.", type: "legacy", target: 999 },
+  { id: "constance", name: "Constance", icon: Flame, color: "text-orange-500", req: "Ancien Badge 7 Jours.", type: "legacy", target: 999 },
+  { id: "titan", name: "Titan", icon: Zap, color: "text-blue-400", req: "Ancien Badge Niveau 10.", type: "legacy", target: 999 },
+  { id: "legend", name: "Légende", icon: Award, color: "text-purple-400", req: "Ancien Badge 30 Jours.", type: "legacy", target: 999 },
 ];
 
 const ACADEMY_BADGES = [
-  { id: "quiz_fer", name: "Savoir : Fer", icon: BookOpen, color: "text-zinc-400", req: "Répondre à 5 Quiz." },
-  { id: "quiz_bronze", name: "Savoir : Bronze", icon: Brain, color: "text-amber-600", req: "Répondre à 15 Quiz." },
-  { id: "quiz_argent", name: "Savoir : Argent", icon: GraduationCap, color: "text-slate-300", req: "Répondre à 30 Quiz." },
-  { id: "quiz_or", name: "Savoir : Or", icon: Trophy, color: "text-yellow-500", req: "Répondre à 60 Quiz." },
-  { id: "quiz_diamant", name: "Savoir : Diamant", icon: Award, color: "text-cyan-300", req: "Répondre à 100 Quiz." },
-  { id: "quiz_initie", name: "Initié", icon: BookOpen, color: "text-cyan-400", req: "Ancien Badge 5 Quiz." },
-  { id: "quiz_erudit", name: "Érudit", icon: Brain, color: "text-fuchsia-400", req: "Ancien Badge 15 Quiz." },
-  { id: "quiz_genie", name: "Génie", icon: GraduationCap, color: "text-yellow-500", req: "Ancien Badge 30 Quiz." },
+  { id: "quiz_fer", name: "Savoir : Fer", icon: BookOpen, color: "text-zinc-400", req: "Répondre à 5 Quiz.", type: "quiz", target: 5 },
+  { id: "quiz_bronze", name: "Savoir : Bronze", icon: Brain, color: "text-amber-600", req: "Répondre à 15 Quiz.", type: "quiz", target: 15 },
+  { id: "quiz_argent", name: "Savoir : Argent", icon: GraduationCap, color: "text-slate-300", req: "Répondre à 30 Quiz.", type: "quiz", target: 30 },
+  { id: "quiz_or", name: "Savoir : Or", icon: Trophy, color: "text-yellow-500", req: "Répondre à 60 Quiz.", type: "quiz", target: 60 },
+  { id: "quiz_diamant", name: "Savoir : Diamant", icon: Award, color: "text-cyan-300", req: "Répondre à 100 Quiz.", type: "quiz", target: 100 },
+  { id: "quiz_initie", name: "Initié", icon: BookOpen, color: "text-cyan-400", req: "Ancien Badge 5 Quiz.", type: "legacy", target: 999 },
+  { id: "quiz_erudit", name: "Érudit", icon: Brain, color: "text-fuchsia-400", req: "Ancien Badge 15 Quiz.", type: "legacy", target: 999 },
+  { id: "quiz_genie", name: "Génie", icon: GraduationCap, color: "text-yellow-500", req: "Ancien Badge 30 Quiz.", type: "legacy", target: 999 },
 ];
 
 export default function ProfilePage() {
@@ -259,33 +260,64 @@ export default function ProfilePage() {
     } catch (e) {}
   }
 
+  // 🛡️ ALGO BROUILLARD DE GUERRE (N+1 / N+2)
+  const getBadgeStatus = (badge: any) => {
+    if (data.unlocked_badges?.includes(badge.id)) return 'unlocked';
+    if (badge.type === 'legacy') return 'locked'; // Les vieux badges non acquis restent verrouillés
+    
+    const categoryBadges = activeTab === 'forge' ? FORGE_BADGES : ACADEMY_BADGES;
+    const sameTypeBadges = categoryBadges.filter(b => b.type === badge.type);
+    
+    // Le premier badge de cette catégorie qui n'est pas débloqué est le "N+1"
+    const firstLocked = sameTypeBadges.find(b => !data.unlocked_badges?.includes(b.id));
+    if (firstLocked && firstLocked.id === badge.id) return 'next';
+    return 'locked';
+  };
+
+  const getProgressData = (badge: any) => {
+    let current = 0;
+    if (badge.type === 'streak') current = data.streak_days;
+    if (badge.type === 'level') current = data.level;
+    if (badge.type === 'quiz') current = totalQuiz;
+    if (badge.type === 'first') current = data.unlocked_badges?.includes('first_step') ? 1 : 0;
+    
+    const max = badge.target || 1;
+    const pct = Math.min((current / max) * 100, 100);
+    return { current, max, pct };
+  };
+
   const renderBadgeGrid = (badges: any[]) => {
     return (
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 mt-6">
         {badges.map((badge) => {
-          const isUnlocked = data.unlocked_badges?.includes(badge.id);
+          const status = getBadgeStatus(badge);
+          // On cache les anciens badges (legacy) s'ils ne sont pas débloqués
+          if (badge.type === 'legacy' && status !== 'unlocked') return null;
+
           const Icon = badge.icon;
           
           return (
             <div
               key={badge.id}
-              onClick={() => setSelectedBadge({ ...badge, isUnlocked })}
+              onClick={() => setSelectedBadge({ ...badge, status })}
               className={`cursor-pointer flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border transition-all hover:scale-105 active:scale-95 ${
-                isUnlocked
+                status === 'unlocked'
                   ? `border-${badge.color.split('-')[1]}-500/30 bg-white dark:bg-zinc-900 shadow-[0_0_15px_rgba(20,184,166,0.1)] hover:shadow-[0_0_20px_rgba(20,184,166,0.2)]`
-                  : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 opacity-60 hover:opacity-100"
+                  : status === 'next'
+                    ? "border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-900/10 shadow-sm"
+                    : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 opacity-50 grayscale hover:grayscale-0"
               }`}
             >
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center relative ${isUnlocked ? 'bg-zinc-100 dark:bg-zinc-800' : 'bg-zinc-200 dark:bg-zinc-900'}`}>
-                {isUnlocked ? (
-                  <Icon className={`w-6 h-6 ${badge.color} drop-shadow-md`} />
-                ) : (
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center relative ${status === 'unlocked' ? 'bg-zinc-100 dark:bg-zinc-800' : 'bg-zinc-200 dark:bg-zinc-900'}`}>
+                {status === 'locked' ? (
                   <Lock className="w-5 h-5 text-zinc-400" />
+                ) : (
+                  <Icon className={`w-6 h-6 ${badge.color} drop-shadow-md ${status === 'next' ? 'opacity-60' : ''}`} />
                 )}
-                {isUnlocked && <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5"><CheckCircle2 className="w-3 h-3 text-white" /></div>}
+                {status === 'unlocked' && <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-0.5"><CheckCircle2 className="w-3 h-3 text-white" /></div>}
               </div>
-              <span className={`text-[10px] font-black uppercase tracking-widest text-center leading-tight ${isUnlocked ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400"}`}>
-                {badge.name}
+              <span className={`text-[10px] font-black uppercase tracking-widest text-center leading-tight ${status === 'unlocked' ? "text-zinc-900 dark:text-zinc-100" : status === 'next' ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"}`}>
+                {status === 'locked' ? "???" : badge.name}
               </span>
             </div>
           );
@@ -428,15 +460,15 @@ export default function ProfilePage() {
       </div>
 
       <Dialog open={showCropModal} onOpenChange={setShowCropModal}>
-        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-3xl">
-          <DialogHeader className="text-center pb-2">
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b p-0 overflow-hidden">
+          <DialogHeader className="text-center pt-6 pb-2">
             <DialogTitle className="text-xl font-black text-indigo-600 dark:text-indigo-400">{lang === 'FR' ? "Centrer la photo" : "Adjust photo"}</DialogTitle>
           </DialogHeader>
-          <div className="py-4 space-y-8">
+          <div className="py-4 space-y-8 px-6">
             <div className="w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-teal-500 shadow-2xl bg-zinc-100 dark:bg-zinc-900 shrink-0">
                <img src={rawAvatar} style={{ objectPosition: `${cropPos.x}% ${cropPos.y}%` }} className="w-full h-full object-cover transition-all" alt="Preview" />
             </div>
-            <div className="space-y-6 px-4">
+            <div className="space-y-6">
                <div className="space-y-3">
                   <Label className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex justify-between">
                     <span>{lang === 'FR' ? "Horizontal (X)" : "Horizontal (X)"}</span>
@@ -453,7 +485,7 @@ export default function ProfilePage() {
                </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-6 pb-6">
             <Button onClick={saveCropPosition} disabled={isSavingCrop} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold h-12 text-lg rounded-xl">
               {isSavingCrop ? <Loader2 className="w-5 h-5 animate-spin" /> : (lang === 'FR' ? "Enregistrer" : "Save")}
             </Button>
@@ -461,41 +493,63 @@ export default function ProfilePage() {
         </DialogContent>
       </Dialog>
 
+      {/* 🛡️ MODALE PROGRESSIVE DISCLOSURE (N / N+1 / N+2) */}
       <Dialog open={selectedBadge !== null} onOpenChange={(open) => !open && setSelectedBadge(null)}>
-        <DialogContent className={`sm:max-w-[400px] border-none rounded-3xl overflow-hidden p-0 ${selectedBadge?.isUnlocked ? 'bg-gradient-to-b from-yellow-500/20 to-zinc-950' : 'bg-zinc-950'}`}>
-          <div className="p-8 flex flex-col items-center justify-center text-center relative">
-            <div className="absolute top-0 right-0 p-4">
-              {selectedBadge?.isUnlocked ? <CheckCircle2 className="w-6 h-6 text-green-500" /> : <Lock className="w-6 h-6 text-zinc-600" />}
-            </div>
-            
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-2xl ${selectedBadge?.isUnlocked ? 'bg-gradient-to-br from-yellow-400 to-amber-600' : 'bg-zinc-900 border-2 border-zinc-800'}`}>
-               {selectedBadge && <selectedBadge.icon className={`w-12 h-12 ${selectedBadge.isUnlocked ? 'text-white' : 'text-zinc-600'}`} />}
-            </div>
-            
-            <h2 className={`text-2xl font-black uppercase tracking-widest mb-2 ${selectedBadge?.isUnlocked ? 'text-yellow-500' : 'text-zinc-300'}`}>
-              {selectedBadge?.name}
-            </h2>
-            
-            <p className="text-sm font-medium text-zinc-400 mb-6">
-              {selectedBadge?.req}
-            </p>
+        <DialogContent className={`sm:max-w-[400px] border-none mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-3xl border-b-0 p-0 overflow-hidden ${selectedBadge?.status === 'unlocked' ? 'bg-gradient-to-b from-yellow-500/20 to-zinc-950' : 'bg-zinc-950'}`}>
+          {selectedBadge && (
+            <div className="p-8 flex flex-col items-center justify-center text-center relative">
+              <div className="absolute top-0 right-0 p-4">
+                {selectedBadge.status === 'unlocked' && <CheckCircle2 className="w-6 h-6 text-green-500" />}
+                {selectedBadge.status === 'next' && <Target className="w-6 h-6 text-indigo-500" />}
+                {selectedBadge.status === 'locked' && <Lock className="w-6 h-6 text-zinc-600" />}
+              </div>
+              
+              <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-2xl ${selectedBadge.status === 'unlocked' ? 'bg-gradient-to-br from-yellow-400 to-amber-600' : selectedBadge.status === 'next' ? 'bg-indigo-900 border-2 border-indigo-500' : 'bg-zinc-900 border-2 border-zinc-800'}`}>
+                 {selectedBadge.status === 'locked' ? (
+                   <Lock className="w-10 h-10 text-zinc-600" />
+                 ) : (
+                   <selectedBadge.icon className={`w-12 h-12 ${selectedBadge.status === 'unlocked' ? 'text-white' : 'text-indigo-400'}`} />
+                 )}
+              </div>
+              
+              <h2 className={`text-2xl font-black uppercase tracking-widest mb-2 ${selectedBadge.status === 'unlocked' ? 'text-yellow-500' : selectedBadge.status === 'next' ? 'text-indigo-400' : 'text-zinc-500'}`}>
+                {selectedBadge.status === 'locked' ? "Secret Verrouillé" : selectedBadge.name}
+              </h2>
+              
+              <p className="text-sm font-medium text-zinc-400 mb-6">
+                {selectedBadge.status === 'locked' 
+                  ? "Le brouillard masque cet exploit. Débloquez d'abord le défi précédent pour révéler cette quête." 
+                  : selectedBadge.req}
+              </p>
 
-            {selectedBadge?.isUnlocked ? (
-              <div className="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-yellow-500 font-bold text-xs uppercase tracking-widest animate-pulse">
-                {lang === 'FR' ? "Débloqué. Félicitations." : "Unlocked. Congratulations."}
-              </div>
-            ) : (
-              <div className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-zinc-500 font-bold text-xs uppercase tracking-widest">
-                {lang === 'FR' ? "Verrouillé. Continuez vos efforts." : "Locked. Keep pushing."}
-              </div>
-            )}
-          </div>
+              {selectedBadge.status === 'unlocked' ? (
+                <div className="w-full bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-yellow-500 font-bold text-xs uppercase tracking-widest animate-pulse">
+                  {lang === 'FR' ? "Débloqué. Félicitations." : "Unlocked. Congratulations."}
+                </div>
+              ) : selectedBadge.status === 'next' ? (
+                <div className="w-full space-y-2">
+                  <div className="flex justify-between text-xs font-bold text-indigo-400 uppercase">
+                    <span>Progression</span>
+                    <span>{getProgressData(selectedBadge).current} / {getProgressData(selectedBadge).max}</span>
+                  </div>
+                  <div className="w-full h-2 bg-indigo-950 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: `${getProgressData(selectedBadge).pct}%` }} />
+                  </div>
+                  <p className="text-[10px] font-bold text-zinc-500 mt-2 uppercase tracking-widest">En cours...</p>
+                </div>
+              ) : (
+                <div className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-zinc-500 font-bold text-xs uppercase tracking-widest">
+                  {lang === 'FR' ? "Objectif Inconnu" : "Unknown Objective"}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
       <Dialog open={showXpModal} onOpenChange={setShowXpModal}>
-        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-3xl">
-          <DialogHeader className="text-center pb-4">
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
+          <DialogHeader className="text-center pt-4 pb-2">
             <DialogTitle className="text-xl font-black text-teal-600 dark:text-teal-400">Expérience & Progression</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center space-y-6">
@@ -514,15 +568,15 @@ export default function ProfilePage() {
               <p className="text-xs font-medium text-zinc-500">Gagnez de l'XP en soulevant lourd et en répondant aux quiz quotidiens.</p>
             </div>
           </div>
-          <DialogFooter className="mt-4">
-            <Button onClick={() => setShowXpModal(false)} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold">Fermer</Button>
+          <DialogFooter className="mt-4 pb-4">
+            <Button onClick={() => setShowXpModal(false)} className="w-full h-12 rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-bold">Fermer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={showStreakModal} onOpenChange={setShowStreakModal}>
-        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-3xl">
-          <DialogHeader className="text-center pb-4">
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
+          <DialogHeader className="text-center pt-4 pb-2">
             <DialogTitle className="text-xl font-black text-orange-500 flex items-center justify-center"><Flame className="w-5 h-5 mr-2"/> La Chaîne</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center space-y-6 py-4">
@@ -534,8 +588,8 @@ export default function ProfilePage() {
               L'algorithme augmente vos gains si vous êtes régulier. Ne brisez pas la chaîne.
             </p>
           </div>
-          <DialogFooter>
-            <Button onClick={() => setShowStreakModal(false)} className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold">Continuer l'effort</Button>
+          <DialogFooter className="pb-4">
+            <Button onClick={() => setShowStreakModal(false)} className="w-full h-12 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold">Continuer l'effort</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

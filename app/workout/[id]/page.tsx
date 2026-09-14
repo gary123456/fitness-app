@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import useSWR from "swr";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight, Scale, Filter, Activity, ArrowUp, ArrowDown, Flame } from "lucide-react";
+import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight, Scale, Filter, Activity, ArrowUp, ArrowDown, Flame, Copy } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ const getSessionInsights = (exercises: any[], lang: string) => {
         { text: lang === 'FR' ? "15 Jumping Jacks ou 10 Burpees" : "15 Jumping Jacks", gif: "/jumping-jack.gif" },
         { text: lang === 'FR' ? "2 séries de pompes et squats à vide" : "2 sets of bodyweight squats and push-ups", gif: "/squat.gif" }
       ],
-      why: lang === 'FR' ? "Le Full-Body (Corps Entier) stimule l'ensemble de votre système nerveux central. Scientifiquement, cette haute fréquence permet de relancer la synthèse protéique musculaire tous les 48h, maximisant l'anabolisme naturel et la dépense énergétique." : "Full-Body stimulates your entire central nervous system. Scientifically, this high frequency restarts muscle protein synthesis every 48h, maximizing natural anabolism and caloric expenditure."
+      why: lang === 'FR' ? "Le Full-Body stimule l'ensemble de votre système nerveux central. Scientifiquement, cette haute fréquence permet de relancer la synthèse protéique musculaire tous les 48h, maximisant l'anabolisme." : "Full-Body stimulates your entire central nervous system. Scientifically, this high frequency restarts muscle protein synthesis every 48h, maximizing natural anabolism."
     };
   } else if (isLower) {
     return {
@@ -38,7 +38,7 @@ const getSessionInsights = (exercises: any[], lang: string) => {
         { text: lang === 'FR' ? "15 fentes alternées au poids du corps" : "15 bodyweight lunges", gif: "/lunge.gif" },
         { text: lang === 'FR' ? "2 séries de squats à vide (pause 2s en bas)" : "2 sets of empty squats (2s pause at bottom)", gif: "/squat.gif" }
       ],
-      why: lang === 'FR' ? "Cette séance bas du corps cible les plus grands groupes musculaires (Quadriceps, Fessiers). Cela déclenche une forte libération d'hormones anaboliques (testostérone, hormone de croissance) bénéfique pour l'ensemble du corps." : "This lower body session targets the largest muscle groups. It triggers a strong release of anabolic hormones beneficial for the entire body."
+      why: lang === 'FR' ? "Cette séance bas du corps cible les plus grands groupes musculaires (Quadriceps, Fessiers). Cela déclenche une forte libération d'hormones anaboliques (testostérone) bénéfique pour le corps entier." : "This lower body session targets the largest muscle groups. It triggers a strong release of anabolic hormones beneficial for the entire body."
     };
   } else if (isUpper) {
     return {
@@ -48,7 +48,7 @@ const getSessionInsights = (exercises: any[], lang: string) => {
         { text: lang === 'FR' ? "Face pulls légers ou disloquations" : "Light face pulls or band dislocations", gif: "/face-pull.gif" },
         { text: lang === 'FR' ? "2 séries de pompes légères" : "2 sets of light push-ups", gif: "/pushup.gif" }
       ],
-      why: lang === 'FR' ? "Focus sur la ceinture scapulaire. Équilibrer les mouvements de poussée (Push) et de tirage (Pull) garantit une posture saine, prévient les blessures aux épaules et sculpte le torse et le dos de manière harmonieuse." : "Focus on the shoulder girdle. Balancing push and pull movements ensures healthy posture, prevents shoulder injuries, and sculpts the torso harmoniously."
+      why: lang === 'FR' ? "Focus sur la ceinture scapulaire. Équilibrer les mouvements de poussée (Push) et de tirage (Pull) garantit une posture saine et prévient les blessures aux épaules." : "Focus on the shoulder girdle. Balancing push and pull movements ensures healthy posture and prevents shoulder injuries."
     };
   }
   
@@ -81,7 +81,7 @@ const getImageUrl = (ex: any, frame: 0 | 1) => {
   return `https://aojcwjsgcffkmrupzjdi.supabase.co/storage/v1/object/public/exercise-assets/${ex.id}/${frame}.webp`;
 };
 
-const fetchActiveSession = async (id: string) => {
+const fetchActiveSession = async (id: string, searchParams: any) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No user");
   const { data: profile } = await supabase.from("profiles").select("first_name, equipment_access").eq("id", user.id).single();
@@ -90,16 +90,22 @@ const fetchActiveSession = async (id: string) => {
   if (!sessionData) throw new Error("Not found");
   if (sessionData.workout_exercises) sessionData.workout_exercises.sort((a: any, b: any) => a.order_index - b.order_index);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const { data: logsToday } = await supabase.from("workout_logs").select("id").eq("user_id", user.id).eq("session_id", id).gte("created_at", todayStr + "T00:00:00.000Z").limit(1);
+  
+  const isReadOnly = (logsToday && logsToday.length > 0) || searchParams?.get('summary') === 'true';
+
   const exerciseIds = sessionData.workout_exercises.map((we: any) => we.exercise_id);
   const { data: pastLogs } = await supabase
     .from('workout_logs')
-    .select('exercise_id, weight, reps, created_at')
+    .select('exercise_id, session_id, set_number, weight, reps, created_at')
     .eq('user_id', user.id)
     .in('exercise_id', exerciseIds)
     .order('created_at', { ascending: false });
 
   const ghostData: Record<string, { weight: string, reps: string }> = {};
   const initialInputs: Record<string, { weight: string, reps: string }> = {};
+  const loggedInputs: Record<string, { weight: string, reps: string }> = {};
   
   sessionData.workout_exercises.forEach((we: any) => {
     const identifier = we.id || we.exercise_id;
@@ -107,32 +113,52 @@ const fetchActiveSession = async (id: string) => {
     if (we.recommended_weight !== null && we.recommended_weight !== undefined && we.recommended_weight > 0) defaultWeight = we.recommended_weight.toString();
     const defaultReps = getRecommendedReps(we.target_reps);
 
+    // Initialisation théorique
     for (let i = 0; i < we.sets; i++) {
       initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
     }
 
     const exLogs = pastLogs?.filter(l => l.exercise_id === we.exercise_id) || [];
-    if (exLogs.length > 0) {
-      const lastDate = exLogs[0].created_at.split('T')[0];
-      const lastSessionLogs = exLogs.filter(l => l.created_at.startsWith(lastDate));
+    
+    // Extraction des VRAIS LOGS pour le Mode Résumé
+    if (isReadOnly) {
+      const logsOfThisSessionToday = exLogs.filter(l => l.session_id === id && l.created_at.startsWith(todayStr));
+      logsOfThisSessionToday.sort((a,b) => a.set_number - b.set_number);
+      
+      for (let i = 0; i < we.sets; i++) {
+        const logForSet = logsOfThisSessionToday.find(l => l.set_number === i + 1);
+        if (logForSet) {
+          loggedInputs[`${identifier}_${i}`] = { weight: logForSet.weight.toString(), reps: logForSet.reps.toString() };
+        } else {
+          loggedInputs[`${identifier}_${i}`] = { weight: "0", reps: "0" };
+        }
+      }
+    }
+
+    // Isolation du Ghost (Prendre la séance précédente)
+    const ghostLogs = exLogs.filter(l => l.session_id !== id && l.created_at.split('T')[0] !== todayStr);
+    if (ghostLogs.length > 0) {
+      const lastDate = ghostLogs[0].created_at.split('T')[0];
+      const lastSessionLogs = ghostLogs.filter(l => l.created_at.startsWith(lastDate));
       lastSessionLogs.sort((a, b) => b.weight - a.weight || b.reps - a.reps);
       const bestSet = lastSessionLogs[0];
       ghostData[identifier] = { weight: bestSet.weight.toString(), reps: bestSet.reps.toString() };
     }
   });
 
-  return { sessionData, initialInputs, ghostData, loadedCompleted: {}, profile };
+  return { sessionData, initialInputs, loggedInputs, ghostData, profile, isReadOnly };
 };
 
-export default function ActiveWorkoutSession() {
+function ActiveWorkoutSessionContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { lang } = useLanguage();
 
   const [sessionKey] = useState(`session-${params.id}-${Date.now()}`);
   const storageKey = `vivex_tracker_${params.id}`;
   
-  const { data, error, mutate, isLoading } = useSWR(sessionKey, () => fetchActiveSession(params.id as string), { 
+  const { data, error, mutate, isLoading } = useSWR(sessionKey, () => fetchActiveSession(params.id as string, searchParams), { 
     revalidateOnFocus: false,
     keepPreviousData: true 
   });
@@ -187,21 +213,30 @@ export default function ActiveWorkoutSession() {
         }
       } catch (err) { console.warn("Wakelock not supported or denied."); }
     };
-    if (isWorkoutUnlocked) {
+    if (isWorkoutUnlocked && !data?.isReadOnly) {
       requestWakeLock();
     }
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isWorkoutUnlocked) requestWakeLock();
+      if (document.visibilityState === 'visible' && isWorkoutUnlocked && !data?.isReadOnly) requestWakeLock();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (wakeLock !== null) wakeLock.release();
     };
-  }, [isWorkoutUnlocked]);
+  }, [isWorkoutUnlocked, data?.isReadOnly]);
 
   useEffect(() => {
     if (data && Object.keys(inputs).length === 0) {
+      if (data.isReadOnly && data.loggedInputs && Object.keys(data.loggedInputs).length > 0) {
+        setInputs(data.loggedInputs);
+        const allCompleted: Record<string, boolean> = {};
+        Object.keys(data.loggedInputs).forEach(k => allCompleted[k] = true);
+        setCompletedSets(allCompleted);
+        setIsWorkoutUnlocked(true); 
+        return;
+      }
+
       const savedState = localStorage.getItem(storageKey);
       if (savedState) {
         try {
@@ -223,14 +258,14 @@ export default function ActiveWorkoutSession() {
   }, [data, lang, inputs, storageKey]);
 
   useEffect(() => {
-    if (Object.keys(inputs).length > 0) {
+    if (Object.keys(inputs).length > 0 && !data?.isReadOnly) {
       localStorage.setItem(storageKey, JSON.stringify({
         inputs,
         completedSets,
         isWorkoutUnlocked
       }));
     }
-  }, [inputs, completedSets, isWorkoutUnlocked, storageKey]);
+  }, [inputs, completedSets, isWorkoutUnlocked, storageKey, data?.isReadOnly]);
 
   useEffect(() => {
     if (restTimer === null || restTimer <= 0) return;
@@ -250,8 +285,8 @@ export default function ActiveWorkoutSession() {
   }, [showBreathingModal, breatheTime]);
 
   const t: Record<string, any> = {
-    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", sqlErr: "Erreur SQL", load: "Chargement...", notFound: "En attente de connexion...", success: "Séance Écrasée !", successMsg: "Données sécurisées pour la surcharge progressive.", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Pensez à vos protéines et buvez 500ml d'eau.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées au retour du réseau.", ghost: "Précédent", rpeTitle: "Difficulté de la séance (RPE)", rpeSub: "Évaluez l'effort global pour ajuster l'algorithme.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur de Disques", calcSub: "Pour une barre olympique de 20 kg.", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", search: "Rechercher...", moveUp: "Monter", moveDown: "Descendre", warmupSetTitle: "Séries d'Échauffement", generateWarmup: "Générer la Chauffe", warmupSet: "Chauffe" },
-    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", sqlErr: "SQL Error", load: "Loading...", notFound: "Waiting for connection...", success: "Workout Crushed!", successMsg: "Data secured for progressive overload.", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol to start recovery.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Get your protein and drink 500ml of water.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when connection is restored.", ghost: "Previous", rpeTitle: "Session Difficulty (RPE)", rpeSub: "Rate global effort to adjust the algorithm.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "For a standard 20 kg olympic bar.", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", search: "Search...", moveUp: "Move Up", moveDown: "Move Down", warmupSetTitle: "Warm-up Sets", generateWarmup: "Generate Warm-up", warmupSet: "Warm" }
+    FR: { activeTracker: "Tracker Actif", target: "Objectif", rec: "Conseil", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", load: "Chargement...", notFound: "En attente...", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager en Story", time: "Temps", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Protéines + Hydratation.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées au retour du réseau.", ghost: "Précédent", rpeTitle: "Difficulté (RPE)", rpeSub: "Évaluez l'effort global.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur de Disques", calcSub: "Barre de 20 kg.", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", search: "Rechercher...", moveUp: "Monter", moveDown: "Descendre", warmupSetTitle: "Séries d'Échauffement", generateWarmup: "Générer la Chauffe", warmupSet: "Chauffe" },
+    EN: { activeTracker: "Active Tracker", target: "Target", rec: "Rec", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", load: "Loading...", notFound: "Waiting...", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share to Story", time: "Time", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Protein + Hydration.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when restored.", ghost: "Previous", rpeTitle: "Difficulty (RPE)", rpeSub: "Rate global effort.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "20 kg bar.", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", search: "Search...", moveUp: "Move Up", moveDown: "Move Down", warmupSetTitle: "Warm-up Sets", generateWarmup: "Generate Warm-up", warmupSet: "Warm" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -263,10 +298,12 @@ export default function ActiveWorkoutSession() {
   const isWarmupDone = warmupChecks.length > 0 && warmupChecks.every(Boolean);
 
   const handleInputChange = (setKey: string, field: "weight" | "reps", value: string) => {
+    if (data?.isReadOnly) return;
     setInputs((prev) => ({ ...prev, [setKey]: { ...prev[setKey], [field]: value } }));
   };
 
   const duplicateFirstSet = (identifier: string, totalSets: number) => {
+    if (data?.isReadOnly) return;
     const firstSetKey = `${identifier}_0`;
     const firstSetData = inputs[firstSetKey];
     if (!firstSetData) return;
@@ -279,7 +316,27 @@ export default function ActiveWorkoutSession() {
     });
   };
 
-  const toggleSet = (setKey: string, restSeconds: number) => {
+  const applyGhostWeights = (identifier: string) => {
+    if (data?.isReadOnly) return;
+    const ghost = data?.ghostData[identifier];
+    if (!ghost) return;
+    
+    setInputs(prev => {
+      const next = { ...prev };
+      const we = data?.sessionData.workout_exercises.find((w:any) => w.id === identifier || w.exercise_id === identifier);
+      if (we) {
+        for (let i = 0; i < we.sets; i++) {
+          if (!completedSets[`${identifier}_${i}`]) {
+            next[`${identifier}_${i}`] = { weight: ghost.weight, reps: ghost.reps };
+          }
+        }
+      }
+      return next;
+    });
+  };
+
+  const toggleSet = (setKey: string, restSeconds: number, weId: string, currentSetIdx: number, totalSets: number) => {
+    if (data?.isReadOnly) return;
     const isCompleted = completedSets[setKey];
     if (isCompleted) {
       setCompletedSets((prev) => ({ ...prev, [setKey]: false }));
@@ -287,13 +344,34 @@ export default function ActiveWorkoutSession() {
       if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
       setCompletedSets((prev) => ({ ...prev, [setKey]: true }));
       setRestTimer(restSeconds);
+      
+      setTimeout(() => {
+        let nextElementId = null;
+        if (currentSetIdx + 1 < totalSets) {
+          nextElementId = `set-row-${weId}_${currentSetIdx + 1}`;
+        } else {
+          const currentIndex = localExercises.findIndex(we => we.id === weId || we.exercise_id === weId);
+          if (currentIndex !== -1 && currentIndex + 1 < localExercises.length) {
+            const nextWe = localExercises[currentIndex + 1];
+            nextElementId = `exercise-block-${nextWe.id || nextWe.exercise_id}`;
+          }
+        }
+        
+        if (nextElementId) {
+          const el = document.getElementById(nextElementId);
+          if (el) {
+            const y = el.getBoundingClientRect().top + window.pageYOffset - 120;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+          }
+        }
+      }, 300);
     }
   };
 
   const checkAllSets = () => {
-    if (!data?.sessionData) return;
+    if (data?.isReadOnly) return;
     const newCompleted = { ...completedSets };
-    data.sessionData.workout_exercises.forEach((we: any) => {
+    data?.sessionData.workout_exercises.forEach((we: any) => {
       const identifier = we.id || we.exercise_id;
       for (let i = 0; i < we.sets; i++) newCompleted[`${identifier}_${i}`] = true;
     });
@@ -323,7 +401,7 @@ export default function ActiveWorkoutSession() {
   };
 
   const moveExercise = async (index: number, direction: 'up' | 'down') => {
-    if (!data?.sessionData) return; 
+    if (!data?.sessionData || data?.isReadOnly) return; 
     if ((direction === 'up' && index === 0) || (direction === 'down' && index === localExercises.length - 1)) return;
     
     const newIndex = direction === 'up' ? index - 1 : index + 1;
@@ -383,13 +461,14 @@ export default function ActiveWorkoutSession() {
   };
 
   const preFinishWorkout = () => {
+    if (data?.isReadOnly) return;
     const hasCompletedSets = Object.values(completedSets).some(val => val === true);
     if (!hasCompletedSets) { setErrorModal({ show: true, title: txt.noSetTitle, message: txt.noSetMsg }); return; }
     setShowRpeModal(true);
   };
 
   const executeFinishWorkout = async () => {
-    if (isSaving) return;
+    if (isSaving || data?.isReadOnly) return;
     setIsSaving(true);
     setShowRpeModal(false);
 
@@ -505,7 +584,7 @@ export default function ActiveWorkoutSession() {
   };
 
   const openSwapModal = async (weId: string, currentEx: any) => {
-    if (!data?.profile) return;
+    if (!data?.profile || data?.isReadOnly) return;
     setSwapLoading(true);
     const { data: alts, error: altsError } = await supabase.from('exercise_library').select('*').neq('id', currentEx.id);
     if (altsError) { setSwapLoading(false); alert("Erreur chargement alternatives"); return; }
@@ -598,7 +677,7 @@ export default function ActiveWorkoutSession() {
 
       <div className="max-w-2xl mx-auto px-4 space-y-6 mt-6">
         
-        {!isWorkoutUnlocked ? (
+        {!isWorkoutUnlocked && !data.isReadOnly ? (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
               <div className="absolute -right-10 -top-10 opacity-5 pointer-events-none"><Brain className="w-48 h-48" /></div>
@@ -642,6 +721,15 @@ export default function ActiveWorkoutSession() {
           </div>
         ) : (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            
+            {/* 🛡️ BANNIÈRE LECTURE SEULE HAUT */}
+            {data.isReadOnly && (
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-4 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-sm mb-4">
+                <ShieldCheck className="w-5 h-5 mr-2" />
+                <span className="font-black uppercase tracking-widest text-sm">Mode Résumé — Séance Verrouillée</span>
+              </div>
+            )}
+
             {localExercises.map((we: any, index: number) => {
               const ex = we.exercise_library;
               const identifier = we.id || we.exercise_id;
@@ -651,7 +739,7 @@ export default function ActiveWorkoutSession() {
               const ghost = data.ghostData[identifier];
 
               return (
-                <div key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm transition-all">
+                <div id={`exercise-block-${identifier}`} key={uniqueKey} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm transition-all">
                   <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                     <div className="flex items-center space-x-3 flex-1">
                       <div className="h-12 w-12 bg-white rounded-lg flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-700 relative p-1 cursor-pointer hover:border-teal-500 transition-colors" onClick={() => router.push(`/workout/${session.id}/exercice/${ex.id}`)}>
@@ -666,17 +754,25 @@ export default function ActiveWorkoutSession() {
                             {renderStars(ex.cns_impact)}
                           </div>
                           {ghost && (
-                            <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mt-1 opacity-80">
-                              👻 {txt.ghost} : {ghost.weight}kg × {ghost.reps}
-                            </p>
+                            <div className="flex items-center space-x-2 mt-1">
+                              <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest opacity-80">
+                                👻 {txt.ghost} : {ghost.weight}kg × {ghost.reps}
+                              </p>
+                              {/* 🛡️ BOUTON COPIER LE GHOST (QOL) */}
+                              {!data.isReadOnly && (
+                                <button onClick={(e) => { e.stopPropagation(); applyGhostWeights(identifier); }} className="text-indigo-400 hover:text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded transition-colors flex items-center" title="Copier pour toutes les séries">
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
                     </div>
                     <div className="flex flex-col space-y-1 ml-2 shrink-0">
                       <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 rounded-md p-0.5">
-                        <button onClick={() => moveExercise(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-zinc-900 rounded disabled:opacity-30 disabled:hover:bg-transparent"><ArrowUp className="w-4 h-4" /></button>
-                        <button onClick={() => moveExercise(index, 'down')} disabled={index === localExercises.length - 1} className="p-1 text-zinc-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-zinc-900 rounded disabled:opacity-30 disabled:hover:bg-transparent"><ArrowDown className="w-4 h-4" /></button>
+                        <button onClick={() => moveExercise(index, 'up')} disabled={index === 0 || data.isReadOnly} className="p-1 text-zinc-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-zinc-900 rounded disabled:opacity-30 disabled:hover:bg-transparent"><ArrowUp className="w-4 h-4" /></button>
+                        <button onClick={() => moveExercise(index, 'down')} disabled={index === localExercises.length - 1 || data.isReadOnly} className="p-1 text-zinc-400 hover:text-indigo-500 hover:bg-white dark:hover:bg-zinc-900 rounded disabled:opacity-30 disabled:hover:bg-transparent"><ArrowDown className="w-4 h-4" /></button>
                       </div>
                     </div>
                   </div>
@@ -707,36 +803,43 @@ export default function ActiveWorkoutSession() {
                         <Info className="w-4 h-4" />
                       </button>
 
-                      {(index === 0 || we.recommended_weight > 20) && (
+                      {(index === 0 || we.recommended_weight > 20) && !data.isReadOnly && (
                         <button onClick={() => setShowWarmupFor(showWarmupFor === we.id ? null : we.id)} className={`flex items-center px-2 py-1 text-xs font-bold rounded-md transition-colors ${showWarmupFor === we.id ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/60'}`}>
                           <Flame className="w-3 h-3 mr-1" /> {txt.generateWarmup}
                         </button>
                       )}
 
                       <div className="flex items-center space-x-1 ml-auto">
-                        <button onClick={() => openSwapModal(we.id, ex)} disabled={swapLoading} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors" title={txt.swapTitle}>
+                        <button onClick={() => openSwapModal(we.id, ex)} disabled={swapLoading || data.isReadOnly} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-30" title={txt.swapTitle}>
                           <ArrowLeftRight className="w-4 h-4" />
                         </button>
-                        <button onClick={() => duplicateFirstSet(identifier, we.sets)} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 transition-colors" title={txt.dup}>
+                        <button onClick={() => duplicateFirstSet(identifier, we.sets)} disabled={data.isReadOnly} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-30" title={txt.dup}>
                           <Repeat className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
 
-                    {renderWarmupSets(we, index)}
+                    {!data.isReadOnly && renderWarmupSets(we, index)}
 
                     <div className="grid grid-cols-12 gap-2 px-2 pt-1 text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase text-center tracking-wider"><div className="col-span-2">{txt.set}</div><div className="col-span-4">{txt.weight}</div><div className="col-span-4">{txt.reps}</div><div className="col-span-2">OK</div></div>
                     {Array.from({ length: we.sets }).map((_, setIdx) => {
                       const setKey = `${identifier}_${setIdx}`;
-                      const isCompleted = completedSets[setKey];
+                      const isCompleted = data.isReadOnly || completedSets[setKey];
                       const currentValues = inputs[setKey] || { weight: "", reps: "" };
+                      
+                      // 🛡️ QOL : GLOW SI PR BATTU
+                      const isPR = ghost && parseFloat(currentValues.weight) > parseFloat(ghost.weight) && isCompleted && !data.isReadOnly;
+                      const inputClass = `w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50 transition-all ${isPR ? 'ring-2 ring-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' : ''}`;
 
                       return (
-                        <div key={setKey} className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-lg transition-colors border ${isCompleted ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 shadow-[inset_0_0_15px_rgba(20,184,166,0.05)]' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm'}`}>
-                          <div className="col-span-2 text-center font-bold text-zinc-500 dark:text-zinc-400">{setIdx + 1}</div>
-                          <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.weight} onChange={(e) => handleInputChange(setKey, "weight", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
-                          <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.reps} onChange={(e) => handleInputChange(setKey, "reps", e.target.value)} disabled={isCompleted} className="w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50" /></div>
-                          <div className="col-span-2 flex justify-center"><button onClick={() => toggleSet(setKey, we.rest_seconds)} className={`h-8 w-8 rounded-md flex items-center justify-center transition-transform active:scale-90 ${isCompleted ? 'bg-teal-500 shadow-lg shadow-teal-500/40 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}><Check className="w-4 h-4 stroke-[3px]" /></button></div>
+                        <div id={`set-row-${setKey}`} key={setKey} className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded-lg transition-colors border ${isCompleted ? 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800 shadow-[inset_0_0_15px_rgba(20,184,166,0.05)]' : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm'}`}>
+                          <div className="col-span-2 text-center font-bold text-zinc-500 dark:text-zinc-400 relative">
+                            {setIdx + 1}
+                            {isPR && <Sparkles className="w-3 h-3 text-yellow-500 absolute -top-1 -right-1" />}
+                          </div>
+                          <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.weight} onChange={(e) => handleInputChange(setKey, "weight", e.target.value)} disabled={isCompleted || data.isReadOnly} className={inputClass} /></div>
+                          <div className="col-span-4"><input type="number" placeholder="0" value={currentValues.reps} onChange={(e) => handleInputChange(setKey, "reps", e.target.value)} disabled={isCompleted || data.isReadOnly} className={inputClass} /></div>
+                          <div className="col-span-2 flex justify-center"><button onClick={() => toggleSet(setKey, we.rest_seconds, identifier, setIdx, we.sets)} disabled={data.isReadOnly} className={`h-8 w-8 rounded-md flex items-center justify-center transition-transform active:scale-90 disabled:opacity-80 ${isCompleted ? 'bg-teal-500 shadow-lg shadow-teal-500/40 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}><Check className="w-4 h-4 stroke-[3px]" /></button></div>
                         </div>
                       );
                     })}
@@ -744,18 +847,32 @@ export default function ActiveWorkoutSession() {
                 </div>
               );
             })}
-            <div className="pt-4 pb-10 space-y-3">
-              <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm"><CheckCircle2 className="w-5 h-5" /><span>{txt.checkAll}</span></button>
-              <button onClick={preFinishWorkout} disabled={isSaving} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">{isSaving ? "..." : txt.finish}</button>
-            </div>
+
+            {data.isReadOnly ? (
+              <div className="pt-4 pb-10 space-y-4">
+                <div className="w-full py-4 bg-zinc-100 dark:bg-zinc-900 text-zinc-500 font-black uppercase tracking-widest rounded-xl text-center flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-800 shadow-inner">
+                  <ShieldCheck className="w-6 h-6 mb-2 text-indigo-500" />
+                  Séance Verrouillée
+                  <span className="text-xs font-bold lowercase opacity-70 mt-1">XP déjà collectés aujourd'hui</span>
+                </div>
+                <Button onClick={() => router.push("/dashboard")} className="w-full py-6 bg-indigo-500 hover:bg-indigo-600 text-white font-black uppercase tracking-widest rounded-xl shadow-lg transition-transform active:scale-95">Retour au Dashboard</Button>
+              </div>
+            ) : (
+              <div className="pt-4 pb-10 space-y-3">
+                <button onClick={checkAllSets} className="w-full py-3 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold rounded-xl flex items-center justify-center space-x-2 hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-colors shadow-sm"><CheckCircle2 className="w-5 h-5" /><span>{txt.checkAll}</span></button>
+                <button onClick={preFinishWorkout} disabled={isSaving} className="w-full py-4 bg-gradient-to-r from-teal-400 to-teal-600 hover:from-teal-500 hover:to-teal-700 text-white font-black uppercase tracking-widest rounded-xl shadow-[0_10px_25px_-5px_rgba(20,184,166,0.4)] transition-transform hover:scale-[1.02] active:scale-[0.98]">{isSaving ? "..." : txt.finish}</button>
+              </div>
+            )}
+            
           </div>
         )}
       </div>
 
       <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
 
+      {/* 🛡️ MODALES EN BOTTOM-SHEET POUR MOBILE */}
       <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
-        <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
+        <DialogContent className="sm:max-w-[600px] w-full bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b p-0 overflow-hidden h-[85dvh] sm:h-[90dvh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
             <DialogTitle className="flex items-center text-indigo-600 dark:text-indigo-400">
               <ArrowLeftRight className="mr-2 h-5 w-5"/> {txt.swapTitle}
@@ -844,7 +961,7 @@ export default function ActiveWorkoutSession() {
       </Dialog>
 
       <Dialog open={showRpeModal} onOpenChange={setShowRpeModal}>
-        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           <DialogHeader>
             <DialogTitle className="text-xl font-black text-indigo-600 dark:text-indigo-400 flex items-center">
               <Brain className="mr-2 h-5 w-5" /> {txt.rpeTitle}
@@ -866,7 +983,7 @@ export default function ActiveWorkoutSession() {
             />
           </div>
           <DialogFooter>
-            <Button onClick={executeFinishWorkout} disabled={isSaving} className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-white font-black uppercase tracking-widest">
+            <Button onClick={executeFinishWorkout} disabled={isSaving} className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-white font-black uppercase tracking-widest rounded-xl">
               {isSaving ? "..." : txt.rpeValidate}
             </Button>
           </DialogFooter>
@@ -874,7 +991,7 @@ export default function ActiveWorkoutSession() {
       </Dialog>
 
       <Dialog open={plateModal.show} onOpenChange={(open) => !open && setPlateModal({ show: false, weight: 0 })}>
-        <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+        <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
               <Calculator className="mr-2 h-5 w-5" /> {txt.calcTitle}
@@ -900,13 +1017,13 @@ export default function ActiveWorkoutSession() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" className="w-full font-bold dark:border-zinc-800 dark:text-zinc-300" onClick={() => setPlateModal({ show: false, weight: 0 })}>Fermer</Button>
+            <Button variant="outline" className="w-full font-bold rounded-xl h-12" onClick={() => setPlateModal({ show: false, weight: 0 })}>Fermer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
-        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
               <Scale className="mr-2 h-5 w-5" /> Conversion
@@ -946,8 +1063,9 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
 
+      {/* Info Modale, Breathing Modale, etc. restent inchangées ou centrées par défaut */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
@@ -1001,7 +1119,7 @@ export default function ActiveWorkoutSession() {
       </Dialog>
 
       <Dialog open={showEndModal} onOpenChange={setShowEndModal}>
-        <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[750px] outline-none">
+        <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 p-0 overflow-hidden flex flex-col h-[90dvh] sm:h-[750px] outline-none w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center relative hide-scrollbar">
             <div className="absolute -left-[9999px]">
               <div ref={stravaCardRef} className="w-[1080px] h-[1920px] bg-zinc-950 relative flex flex-col items-center justify-between py-24 px-16 text-white overflow-hidden" style={{ fontFamily: "sans-serif" }}>
@@ -1076,5 +1194,14 @@ export default function ActiveWorkoutSession() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// 🛡️ CORRECTION : Le composant principal est enveloppé dans Suspense
+export default function WorkoutPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950"><Loader2 className="w-12 h-12 text-teal-500 animate-spin" /></div>}>
+      <ActiveWorkoutSessionContent />
+    </Suspense>
   );
 }

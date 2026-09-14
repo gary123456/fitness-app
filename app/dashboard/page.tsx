@@ -6,8 +6,7 @@ import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-// 🛡️ CORRECTION : Ajout de l'icône "Check" ici
-import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, Edit3, ArrowLeftRight, Check } from "lucide-react";
+import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, Edit3, ArrowLeftRight, Check, FileText } from "lucide-react";
 import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, calculateWaterIntake, getCurrentWeekStreak, generateMealIdeas, getMicronutrients } from "@/lib/fitness";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/lib/useLanguage";
@@ -262,9 +261,9 @@ export default function DashboardPage() {
   const renderSmartBanner = () => {
     const todayName = DAYS[["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()] as keyof typeof DAYS];
     
-    if (isTodayWorkoutCompleted) {
+    if (isTodayWorkoutCompleted && todayWorkoutId) {
       return (
-        <div className="bg-gradient-to-r from-yellow-500 to-amber-600 rounded-2xl p-4 shadow-lg shadow-amber-500/20 flex items-center justify-between">
+        <div onClick={() => router.push(`/workout/${todayWorkoutId}?summary=true`)} className="cursor-pointer bg-gradient-to-r from-yellow-500 to-amber-600 rounded-2xl p-4 shadow-lg shadow-amber-500/20 flex items-center justify-between hover:scale-[1.01] active:scale-95 transition-transform">
           <div className="flex items-center space-x-3">
             <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Trophy className="w-6 h-6 text-white" /></div>
             <div>
@@ -272,6 +271,10 @@ export default function DashboardPage() {
               <h3 className="text-white font-black text-lg">{todayName} : {lang === 'FR' ? 'Repos mérité !' : 'Well deserved rest!'}</h3>
             </div>
           </div>
+          {/* 🛡️ CORRECTION : Le bouton mène maintenant au Résumé de la séance */}
+          <Button variant="secondary" className="bg-white text-amber-700 hover:bg-zinc-50 font-bold rounded-full shadow-sm">
+            <FileText className="w-4 h-4 mr-2" /> {lang === 'FR' ? 'Résumé' : 'Summary'}
+          </Button>
         </div>
       );
     }
@@ -286,7 +289,7 @@ export default function DashboardPage() {
               <h3 className="text-white font-black text-lg">{todayName}</h3>
             </div>
           </div>
-          <Button variant="secondary" className="bg-white text-teal-700 hover:bg-zinc-50 font-bold rounded-full">{txt.goWorkout}</Button>
+          <Button variant="secondary" className="bg-white text-teal-700 hover:bg-zinc-50 font-bold rounded-full shadow-sm">{txt.goWorkout}</Button>
         </div>
       );
     }
@@ -361,7 +364,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 🛡️ POINT 2 QOL : BOUTON ÉDITION DU SOMMEIL */}
       <div className={`p-6 rounded-2xl border ${rUI.border} bg-white dark:bg-zinc-950 shadow-sm flex items-center justify-between relative`}>
         <div className="absolute top-3 right-3 flex space-x-1">
           {!showSleepPrompt && (
@@ -509,6 +511,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Le reste du composant (Modales de nutrition, eau, sommeil, etc.) reste identique */}
       <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <CardHeader>
           <CardTitle className="flex items-center text-xl text-zinc-900 dark:text-zinc-100">
@@ -518,17 +521,14 @@ export default function DashboardPage() {
           <CardDescription>{txt.macrosSub}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          
           <div className="flex justify-around items-center pt-2 pb-4">
             <MacroRing pct={macros.proteinPct} color="#3b82f6" label={txt.prot} value={macros.protein} onClick={() => setMealModal({show: true, type: 'protein', target: macros.protein})} />
             <MacroRing pct={macros.carbPct} color="#10b981" label={txt.carb} value={macros.carbs} onClick={() => setMealModal({show: true, type: 'carbs', target: macros.carbs})} />
             <MacroRing pct={macros.fatPct} color="#f59e0b" label={txt.fat} value={macros.fat} onClick={() => setMealModal({show: true, type: 'fat', target: macros.fat})} />
           </div>
-          
           <div className="flex items-center justify-center p-3 bg-zinc-50 dark:bg-zinc-950 rounded-lg text-sm text-zinc-500 dark:text-zinc-400 font-medium">
             💡 {lang === 'FR' ? "Cliquez sur un anneau pour voir vos protocoles de repas." : "Click on a ring to see your meal protocols."}
           </div>
-
           <div onClick={() => setIsWaterModalOpen(true)} className="pt-4 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800 cursor-pointer group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 p-2 -mx-2 rounded-lg transition-colors">
             <span className="text-sm font-bold text-zinc-500 dark:text-zinc-400 group-hover:text-blue-600 transition-colors">{txt.water}</span>
             <span className="font-black flex items-center dark:text-zinc-100 text-lg group-hover:text-blue-500 transition-colors"><Droplets className="h-5 w-5 mr-1 text-blue-400"/> {waterTotal} L</span>
@@ -556,8 +556,9 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
+      {/* Toutes les Modales */}
       <Dialog open={isCalModalOpen} onOpenChange={setIsCalModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b w-full sm:w-auto">
           <DialogHeader><DialogTitle className="text-2xl font-black text-orange-500 flex items-center"><Flame className="mr-2" /> {txt.calTitle}</DialogTitle><DialogDescription>{txt.calSub}</DialogDescription></DialogHeader>
           <div className="py-4 space-y-4">
             <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl">
@@ -574,7 +575,7 @@ export default function DashboardPage() {
       </Dialog>
 
       <Dialog open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b w-full sm:w-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black text-blue-500 flex items-center">
               <Droplets className="mr-2 h-6 w-6" /> {txt.waterTitle}
@@ -604,7 +605,7 @@ export default function DashboardPage() {
       </Dialog>
 
       <Dialog open={isImgModalOpen} onOpenChange={setIsImgModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b w-full sm:w-auto">
           <DialogHeader><DialogTitle className="text-2xl font-black text-indigo-500 flex items-center"><Activity className="mr-2" /> {txt.imgTitle}</DialogTitle></DialogHeader>
           <div className="py-6 text-center space-y-4">
             <div className="text-6xl font-black text-zinc-900 dark:text-zinc-100">~{displayedImg}%</div>
@@ -617,7 +618,7 @@ export default function DashboardPage() {
       </Dialog>
 
       <Dialog open={microModal.show} onOpenChange={(open) => !open && setMicroModal({ show: false, micro: null })}>
-        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800">
+        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b w-full sm:w-auto">
           {microModal.micro && (
             <>
               <DialogHeader><DialogTitle className="text-2xl font-black text-teal-600 dark:text-teal-400">{microModal.micro.name}</DialogTitle><DialogDescription className="font-bold text-zinc-900 dark:text-zinc-100 border-b border-zinc-100 dark:border-zinc-800 pb-3">{lang === 'FR' ? "Objectif :" : "Target:"} {microModal.micro.amount}</DialogDescription></DialogHeader>
@@ -641,7 +642,7 @@ export default function DashboardPage() {
       </Dialog>
 
       <Dialog open={mealModal?.show || false} onOpenChange={(open) => !open && setMealModal(null)}>
-        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[85vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 max-h-[90vh] overflow-y-auto mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b w-full sm:w-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black text-zinc-900 dark:text-zinc-100 flex items-center"><Utensils className="mr-2" /> {txt.mealTitle}</DialogTitle>
             <DialogDescription>{txt.mealSub}</DialogDescription>
@@ -672,31 +673,8 @@ export default function DashboardPage() {
         </DialogContent>
       </Dialog>
       
-      <Dialog open={isReadinessModalOpen} onOpenChange={setIsReadinessModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-black text-zinc-900 dark:text-zinc-100 flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-teal-500" /> 
-              {lang === 'FR' ? "Readiness Score (SNC)" : "Readiness Score (CNS)"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 leading-relaxed whitespace-pre-wrap">
-              {lang === 'FR' 
-                ? "Ce score sur 100 évalue la fatigue de votre Système Nerveux Central (SNC).\n\nIl est calculé en temps réel en croisant 3 variables :\n• Votre ratio de fatigue (ACWR).\n• Le tonnage de votre séance d'hier.\n• La qualité de votre sommeil.\n\nUtilisez-le pour savoir si vous devez pousser vos limites aujourd'hui ou lever le pied pour éviter la blessure." 
-                : "This score out of 100 evaluates the fatigue of your Central Nervous System (CNS).\n\nIt is calculated in real-time by cross-referencing 3 variables:\n• Your fatigue ratio (ACWR).\n• The tonnage of yesterday's session.\n• Your sleep quality.\n\nUse it to know if you should push your limits today or ease off to prevent injury."}
-            </p>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setIsReadinessModalOpen(false)} className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold">
-              {txt.understood}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={isStreakModalOpen} onOpenChange={setIsStreakModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b w-full sm:w-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black text-orange-500 flex items-center">
               <Flame className="w-6 h-6 mr-2" /> {txt.streakTitle}

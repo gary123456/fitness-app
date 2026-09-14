@@ -380,6 +380,13 @@ function WorkoutPageContent() {
   const liftingSessionsCount = data?.weeklyPlan?.filter(s => s.workout_exercises?.length > 0).length || 0;
   const allSessionsCompleted = liftingSessionsCount > 0 && (data?.completedSessionIds?.length || 0) >= liftingSessionsCount;
 
+  // 🛡️ CORRECTION : Calcul du jour manquant pour le bouton de Surcharge
+  const liftingSessionsList = sortedPlan.filter((s: any) => s.workout_exercises && s.workout_exercises.length > 0);
+  const uncompletedSessions = liftingSessionsList.filter((s: any) => !(data?.completedSessionIds?.includes(s.id)));
+  const lastSessionNeeded = liftingSessionsList[liftingSessionsList.length - 1];
+  const lastDayName = lastSessionNeeded ? DAYS[lastSessionNeeded.day_name as keyof typeof DAYS] : "";
+  const pendingOverloadMsg = lang === 'FR' ? `⏳ Attente de la séance de ${lastDayName}` : `⏳ Pending: ${lastDayName}`;
+
   return (
     <div className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full relative pb-24">
       
@@ -411,9 +418,11 @@ function WorkoutPageContent() {
           {data?.existingProgram && (
             <Button 
               onClick={() => setShowProgressModal(true)} 
-              className={`w-full sm:w-auto font-bold transition-all ${allSessionsCompleted ? 'bg-orange-500 text-white hover:bg-orange-600 animate-pulse shadow-[0_0_15px_rgba(249,115,22,0.6)] border border-orange-400' : 'bg-teal-500 text-white hover:bg-teal-600'}`}
+              disabled={!allSessionsCompleted}
+              className={`w-full sm:w-auto font-bold transition-all ${allSessionsCompleted ? 'bg-orange-500 text-white hover:bg-orange-600 animate-pulse shadow-[0_0_15px_rgba(249,115,22,0.6)] border border-orange-400' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 cursor-not-allowed opacity-80'}`}
             >
-              <Zap className="w-4 h-4 mr-2" /> {txt.genNext}
+              <Zap className="w-4 h-4 mr-2" /> 
+              {allSessionsCompleted ? txt.genNext : <><span className="hidden sm:inline">{pendingOverloadMsg}</span><span className="sm:hidden">{lang === 'FR' ? `⏳ Attente : ${lastDayName}` : `⏳ Pending: ${lastDayName}`}</span></>}
             </Button>
           )}
         </div>
@@ -467,10 +476,12 @@ function WorkoutPageContent() {
                 </div>
                 {hasLifting && (
                   isFuture || isCompleted ? (
-                    <Button size="sm" disabled className="font-bold bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600 border-none">
-                      {isCompleted ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <Lock className="w-4 h-4 mr-2" />} 
-                      {isCompleted ? "Terminée" : txt.locked}
-                    </Button>
+                    <Link href={`/workout/${session.id}?summary=true`}>
+                      <Button size="sm" className={`font-bold border-none transition-colors ${isCompleted ? 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400 hover:bg-orange-100' : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600'}`}>
+                        {isCompleted ? <CheckCircle2 className="w-4 h-4 mr-2" /> : <Lock className="w-4 h-4 mr-2" />} 
+                        {isCompleted ? "Terminée" : txt.locked}
+                      </Button>
+                    </Link>
                   ) : (
                     <Link href={`/workout/${session.id}`}>
                       <Button size="sm" className={`font-bold shadow-sm ${isToday ? 'bg-teal-500 hover:bg-teal-600 text-white shadow-teal-500/30' : 'bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900'}`}>
@@ -599,7 +610,7 @@ function WorkoutPageContent() {
       </Dialog>
 
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
@@ -622,7 +633,7 @@ function WorkoutPageContent() {
       </Dialog>
 
       <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
-        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
               <Scale className="mr-2 h-5 w-5" /> Conversion
@@ -663,7 +674,7 @@ function WorkoutPageContent() {
       </Dialog>
 
       <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
-        <DialogContent className="sm:max-w-[600px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl p-0 overflow-hidden h-[90dvh] flex flex-col">
+        <DialogContent className="sm:max-w-[600px] w-full bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b p-0 overflow-hidden h-[85dvh] sm:h-[90dvh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
             <DialogTitle className="flex items-center text-indigo-600 dark:text-indigo-400">
               <ArrowLeftRight className="mr-2 h-5 w-5"/> {txt.swapTitle}
