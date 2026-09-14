@@ -380,7 +380,6 @@ function WorkoutPageContent() {
   const liftingSessionsCount = data?.weeklyPlan?.filter(s => s.workout_exercises?.length > 0).length || 0;
   const allSessionsCompleted = liftingSessionsCount > 0 && (data?.completedSessionIds?.length || 0) >= liftingSessionsCount;
 
-  // 🛡️ CORRECTION : Calcul du jour manquant pour le bouton de Surcharge
   const liftingSessionsList = sortedPlan.filter((s: any) => s.workout_exercises && s.workout_exercises.length > 0);
   const uncompletedSessions = liftingSessionsList.filter((s: any) => !(data?.completedSessionIds?.includes(s.id)));
   const lastSessionNeeded = liftingSessionsList[liftingSessionsList.length - 1];
@@ -587,7 +586,6 @@ function WorkoutPageContent() {
                   </div>
                 </div>
                 <div className="flex space-x-2">
-                  {/* 🛡️ BOUTON ÉDITION POUR LES PROGRAMMES PERSO */}
                   {prog.program_type === 'custom' && (
                     <Button size="sm" onClick={() => router.push(`/workout/builder?edit=${prog.id}`)} variant="outline" className="px-3" title="Éditer le programme">
                       <PenTool className="w-4 h-4" />

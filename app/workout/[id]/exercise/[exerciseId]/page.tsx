@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { ArrowLeft, Loader2, Dumbbell, Info, Star } from "lucide-react";
+import { ArrowLeft, Loader2, Info, Star, PlayCircle } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
 const getInstructions = (name: string, lang: string) => {
@@ -141,26 +141,28 @@ export default function ExerciseFullPage() {
           </div>
         ) : (
           <>
-            <div className="flex flex-col md:flex-row gap-6">
-              <div className="flex-1 bg-white dark:bg-zinc-900 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
-                <div className="bg-zinc-100/80 dark:bg-zinc-800/80 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-xs font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Position de départ" : "Starting Position"}</div>
-                <div className="p-6 flex justify-center items-center flex-1 min-h-[300px] relative">
-                  {exercise.gif_url ? <img src={`${exercise.gif_url}/0.jpg`} alt="Départ" className="max-w-full object-contain mix-blend-multiply dark:mix-blend-normal absolute z-10" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
-                  <Dumbbell className="w-16 h-16 text-zinc-300 dark:text-zinc-700 absolute z-0 opacity-50" />
-                </div>
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+              <div className="bg-zinc-100/80 dark:bg-zinc-800/80 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-xs font-black text-zinc-500 text-center uppercase tracking-widest flex items-center justify-center">
+                <PlayCircle className="w-4 h-4 mr-2 text-red-500" /> {lang === 'FR' ? "Démonstration" : "Demonstration"}
               </div>
-              <div className="flex-1 bg-white dark:bg-zinc-900 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col">
-                <div className="bg-zinc-100/80 dark:bg-zinc-800/80 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-xs font-black text-zinc-500 text-center uppercase tracking-widest">{lang === 'FR' ? "Contraction" : "Contraction"}</div>
-                <div className="p-6 flex justify-center items-center flex-1 min-h-[300px] relative">
-                  {exercise.gif_url ? <img src={`${exercise.gif_url}/1.jpg`} alt="Fin" className="max-w-full object-contain mix-blend-multiply dark:mix-blend-normal absolute z-10" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
-                  <Dumbbell className="w-16 h-16 text-zinc-300 dark:text-zinc-700 absolute z-0 opacity-50" />
-                </div>
+              <div className="w-full aspect-video bg-black flex items-center justify-center relative">
+                {exercise.youtube_id ? (
+                  <iframe 
+                    src={`https://www.youtube.com/embed/${exercise.youtube_id}?autoplay=0&rel=0&modestbranding=1`}
+                    className="absolute inset-0 w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-zinc-600">
+                    <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
+                    <span className="text-sm font-bold">Vidéo non disponible</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-md relative">
-              
-              {/* 🛡️ INJECTION DU SCORE SNC EN HAUT À DROITE DE LA BOITE D'INSTRUCTION */}
               <div className="absolute top-6 right-6 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-center hidden sm:block">
                 <span className="text-[9px] font-black uppercase text-zinc-500 tracking-widest">Fatigue SNC</span>
                 {renderStars(exercise.cns_impact)}
@@ -171,7 +173,6 @@ export default function ExerciseFullPage() {
                 {lang === 'FR' ? "Consignes d'exécution" : "Execution Guidelines"}
               </h4>
 
-              {/* Affichage Mobile pour le SNC */}
               <div className="sm:hidden flex items-center justify-between mb-4 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800">
                 <span className="text-xs font-black uppercase text-zinc-500">Fatigue SNC</span>
                 {renderStars(exercise.cns_impact)}

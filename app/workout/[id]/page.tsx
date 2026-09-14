@@ -113,14 +113,12 @@ const fetchActiveSession = async (id: string, searchParams: any) => {
     if (we.recommended_weight !== null && we.recommended_weight !== undefined && we.recommended_weight > 0) defaultWeight = we.recommended_weight.toString();
     const defaultReps = getRecommendedReps(we.target_reps);
 
-    // Initialisation théorique
     for (let i = 0; i < we.sets; i++) {
       initialInputs[`${identifier}_${i}`] = { weight: defaultWeight, reps: defaultReps };
     }
 
     const exLogs = pastLogs?.filter(l => l.exercise_id === we.exercise_id) || [];
     
-    // Extraction des VRAIS LOGS pour le Mode Résumé
     if (isReadOnly) {
       const logsOfThisSessionToday = exLogs.filter(l => l.session_id === id && l.created_at.startsWith(todayStr));
       logsOfThisSessionToday.sort((a,b) => a.set_number - b.set_number);
@@ -135,7 +133,6 @@ const fetchActiveSession = async (id: string, searchParams: any) => {
       }
     }
 
-    // Isolation du Ghost (Prendre la séance précédente)
     const ghostLogs = exLogs.filter(l => l.session_id !== id && l.created_at.split('T')[0] !== todayStr);
     if (ghostLogs.length > 0) {
       const lastDate = ghostLogs[0].created_at.split('T')[0];
@@ -647,12 +644,6 @@ function ActiveWorkoutSessionContent() {
     }
   };
 
-  if (isLoading && !data) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">{txt.load}</div>;
-  if (error || !data?.sessionData) return <div className="p-8 text-center text-red-500">{txt.notFound}</div>;
-
-  const session = data.sessionData;
-  const insights = getSessionInsights(localExercises, lang);
-
   const renderStars = (impact: number) => {
     const safeImpact = impact || 1;
     return (
@@ -663,6 +654,12 @@ function ActiveWorkoutSessionContent() {
       </div>
     );
   };
+
+  if (isLoading && !data) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">{txt.load}</div>;
+  if (error || !data?.sessionData) return <div className="p-8 text-center text-red-500">{txt.notFound}</div>;
+
+  const session = data.sessionData;
+  const insights = getSessionInsights(localExercises, lang);
 
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
@@ -827,7 +824,6 @@ function ActiveWorkoutSessionContent() {
                       const isCompleted = data.isReadOnly || completedSets[setKey];
                       const currentValues = inputs[setKey] || { weight: "", reps: "" };
                       
-                      // 🛡️ QOL : GLOW SI PR BATTU
                       const isPR = ghost && parseFloat(currentValues.weight) > parseFloat(ghost.weight) && isCompleted && !data.isReadOnly;
                       const inputClass = `w-full bg-transparent text-center font-bold text-zinc-900 dark:text-zinc-100 focus:outline-none focus:bg-white dark:focus:bg-zinc-800 rounded p-1 disabled:opacity-50 transition-all ${isPR ? 'ring-2 ring-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' : ''}`;
 
@@ -870,7 +866,6 @@ function ActiveWorkoutSessionContent() {
 
       <AudioHapticTimer restTimer={restTimer} setRestTimer={setRestTimer} formatTime={formatTime} />
 
-      {/* 🛡️ MODALES EN BOTTOM-SHEET POUR MOBILE */}
       <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
         <DialogContent className="sm:max-w-[600px] w-full bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b p-0 overflow-hidden h-[85dvh] sm:h-[90dvh] flex flex-col">
           <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
@@ -1063,7 +1058,7 @@ function ActiveWorkoutSessionContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Info Modale, Breathing Modale, etc. restent inchangées ou centrées par défaut */}
+      {/* Info Modale */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
