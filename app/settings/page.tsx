@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
+import { getEvolvedExperienceLevel } from "@/lib/fitness"; // 🛡️ IMPORT DU NOUVEAU MOTEUR
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const EXTRA_SPORTS = [ 
@@ -42,6 +43,8 @@ const fetchProfileData = async () => {
   if (!user) throw new Error("No user");
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  const { data: gamification } = await supabase.from("user_gamification").select("level").eq("user_id", user.id).maybeSingle(); // 🛡️ FETCH DU NIVEAU
+  
   const { data: lastMeasurement } = await supabase
     .from("measurements")
     .select("weight_kg, body_fat_percentage")
@@ -51,7 +54,7 @@ const fetchProfileData = async () => {
     .limit(1)
     .single();
 
-  return { profile, currentWeight: lastMeasurement?.weight_kg || profile.weight_kg, currentBodyFat: lastMeasurement?.body_fat_percentage };
+  return { profile, gamification, currentWeight: lastMeasurement?.weight_kg || profile.weight_kg, currentBodyFat: lastMeasurement?.body_fat_percentage };
 };
 
 export default function SettingsPage() {
@@ -69,7 +72,7 @@ export default function SettingsPage() {
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [editDisableQuiz, setEditDisableQuiz] = useState(false);
-  const [editDataSaver, setEditDataSaver] = useState(false); // 🛡️ DATA SAVER
+  const [editDataSaver, setEditDataSaver] = useState(false);
   
   const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [recalibrateAI, setRecalibrateAI] = useState(false);
@@ -183,13 +186,27 @@ export default function SettingsPage() {
          const { data: library } = await supabase.from("exercise_library").select("*");
          const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
          
-         const completeProfileForAI = { ...data.profile, ...updatedProfileData };
+         // 🛡️ APPLICATION DE L'ÉVOLUTION BIOMÉCANIQUE
+         const userLevel = data.gamification?.level || 1;
+         const evolvedExperience = getEvolvedExperienceLevel(userLevel, updatedProfileData.experience_level);
+         
+         const completeProfileForAI = { ...data.profile, ...updatedProfileData, experience_level: evolvedExperience };
+         
+         // 🛡️ PATTERN HIGHLANDER : Suppression des anciens programmes IA avant de générer le nouveau
+         const { data: oldAlgoProgs } = await supabase.from("user_programs").select("id").eq("user_id", data.profile.id).eq("program_type", "ai");
+         if (oldAlgoProgs && oldAlgoProgs.length > 0) {
+           for (const p of oldAlgoProgs) {
+             await supabase.from("user_programs").delete().eq("id", p.id);
+           }
+         }
+
          const newPlan = generateSmartWorkoutPlan(completeProfileForAI, library || [], historyLogs || [], false, []);
          
          await supabase.from("user_programs").update({ is_active: false }).eq("user_id", data.profile.id);
 
+         // 🛡️ CRÉATION DU NOUVEAU PROGRAMME DÉFAUT (IA)
          const { data: newProgram } = await supabase.from("user_programs").insert([{ 
-            user_id: data.profile.id, name: "Programme I.A. (Recalibré)", is_active: true, program_type: 'ai' 
+            user_id: data.profile.id, name: "Programme Base (Défaut)", is_active: true, program_type: 'ai', is_default: true 
          } as any]).select().single();
 
          if (newProgram) {
@@ -369,7 +386,6 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            {/* 🛡️ NOUVEAU BOUTON DATA SAVER */}
             <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
               <div className="space-y-0.5">
                 <Label className="text-base font-bold dark:text-zinc-100 flex items-center"><WifiOff className="w-4 h-4 mr-2 text-blue-500" /> Mode Éco (Data Saver)</Label>

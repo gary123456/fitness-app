@@ -265,3 +265,14 @@ export function generateMealIdeas(macro: 'protein' | 'carbs' | 'fat', targetGram
   
   return [];
 }
+
+// 🛡️ NOUVEAU : SYSTÈME D'ÉVOLUTION BIOMÉCANIQUE
+// Si le joueur atteint le niveau 10, son profil passe de "debutant" à "intermediaire"
+export function getEvolvedExperienceLevel(currentLevel: number, currentExpStr: string): string {
+  if (currentExpStr === 'avance') return 'avance'; // Déjà au max
+  
+  if (currentLevel >= 25 && currentExpStr === 'intermediaire') return 'avance';
+  if (currentLevel >= 10 && currentExpStr === 'debutant') return 'intermediaire';
+  
+  return currentExpStr;
+}

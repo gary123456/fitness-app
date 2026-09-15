@@ -6,8 +6,7 @@ import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, Edit3, ArrowLeftRight, Check, FileText } from "lucide-react";
-import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, calculateWaterIntake, getCurrentWeekStreak, generateMealIdeas, getMicronutrients } from "@/lib/fitness";
+import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, Edit3, ArrowLeftRight, Check, FileText, Loader2 } from "lucide-react";import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, calculateWaterIntake, getCurrentWeekStreak, generateMealIdeas, getMicronutrients } from "@/lib/fitness";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/lib/useLanguage";
 
@@ -146,21 +145,139 @@ export default function DashboardPage() {
   const [quizState, setQuizState] = useState<'playing' | 'success' | 'fail'>('playing');
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
 
+  // 🛡️ NOUVEAUX ÉTATS POUR L'ONBOARDING
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
+
   useEffect(() => {
     if (data?.profile) {
       const todayStr = new Date().toISOString().split('T')[0];
       if (data.profile.last_sleep_check !== todayStr) {
         setShowSleepPrompt(true);
       }
+      // 🛡️ VÉRIFICATION DE L'ONBOARDING
+      if (data.profile.has_seen_onboarding === false) {
+        setShowOnboarding(true);
+      }
     }
   }, [data]);
 
   const t = {
-    FR: { sub: "Analyse systémique et prescriptions métaboliques.", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bmi: "IMC", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", water: "Hydratation", imgTitle: "Masse Grasse", imgWhere: "Où vous situez-vous ?", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", sleepPrompt: "Comment avez-vous dormi cette nuit ?", sleepContext: "L'algorithme a besoin de votre ressenti.", settingsHint: "Ajustez vos paramètres", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Stratégie Repas :", mealSub: "Exemples calibrés pour vos macros. Cliquez sur un protocole pour l'ouvrir.", clinicBmr: "Katch-McArdle (Précision Clinique)", understood: "Compris", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgSub: "Indice de masse grasse sur votre corps.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", sleepExc: "Excellent", sleepAvg: "Moyen", sleepBad: "Mauvais", sleepLegendExc: "8h+ ininterrompu", sleepLegendAvg: "6-7h, réveils", sleepLegendBad: "< 6h, insomnie" },
-    EN: { sub: "Systemic analysis and metabolic prescriptions.", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bmi: "BMI", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", water: "Hydration", imgTitle: "Body Fat", imgWhere: "Where do you stand?", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", sleepPrompt: "How did you sleep last night?", sleepContext: "The algorithm needs your input.", settingsHint: "Adjust your settings", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Meal Strategy:", mealSub: "Calibrated examples for your macros. Click a protocol to expand.", clinicBmr: "Katch-McArdle (Clinical Precision)", understood: "Got it", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgSub: "Percentage of fat on your body.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", sleepExc: "Excellent", sleepAvg: "Average", sleepBad: "Poor", sleepLegendExc: "8h+ uninterrupted", sleepLegendAvg: "6-7h, minor waking", sleepLegendBad: "< 6h, restless" }
+    FR: { sub: "Analyse systémique et prescriptions métaboliques.", goal: "Objectif Actuel", ideal: "Idéal", cals: "Calories", maint: "Maintien", bmi: "IMC", macros: "Objectifs Macros", macrosSub: "Cibles journalières en grammes", prot: "Prot", carb: "Glucides", fat: "Lipides", pendingWorkout: "Séance prévue aujourd'hui", completedWorkout: "Séance accomplie", restDay: "Jour de repos", goWorkout: "Démarrer", streakUnit: "Série", tonnageTitle: "Tonnage Hebdomadaire", tonnageDesc: "Vous avez soulevé l'équivalent de : ", water: "Hydratation", imgTitle: "Masse Grasse", imgWhere: "Où vous situez-vous ?", quizTitle: "Daily Brain Gain", quizSub: "L'intelligence bâtit le muscle.", reqCal: "Calibrage Requis", reqCalSub: "Dernière pesée il y a", sleepPrompt: "Comment avez-vous dormi cette nuit ?", sleepContext: "L'algorithme a besoin de votre ressenti.", settingsHint: "Ajustez vos paramètres", micros: "Micronutriments", microsSub: "Cofacteurs métaboliques recommandés", waterTitle: "Science de l'Hydratation", waterTotal: "Besoin Total", waterPure: "Eau Pure (~70%)", water1: "🍎 Le Mythe des 100% : Vous n'avez pas besoin de boire tout ce volume en eau pure. Environ 30% de votre hydratation provient des fruits, légumes, café ou thé.", water2: "💪 Congestion & Force : Chaque gramme de glucide stocké dans vos muscles retient 3g d'eau. Une bonne hydratation garantit des muscles pleins (Pump).", water3: "🛡️ Prévention des Blessures : L'eau lubrifie vos articulations et maintient l'élasticité de vos tendons sous charge lourde.", calTitle: "La Salle des Machines", calSub: "Comment votre corps brûle-t-il l'énergie ?", calBmr: "Survie pure (BMR)", calBmrSub: "Énergie brûlée au repos (Cerveau, Cœur, Organes).", calMove: "Votre Mouvement", calMoveSub: "Énergie liée à vos entraînements et la digestion.", calObj: "Objectif du jour", mealTitle: "Stratégie Repas :", mealSub: "Exemples calibrés pour vos macros. Cliquez sur un protocole pour l'ouvrir.", clinicBmr: "Katch-McArdle (Précision Clinique)", understood: "Compris", streakTitle: "Votre Semaine", streakSub: "Ne brisez pas la chaîne ! Consistance > Intensité.", imgSub: "Indice de masse grasse sur votre corps.", easy: "Facile", medium: "Moyen", hard: "Difficile", checkAns: "Vérifier", correct: "Exact !", wrong: "Raté...", sleepExc: "Excellent", sleepAvg: "Moyen", sleepBad: "Mauvais", sleepLegendExc: "8h+ ininterrompu", sleepLegendAvg: "6-7h, réveils", sleepLegendBad: "< 6h, insomnie",
+          ob1Title: "La Méthode Vivex", ob1Desc: "Bienvenue dans votre nouvel écosystème. Ici, tout repose sur la Loi de la Surcharge Progressive : l'algorithme vous guidera pour battre vos anciens records à chaque séance.", ob2Title: "Le Readiness Score", ob2Desc: "Votre sommeil et vos séances passées dictent votre état de forme. Un score élevé ? Tentez un record personnel. Un score faible ? Le système vous protégera en baissant le volume.", ob3Title: "Le Ratio ACWR", ob3Desc: "L'application compare votre charge de la semaine avec celle du mois écoulé pour vous garder dans la zone de croissance idéale (Sweet Spot) et éviter les blessures.", nextBtn: "Suivant", startBtn: "Démarrer ma transformation" },
+    EN: { sub: "Systemic analysis and metabolic prescriptions.", goal: "Current Goal", ideal: "Ideal", cals: "Calories", maint: "Maint.", bmi: "BMI", macros: "Macro Targets", macrosSub: "Daily targets in grams", prot: "Pro", carb: "Carbs", fat: "Fats", pendingWorkout: "Scheduled workout today", completedWorkout: "Workout completed", restDay: "Rest day", goWorkout: "Start", streakUnit: "Streak", tonnageTitle: "Weekly Tonnage", tonnageDesc: "You lifted the equivalent of: ", water: "Hydration", imgTitle: "Body Fat", imgWhere: "Where do you stand?", quizTitle: "Daily Brain Gain", quizSub: "Intelligence builds muscle.", reqCal: "Calibration Required", reqCalSub: "Last weigh-in", sleepPrompt: "How did you sleep last night?", sleepContext: "The algorithm needs your input.", settingsHint: "Adjust your settings", micros: "Micronutrients", microsSub: "Recommended metabolic cofactors", waterTitle: "Hydration Science", waterTotal: "Total Need", waterPure: "Pure Water (~70%)", water1: "🍎 The 100% Myth: You don't need to drink this entire volume in pure water. About 30% comes from fruits, veggies, coffee, or tea.", water2: "💪 Pump & Strength: Each gram of carb stored in your muscles holds 3g of water. Good hydration ensures full muscles.", water3: "🛡️ Injury Prevention: Water lubricates your joints and maintains tendon elasticity under heavy loads.", calTitle: "The Engine Room", calSub: "How does your body burn energy?", calBmr: "Pure Survival (BMR)", calBmrSub: "Energy burned at rest (Brain, Heart, Organs).", calMove: "Your Movement", calMoveSub: "Energy from workouts and digestion.", calObj: "Today's Target", mealTitle: "Meal Strategy:", mealSub: "Calibrated examples for your macros. Click a protocol to expand.", clinicBmr: "Katch-McArdle (Clinical Precision)", understood: "Got it", streakTitle: "Your Week", streakSub: "Don't break the chain! Consistency > Intensity.", imgSub: "Percentage of fat on your body.", easy: "Easy", medium: "Medium", hard: "Hard", checkAns: "Check", correct: "Correct!", wrong: "Missed...", sleepExc: "Excellent", sleepAvg: "Average", sleepBad: "Poor", sleepLegendExc: "8h+ uninterrupted", sleepLegendAvg: "6-7h, minor waking", sleepLegendBad: "< 6h, restless",
+          ob1Title: "The Vivex Method", ob1Desc: "Welcome to your ecosystem. Everything here is based on Progressive Overload: the app will guide you to beat your past records every session.", ob2Title: "Readiness Score", ob2Desc: "Your sleep and past sessions dictate your shape. High score? Go for a PR. Low score? The algorithm drops your volume to protect you.", ob3Title: "ACWR Ratio", ob3Desc: "The app compares your weekly load with the past month to keep you in the growth zone (Sweet Spot) and prevent injuries.", nextBtn: "Next", startBtn: "Start my transformation" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
+
+  const handleSleepCheckin = async (quality: 'excellent' | 'moyen' | 'mauvais') => {
+    if (isSavingSleep) return;
+    setIsSavingSleep(true);
+
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      const { error: profileError } = await supabase.from("profiles").update({ sleep_quality: quality, last_sleep_check: todayStr }).eq("id", profile.id);
+      if (profileError) throw profileError;
+
+      const { error: metricsError } = await supabase.from("daily_metrics").upsert({ 
+        user_id: profile.id, 
+        date: todayStr, 
+        sleep_quality: quality, 
+        readiness_score: rScore 
+      }, { onConflict: 'user_id, date' });
+
+      if (metricsError) throw metricsError;
+
+      setShowSleepPrompt(false);
+      mutate();
+    } catch (error: any) {
+      console.error("Erreur critique d'insertion :", error);
+      alert(`Erreur de base de données : ${error.message}`);
+    } finally {
+      setIsSavingSleep(false);
+    }
+  };
+
+  const submitQuiz = async () => {
+    if (selectedAnswer === null || !dailyQuiz) return;
+    const isCorrect = selectedAnswer === dailyQuiz.correct_index;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    if (isCorrect) {
+      setQuizState('success');
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("user_gamification").update({ last_quiz_date: todayStr }).eq("user_id", user?.id);
+      setTimeout(() => { mutate(); }, 2500); 
+    } else {
+      setQuizState('fail');
+      setTimeout(() => { setQuizState('playing'); setSelectedAnswer(null); }, 3500); 
+    }
+  };
+
+  // 🛡️ NOUVEAU : Fonction pour terminer l'onboarding
+  const completeOnboarding = async () => {
+    setIsSavingOnboarding(true);
+    try {
+      await supabase.from("profiles").update({ has_seen_onboarding: true }).eq("id", profile.id);
+      setShowOnboarding(false);
+      mutate();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSavingOnboarding(false);
+    }
+  };
+
+  const renderSmartBanner = () => {
+    const todayName = DAYS[["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()] as keyof typeof DAYS];
+    
+    if (isTodayWorkoutCompleted && todayWorkoutId) {
+      return (
+        <div onClick={() => router.push(`/workout/${todayWorkoutId}?summary=true`)} className="cursor-pointer bg-gradient-to-r from-yellow-500 to-amber-600 rounded-2xl p-4 shadow-lg shadow-amber-500/20 flex items-center justify-between hover:scale-[1.01] active:scale-95 transition-transform">
+          <div className="flex items-center space-x-3">
+            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Trophy className="w-6 h-6 text-white" /></div>
+            <div>
+              <p className="text-amber-100 text-xs font-bold uppercase tracking-wider">{txt.completedWorkout}</p>
+              <h3 className="text-white font-black text-lg">{todayName} : {lang === 'FR' ? 'Repos mérité !' : 'Well deserved rest!'}</h3>
+            </div>
+          </div>
+          <Button variant="secondary" className="bg-white text-amber-700 hover:bg-zinc-50 font-bold rounded-full shadow-sm">
+            <FileText className="w-4 h-4 mr-2" /> {lang === 'FR' ? 'Résumé' : 'Summary'}
+          </Button>
+        </div>
+      );
+    }
+    
+    if (todayWorkoutId) {
+      return (
+        <div onClick={() => router.push(`/workout/${todayWorkoutId}`)} className="cursor-pointer bg-gradient-to-r from-teal-500 to-teal-700 rounded-2xl p-4 shadow-lg shadow-teal-500/20 flex items-center justify-between transition-transform hover:scale-[1.01] active:scale-95">
+          <div className="flex items-center space-x-3">
+            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Play className="w-6 h-6 text-white fill-white" /></div>
+            <div>
+              <p className="text-teal-100 text-xs font-bold uppercase tracking-wider">{txt.pendingWorkout}</p>
+              <h3 className="text-white font-black text-lg">{todayName}</h3>
+            </div>
+          </div>
+          <Button variant="secondary" className="bg-white text-teal-700 hover:bg-zinc-50 font-bold rounded-full shadow-sm">{txt.goWorkout}</Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-gradient-to-r from-indigo-500 to-indigo-700 rounded-2xl p-4 shadow-lg shadow-indigo-500/20 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Moon className="w-6 h-6 text-white fill-white" /></div>
+          <div>
+            <p className="text-indigo-100 text-xs font-bold uppercase tracking-wider">{txt.restDay}</p>
+            <h3 className="text-white font-black text-lg">{lang === 'FR' ? 'La croissance musculaire est en cours.' : 'Muscle growth in progress.'}</h3>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   if (isLoading || !data?.profile) {
     return (
@@ -212,100 +329,6 @@ export default function DashboardPage() {
     return { color: "text-red-500", bg: "bg-red-500", border: "border-red-500/30", text: lang === 'FR' ? "SNC Épuisé, baissez le volume de 20% aujourd'hui." : "CNS Exhausted, drop volume by 20% today.", icon: <BatteryWarning className="w-8 h-8 text-red-500" /> };
   };
   const rUI = getReadinessUI();
-
-  const handleSleepCheckin = async (quality: 'excellent' | 'moyen' | 'mauvais') => {
-    if (isSavingSleep) return;
-    setIsSavingSleep(true);
-
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      
-      const { error: profileError } = await supabase.from("profiles").update({ sleep_quality: quality, last_sleep_check: todayStr }).eq("id", profile.id);
-      if (profileError) throw profileError;
-
-      const { error: metricsError } = await supabase.from("daily_metrics").upsert({ 
-        user_id: profile.id, 
-        date: todayStr, 
-        sleep_quality: quality, 
-        readiness_score: rScore 
-      }, { onConflict: 'user_id, date' });
-
-      if (metricsError) throw metricsError;
-
-      setShowSleepPrompt(false);
-      mutate();
-    } catch (error: any) {
-      console.error("Erreur critique d'insertion :", error);
-      alert(`Erreur de base de données : ${error.message}. Vérifiez que le script SQL a bien été exécuté.`);
-    } finally {
-      setIsSavingSleep(false);
-    }
-  };
-
-  const submitQuiz = async () => {
-    if (selectedAnswer === null || !dailyQuiz) return;
-    const isCorrect = selectedAnswer === dailyQuiz.correct_index;
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    if (isCorrect) {
-      setQuizState('success');
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("user_gamification").update({ last_quiz_date: todayStr }).eq("user_id", user?.id);
-      setTimeout(() => { mutate(); }, 2500); 
-    } else {
-      setQuizState('fail');
-      setTimeout(() => { setQuizState('playing'); setSelectedAnswer(null); }, 3500); 
-    }
-  };
-
-  const renderSmartBanner = () => {
-    const todayName = DAYS[["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][new Date().getDay()] as keyof typeof DAYS];
-    
-    if (isTodayWorkoutCompleted && todayWorkoutId) {
-      return (
-        <div onClick={() => router.push(`/workout/${todayWorkoutId}?summary=true`)} className="cursor-pointer bg-gradient-to-r from-yellow-500 to-amber-600 rounded-2xl p-4 shadow-lg shadow-amber-500/20 flex items-center justify-between hover:scale-[1.01] active:scale-95 transition-transform">
-          <div className="flex items-center space-x-3">
-            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Trophy className="w-6 h-6 text-white" /></div>
-            <div>
-              <p className="text-amber-100 text-xs font-bold uppercase tracking-wider">{txt.completedWorkout}</p>
-              <h3 className="text-white font-black text-lg">{todayName} : {lang === 'FR' ? 'Repos mérité !' : 'Well deserved rest!'}</h3>
-            </div>
-          </div>
-          {/* 🛡️ CORRECTION : Le bouton mène maintenant au Résumé de la séance */}
-          <Button variant="secondary" className="bg-white text-amber-700 hover:bg-zinc-50 font-bold rounded-full shadow-sm">
-            <FileText className="w-4 h-4 mr-2" /> {lang === 'FR' ? 'Résumé' : 'Summary'}
-          </Button>
-        </div>
-      );
-    }
-    
-    if (todayWorkoutId) {
-      return (
-        <div onClick={() => router.push(`/workout/${todayWorkoutId}`)} className="cursor-pointer bg-gradient-to-r from-teal-500 to-teal-700 rounded-2xl p-4 shadow-lg shadow-teal-500/20 flex items-center justify-between transition-transform hover:scale-[1.01] active:scale-95">
-          <div className="flex items-center space-x-3">
-            <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Play className="w-6 h-6 text-white fill-white" /></div>
-            <div>
-              <p className="text-teal-100 text-xs font-bold uppercase tracking-wider">{txt.pendingWorkout}</p>
-              <h3 className="text-white font-black text-lg">{todayName}</h3>
-            </div>
-          </div>
-          <Button variant="secondary" className="bg-white text-teal-700 hover:bg-zinc-50 font-bold rounded-full shadow-sm">{txt.goWorkout}</Button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-gradient-to-r from-indigo-500 to-indigo-700 rounded-2xl p-4 shadow-lg shadow-indigo-500/20 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm"><Moon className="w-6 h-6 text-white fill-white" /></div>
-          <div>
-            <p className="text-indigo-100 text-xs font-bold uppercase tracking-wider">{txt.restDay}</p>
-            <h3 className="text-white font-black text-lg">{lang === 'FR' ? 'La croissance musculaire est en cours.' : 'Muscle growth in progress.'}</h3>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
@@ -511,7 +534,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Le reste du composant (Modales de nutrition, eau, sommeil, etc.) reste identique */}
       <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <CardHeader>
           <CardTitle className="flex items-center text-xl text-zinc-900 dark:text-zinc-100">
@@ -555,6 +577,78 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 🛡️ NOUVELLE MODALE D'ONBOARDING INTERACTIVE */}
+      <Dialog open={showOnboarding} onOpenChange={(open) => {
+        // Empêcher la fermeture si l'utilisateur clique en dehors (obliger à finir l'onboarding)
+      }}>
+        <DialogContent className="sm:max-w-[450px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b p-0 overflow-hidden hide-close-button [&>button]:hidden">
+          
+          <div className="relative">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-teal-400 via-indigo-500 to-purple-500"></div>
+            
+            {onboardingStep === 1 && (
+              <div className="p-8 text-center space-y-6 animate-in slide-in-from-right-4 duration-500">
+                <div className="w-20 h-20 bg-teal-100 dark:bg-teal-900/30 rounded-full flex items-center justify-center mx-auto shadow-sm border border-teal-200 dark:border-teal-800">
+                  <Target className="w-10 h-10 text-teal-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-zinc-900 dark:text-white mb-2">{txt.ob1Title}</h2>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed">
+                    {txt.ob1Desc}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 2 && (
+              <div className="p-8 text-center space-y-6 animate-in slide-in-from-right-4 duration-500">
+                <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto shadow-sm border border-indigo-200 dark:border-indigo-800">
+                  <Battery className="w-10 h-10 text-indigo-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-zinc-900 dark:text-white mb-2">{txt.ob2Title}</h2>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed">
+                    {txt.ob2Desc}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 3 && (
+              <div className="p-8 text-center space-y-6 animate-in slide-in-from-right-4 duration-500">
+                <div className="w-20 h-20 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto shadow-sm border border-purple-200 dark:border-purple-800">
+                  <Activity className="w-10 h-10 text-purple-500" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-zinc-900 dark:text-white mb-2">{txt.ob3Title}</h2>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium leading-relaxed">
+                    {txt.ob3Desc}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="px-8 pb-8">
+              <div className="flex justify-center space-x-2 mb-8">
+                <div className={`w-2 h-2 rounded-full transition-colors ${onboardingStep === 1 ? 'bg-teal-500' : 'bg-zinc-200 dark:bg-zinc-800'}`}></div>
+                <div className={`w-2 h-2 rounded-full transition-colors ${onboardingStep === 2 ? 'bg-indigo-500' : 'bg-zinc-200 dark:bg-zinc-800'}`}></div>
+                <div className={`w-2 h-2 rounded-full transition-colors ${onboardingStep === 3 ? 'bg-purple-500' : 'bg-zinc-200 dark:bg-zinc-800'}`}></div>
+              </div>
+
+              {onboardingStep < 3 ? (
+                <Button onClick={() => setOnboardingStep(prev => prev + 1)} className="w-full h-12 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-black rounded-xl text-lg transition-transform active:scale-95">
+                  {txt.nextBtn} <ChevronRight className="w-5 h-5 ml-1" />
+                </Button>
+              ) : (
+                <Button onClick={completeOnboarding} disabled={isSavingOnboarding} className="w-full h-12 bg-gradient-to-r from-teal-500 to-indigo-500 text-white font-black rounded-xl text-lg shadow-lg shadow-indigo-500/20 transition-transform active:scale-95">
+                  {isSavingOnboarding ? <Loader2 className="w-6 h-6 animate-spin" /> : txt.startBtn}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Toutes les Modales */}
       <Dialog open={isCalModalOpen} onOpenChange={setIsCalModalOpen}>
