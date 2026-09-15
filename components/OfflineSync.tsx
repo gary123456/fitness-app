@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 export function OfflineSync() {
   useEffect(() => {
-    // 🛡️ PARTIE 1 : VOTRE LOGIQUE D'UPLOAD (Envoi des logs en attente)
+    // 🛡️ PARTIE 1 : VOTRE LOGIQUE D'UPLOAD (Envoi des logs en attente quand le réseau revient)
     const uploadPendingLogs = async () => {
       if (typeof window === "undefined" || !navigator.onLine) return;
       

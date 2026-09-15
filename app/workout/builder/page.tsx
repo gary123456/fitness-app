@@ -28,7 +28,7 @@ interface PlannedExercise {
   sets: number;
   target_reps: string;
   rest_seconds: number;
-  recommended_weight?: number | null; // 🛡️ CHARGE PRÉ-REMPLIE
+  recommended_weight?: number | null;
   uid: string;
 }
 
@@ -41,14 +41,20 @@ const fetchLibrary = async () => {
   return data;
 };
 
-// 🛡️ NOUVEAU : Récupère les PRs de l'utilisateur depuis la Vue SQL
+// 🛡️ INTELLIGENCE : Récupère les PRs de l'utilisateur depuis la Vue SQL
 const fetchPRs = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return {};
+  
   const { data, error } = await supabase.from('user_prs').select('*').eq('user_id', user.id);
-  if (error) return {};
+  
+  if (error) {
+    console.error("❌ Erreur Supabase (user_prs) :", error.message);
+    return {};
+  }
+  
   const prMap: Record<string, any> = {};
-  data.forEach(pr => { prMap[pr.exercise_id] = pr; });
+  data?.forEach(pr => { prMap[pr.exercise_id] = pr; });
   return prMap;
 };
 
@@ -64,7 +70,7 @@ function BuilderContent() {
   const { lang } = useLanguage();
 
   const { data: library, isLoading: loadingEx } = useSWR('exerciseLibrary', fetchLibrary);
-  const { data: userPRs } = useSWR('userPRs', fetchPRs); // 🛡️ FETCH DES PRs
+  const { data: userPRs } = useSWR('userPRs', fetchPRs); // 🛡️ Appel SWR pour les PRs
 
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -82,7 +88,6 @@ function BuilderContent() {
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   const [guideModal, setGuideModal] = useState(false);
   
-  // 🛡️ ÉTATS POUR LE DRAG & DROP
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
@@ -135,7 +140,7 @@ function BuilderContent() {
                 sets: we.sets,
                 target_reps: we.target_reps,
                 rest_seconds: we.rest_seconds,
-                recommended_weight: we.recommended_weight, // 🛡️ CONSERVER LA CHARGE
+                recommended_weight: we.recommended_weight,
                 uid: we.id || (Date.now().toString() + Math.random().toString(36).substr(2, 5))
               };
             }).filter((item: any) => item.exercise); 
@@ -207,7 +212,7 @@ function BuilderContent() {
     
     if (pr) {
       recWeight = pr.weight > 0 ? pr.weight : null;
-      target = `Viser > ${pr.reps}`; // On s'adapte à son dernier record
+      target = `Viser > ${pr.reps}`; // Adaptation de l'objectif selon le PR
     }
 
     setPlan(prev => ({
@@ -242,7 +247,6 @@ function BuilderContent() {
     });
   };
 
-  // 🛡️ DRAG AND DROP HANDLERS
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
     if (navigator.vibrate) navigator.vibrate(15);
@@ -316,14 +320,13 @@ function BuilderContent() {
           }]).select().single();
 
           if (newSession) {
-            // 🛡️ SAUVEGARDE DE LA CHARGE RECOMMANDÉE
             const inserts = dailyExercises.map((plannedEx, idx) => ({
               session_id: newSession.id,
               exercise_id: plannedEx.exercise.id,
               sets: plannedEx.sets,
               target_reps: plannedEx.target_reps,
               rest_seconds: plannedEx.rest_seconds,
-              recommended_weight: plannedEx.recommended_weight || null,
+              recommended_weight: plannedEx.recommended_weight || null, // 🛡️ SAUVEGARDE DU PR
               order_index: idx
             }));
             await supabase.from("workout_exercises").insert(inserts);
@@ -649,7 +652,6 @@ function BuilderContent() {
         </div>
       </div>
 
-      {/* 🛡️ MODALE INFO FORMAT YOUTUBE SHORTS (VERTICAL) */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
