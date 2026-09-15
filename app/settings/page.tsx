@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Medal, Loader2, CheckCircle2, Image as ImageIcon } from "lucide-react";
+import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -69,6 +69,7 @@ export default function SettingsPage() {
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [editDisableQuiz, setEditDisableQuiz] = useState(false);
+  const [editDataSaver, setEditDataSaver] = useState(false); // 🛡️ DATA SAVER
   
   const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [recalibrateAI, setRecalibrateAI] = useState(false);
@@ -96,6 +97,7 @@ export default function SettingsPage() {
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
       setEditEquipment(data.profile.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : ['poids_corps']);
       setEditDisableQuiz(data.profile.disable_quiz || false);
+      setEditDataSaver(data.profile.data_saver_enabled || false);
     }
 
     if (typeof window !== "undefined" && 'serviceWorker' in navigator && 'PushManager' in window) {
@@ -168,7 +170,7 @@ export default function SettingsPage() {
       const updatedProfileData = { 
         first_name: editFirstName, last_name: editLastName, height_cm: newHeight, weight_kg: newWeight, 
         current_goal: editGoal, experience_level: editExperience, weekly_schedule: editSchedule,
-        equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz
+        equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz, data_saver_enabled: editDataSaver
       };
 
       await supabase.from("profiles").update(updatedProfileData).eq("id", data.profile.id);
@@ -232,7 +234,6 @@ export default function SettingsPage() {
         const filePaths = files.map(file => `${userId}/${file.name}`);
         await supabase.storage.from('progress-photos').remove(filePaths);
       }
-      // 🛡️ NOUVEAU : Purge de l'avatar lors de la suppression du compte
       const { data: avatarFiles } = await supabase.storage.from('avatars').list(userId);
       if (avatarFiles && avatarFiles.length > 0) {
         const avatarPaths = avatarFiles.map(file => `${userId}/${file.name}`);
@@ -265,7 +266,6 @@ export default function SettingsPage() {
               <div className="space-y-2"><Label>Prénom</Label><Input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} className="font-bold dark:bg-zinc-950 dark:border-zinc-800" /></div>
               <div className="space-y-2"><Label>Nom</Label><Input value={editLastName} onChange={(e) => setEditLastName(e.target.value)} className="font-bold dark:bg-zinc-950 dark:border-zinc-800" /></div>
             </div>
-            {/* 🛡️ CORRECTION : Remplacement du champ Avatar */}
             <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
               <div className="space-y-1">
                 <Label className="text-sm font-bold dark:text-zinc-100 flex items-center"><ImageIcon className="w-4 h-4 mr-2 text-teal-500" /> Photo de Profil</Label>
@@ -366,6 +366,17 @@ export default function SettingsPage() {
               </div>
               <button type="button" onClick={() => setEditDisableQuiz(!editDisableQuiz)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${!editDisableQuiz ? 'bg-teal-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>
                 <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${!editDisableQuiz ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            {/* 🛡️ NOUVEAU BOUTON DATA SAVER */}
+            <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <div className="space-y-0.5">
+                <Label className="text-base font-bold dark:text-zinc-100 flex items-center"><WifiOff className="w-4 h-4 mr-2 text-blue-500" /> Mode Éco (Data Saver)</Label>
+                <p className="text-[10px] uppercase tracking-widest text-zinc-500">Bloquer les vidéos/images pour économiser la 4G</p>
+              </div>
+              <button type="button" onClick={() => setEditDataSaver(!editDataSaver)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${editDataSaver ? 'bg-blue-500' : 'bg-zinc-300 dark:bg-zinc-700'}`}>
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${editDataSaver ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
 

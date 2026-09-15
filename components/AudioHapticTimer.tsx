@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { Timer, X, Minus, Plus } from "lucide-react";
 
 interface AudioHapticTimerProps {
-  restTimer: number | null;
-  setRestTimer: (val: number | null) => void;
+  targetTime: number | null; // 🛡️ Reçoit l'heure de fin exacte
+  setTargetTime: (val: number | null) => void;
   formatTime: (seconds: number) => string;
 }
 
-export default function AudioHapticTimer({ restTimer, setRestTimer, formatTime }: AudioHapticTimerProps) {
+export default function AudioHapticTimer({ targetTime, setTargetTime, formatTime }: AudioHapticTimerProps) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number>(0);
 
   // 🛡️ DÉVERROUILLAGE AUDIO (Hack pour contourner la sécurité iOS/Chrome)
   useEffect(() => {
@@ -70,30 +71,48 @@ export default function AudioHapticTimer({ restTimer, setRestTimer, formatTime }
     }
   };
 
+  // 🛡️ HORODATAGE ABSOLU
   useEffect(() => {
-    if (restTimer === 0) {
-      playCompletionFeedback();
+    if (targetTime === null) {
+      setTimeLeft(0);
+      return;
     }
-  }, [restTimer]);
 
-  if (restTimer === null) return null;
+    const calculateTimeLeft = () => {
+      const now = Date.now();
+      const difference = Math.round((targetTime - now) / 1000);
+      if (difference <= 0) {
+        setTimeLeft(0);
+        setTargetTime(null);
+        playCompletionFeedback();
+      } else {
+        setTimeLeft(difference);
+      }
+    };
+
+    calculateTimeLeft(); // Appel immédiat
+    const interval = setInterval(calculateTimeLeft, 1000);
+
+    return () => clearInterval(interval);
+  }, [targetTime]);
+
+  if (targetTime === null && timeLeft === 0) return null;
 
   return (
-    <div className={`fixed bottom-24 sm:bottom-10 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-4 py-3 rounded-full flex items-center shadow-[0_10px_40px_rgba(0,0,0,0.4)] transition-all duration-300 ease-out z-[9999] ${restTimer > 0 ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-10 opacity-0 scale-95 pointer-events-none'}`}>
+    <div className={`fixed bottom-24 sm:bottom-10 left-1/2 -translate-x-1/2 bg-zinc-900 dark:bg-zinc-100 text-zinc-50 dark:text-zinc-900 px-4 py-3 rounded-full flex items-center shadow-[0_10px_40px_rgba(0,0,0,0.4)] transition-all duration-300 ease-out z-[9999] ${timeLeft > 0 ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-10 opacity-0 scale-95 pointer-events-none'}`}>
       <Timer className="w-5 h-5 animate-pulse text-teal-400 dark:text-teal-600 mr-2 shrink-0" />
       
-      {/* 🛡️ POINT 4 : AJUSTEMENT DYNAMIQUE DU TIMER */}
       <div className="flex items-center bg-zinc-800 dark:bg-zinc-200 rounded-full px-1">
-        <button onClick={() => setRestTimer(Math.max(1, restTimer - 15))} className="p-2 text-zinc-400 hover:text-white dark:hover:text-zinc-900 transition-colors">
+        <button onClick={() => setTargetTime(targetTime ? targetTime - 15000 : null)} className="p-2 text-zinc-400 hover:text-white dark:hover:text-zinc-900 transition-colors">
           <Minus className="w-4 h-4" />
         </button>
-        <span className="font-mono text-xl font-black w-16 text-center">{formatTime(restTimer)}</span>
-        <button onClick={() => setRestTimer(restTimer + 30)} className="p-2 text-zinc-400 hover:text-white dark:hover:text-zinc-900 transition-colors">
+        <span className="font-mono text-xl font-black w-16 text-center">{formatTime(timeLeft)}</span>
+        <button onClick={() => setTargetTime(targetTime ? targetTime + 30000 : null)} className="p-2 text-zinc-400 hover:text-white dark:hover:text-zinc-900 transition-colors">
           <Plus className="w-4 h-4" />
         </button>
       </div>
 
-      <button onClick={() => setRestTimer(0)} className="text-zinc-400 hover:text-white dark:hover:text-zinc-900 transition-colors p-2 ml-2">
+      <button onClick={() => setTargetTime(null)} className="text-zinc-400 hover:text-white dark:hover:text-zinc-900 transition-colors p-2 ml-2">
         <X className="w-5 h-5" />
       </button>
     </div>

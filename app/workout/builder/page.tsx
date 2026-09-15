@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2, PlayCircle } from "lucide-react";
+import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2, PlayCircle, GripVertical } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -40,7 +40,6 @@ const fetchLibrary = async () => {
   return data;
 };
 
-// 🛡️ NOUVEAU : Récupère la miniature YouTube
 const getYoutubeThumbnail = (youtubeId?: string) => {
   if (!youtubeId) return null;
   return `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
@@ -69,6 +68,10 @@ function BuilderContent() {
 
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   const [guideModal, setGuideModal] = useState(false);
+  
+  // 🛡️ ÉTATS POUR LE DRAG & DROP
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const t = {
     FR: { 
@@ -207,6 +210,32 @@ function BuilderContent() {
       return { ...prev, [day]: newDay };
     });
   };
+
+  // 🛡️ DRAG AND DROP HANDLERS
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    if (navigator.vibrate) navigator.vibrate(15);
+    e.dataTransfer.effectAllowed = "move";
+  };
+  const handleDragEnter = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIdx(index);
+    if (draggedIdx === null || draggedIdx === index) return;
+    
+    setPlan(prev => {
+      const newDay = [...prev[activeDay]];
+      const item = newDay[draggedIdx];
+      newDay.splice(draggedIdx, 1);
+      newDay.splice(index, 0, item);
+      return { ...prev, [activeDay]: newDay };
+    });
+    setDraggedIdx(index);
+  };
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
   const totalExercisesPlanned = Object.values(plan).reduce((acc, curr) => acc + curr.length, 0);
 
@@ -518,10 +547,23 @@ function BuilderContent() {
               </div>
             ) : (
               plan[activeDay].map((item, idx) => (
-                <div key={item.uid} className="p-3 bg-zinc-950/80 border border-zinc-800 rounded-xl space-y-3 shadow-sm group hover:border-indigo-500/50 transition-colors">
+                <div 
+                  key={item.uid} 
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragEnter={(e) => handleDragEnter(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={handleDragOver}
+                  className={`p-3 bg-zinc-950/80 border rounded-xl space-y-3 shadow-sm group hover:border-indigo-500/50 transition-colors ${draggedIdx === idx ? 'opacity-50 border-indigo-500 scale-95' : 'border-zinc-800 opacity-100'} ${dragOverIdx === idx ? 'border-t-2 border-t-indigo-500' : ''}`}
+                >
                   
                   <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                    <h4 className="font-bold text-zinc-100 text-sm line-clamp-1">{item.exercise.name}</h4>
+                    <div className="flex items-center space-x-2 flex-1">
+                      <div className="cursor-grab active:cursor-grabbing p-1 text-zinc-600 hover:text-indigo-400">
+                        <GripVertical className="w-5 h-5" />
+                      </div>
+                      <h4 className="font-bold text-zinc-100 text-sm line-clamp-1 flex-1">{item.exercise.name}</h4>
+                    </div>
                     <button onClick={() => removeExercise(activeDay, idx)} className="text-zinc-600 hover:text-red-500 transition-colors p-1">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -563,9 +605,8 @@ function BuilderContent() {
         </div>
       </div>
 
-      {/* 🛡️ MODALE INFO FORMAT YOUTUBE SHORTS (VERTICAL) */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
