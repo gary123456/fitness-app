@@ -28,6 +28,7 @@ interface PlannedExercise {
   sets: number;
   target_reps: string;
   rest_seconds: number;
+  recommended_weight?: number | null; // 🛡️ CHARGE PRÉ-REMPLIE
   uid: string;
 }
 
@@ -38,6 +39,17 @@ const fetchLibrary = async () => {
   const { data, error } = await supabase.from("exercise_library").select("*").order("name", { ascending: true });
   if (error) throw new Error(error.message);
   return data;
+};
+
+// 🛡️ NOUVEAU : Récupère les PRs de l'utilisateur depuis la Vue SQL
+const fetchPRs = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return {};
+  const { data, error } = await supabase.from('user_prs').select('*').eq('user_id', user.id);
+  if (error) return {};
+  const prMap: Record<string, any> = {};
+  data.forEach(pr => { prMap[pr.exercise_id] = pr; });
+  return prMap;
 };
 
 const getYoutubeThumbnail = (youtubeId?: string) => {
@@ -52,6 +64,7 @@ function BuilderContent() {
   const { lang } = useLanguage();
 
   const { data: library, isLoading: loadingEx } = useSWR('exerciseLibrary', fetchLibrary);
+  const { data: userPRs } = useSWR('userPRs', fetchPRs); // 🛡️ FETCH DES PRs
 
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -122,6 +135,7 @@ function BuilderContent() {
                 sets: we.sets,
                 target_reps: we.target_reps,
                 rest_seconds: we.rest_seconds,
+                recommended_weight: we.recommended_weight, // 🛡️ CONSERVER LA CHARGE
                 uid: we.id || (Date.now().toString() + Math.random().toString(36).substr(2, 5))
               };
             }).filter((item: any) => item.exercise); 
@@ -186,11 +200,28 @@ function BuilderContent() {
   };
 
   const addExercise = (ex: Exercise) => {
+    // 🛡️ PRÉ-REMPLISSAGE INTELLIGENT
+    const pr = userPRs?.[ex.id];
+    let recWeight = null;
+    let target = "8-12";
+    
+    if (pr) {
+      recWeight = pr.weight > 0 ? pr.weight : null;
+      target = `Viser > ${pr.reps}`; // On s'adapte à son dernier record
+    }
+
     setPlan(prev => ({
       ...prev,
       [activeDay]: [
         ...prev[activeDay],
-        { exercise: ex, sets: 3, target_reps: "8-12", rest_seconds: ex.cns_impact >= 4 ? 120 : 90, uid: Date.now().toString() + Math.random().toString(36).substr(2, 5) }
+        { 
+          exercise: ex, 
+          sets: 3, 
+          target_reps: target, 
+          rest_seconds: ex.cns_impact >= 4 ? 120 : 90, 
+          recommended_weight: recWeight, // 🛡️ INTÉGRATION DE LA CHARGE
+          uid: Date.now().toString() + Math.random().toString(36).substr(2, 5) 
+        }
       ]
     }));
   };
@@ -285,12 +316,14 @@ function BuilderContent() {
           }]).select().single();
 
           if (newSession) {
+            // 🛡️ SAUVEGARDE DE LA CHARGE RECOMMANDÉE
             const inserts = dailyExercises.map((plannedEx, idx) => ({
               session_id: newSession.id,
               exercise_id: plannedEx.exercise.id,
               sets: plannedEx.sets,
               target_reps: plannedEx.target_reps,
               rest_seconds: plannedEx.rest_seconds,
+              recommended_weight: plannedEx.recommended_weight || null,
               order_index: idx
             }));
             await supabase.from("workout_exercises").insert(inserts);
@@ -569,7 +602,18 @@ function BuilderContent() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  {/* 🛡️ LIGNE À 4 COLONNES POUR INCLURE LA CHARGE */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase text-zinc-500 font-bold">Charge (kg)</Label>
+                      <Input 
+                        type="number" 
+                        value={item.recommended_weight || ""} 
+                        placeholder="BW"
+                        onChange={(e) => updateExerciseConfig(activeDay, idx, 'recommended_weight', parseFloat(e.target.value) || null)}
+                        className="h-8 bg-zinc-900 border-zinc-800 text-white text-center font-bold"
+                      />
+                    </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase text-zinc-500 font-bold">{txt.sets}</Label>
                       <Input 
@@ -605,6 +649,7 @@ function BuilderContent() {
         </div>
       </div>
 
+      {/* 🛡️ MODALE INFO FORMAT YOUTUBE SHORTS (VERTICAL) */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
