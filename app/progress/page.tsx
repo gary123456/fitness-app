@@ -703,7 +703,7 @@ export default function ProgressPage() {
             <div className="w-full max-w-[250px] aspect-[3/4] bg-zinc-100 dark:bg-zinc-900 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 flex items-center justify-center relative shadow-inner">
               {wizardStep === 0 && (wizardPreviews.front ? <img src={wizardPreviews.front} className="w-full h-full object-cover" /> : <img src={`/guide-${genderPrefix}-face.jpg`} className="w-full h-full object-contain opacity-40 dark:opacity-60" />)}
               {wizardStep === 1 && (wizardPreviews.side ? <img src={wizardPreviews.side} className="w-full h-full object-cover" /> : <img src={`/guide-${genderPrefix}-profil.jpg`} className="w-full h-full object-contain opacity-40 dark:opacity-60" />)}
-              {wizardStep === 2 && (wizardPreviews.back ? <img src={wizardPreviews.back} className="w-full h-full object-cover" /> : <img src={`/guide-${genderPrefix}-face.jpg`} className="w-full h-full object-contain opacity-40 dark:opacity-60 scale-x-[-1]" />)}
+              {wizardStep === 2 && (wizardPreviews.back ? <img src={wizardPreviews.back} className="w-full h-full object-cover" /> : <img src={`/guide-${genderPrefix}-dos.jpg`} className="w-full h-full object-contain opacity-40 dark:opacity-60 scale-x-[-1]" />)}
               <input type="file" accept="image/*" onChange={(e) => handleWizardFile(e, wizardStep === 0 ? "front" : wizardStep === 1 ? "side" : "back")} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" />
               {!wizardPreviews[wizardStep === 0 ? 'front' : wizardStep === 1 ? 'side' : 'back'] && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
