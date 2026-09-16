@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
+import confetti from "canvas-confetti"; // 🛡️ IMPORT CONFETTIS
 import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight, Scale, Filter, Activity, ArrowUp, ArrowDown, Flame, Copy, PlayCircle, GripVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -161,7 +162,6 @@ function ActiveWorkoutSessionContent() {
   const [inputs, setInputs] = useState<Record<string, { weight: string, reps: string }>>({});
   const [completedSets, setCompletedSets] = useState<Record<string, boolean>>({});
   
-  // 🛡️ REMPLACEMENT DE restTimer PAR targetTime (Horodatage Absolu)
   const [targetTime, setTargetTime] = useState<number | null>(null);
   
   const [isWorkoutUnlocked, setIsWorkoutUnlocked] = useState(false);
@@ -196,6 +196,14 @@ function ActiveWorkoutSessionContent() {
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   
   const stravaCardRef = useRef<HTMLDivElement>(null);
+
+  // 🛡️ INITIALISATION DU RPE INTELLIGENT
+  useEffect(() => {
+    const savedRpe = localStorage.getItem("vivex_last_rpe");
+    if (savedRpe) {
+      setSessionRpe(parseInt(savedRpe));
+    }
+  }, []);
 
   useEffect(() => {
     if (data?.sessionData?.workout_exercises) {
@@ -323,7 +331,6 @@ function ActiveWorkoutSessionContent() {
       if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(40);
       setCompletedSets((prev) => ({ ...prev, [setKey]: true }));
       
-      // 🛡️ MISE EN PLACE DE LA LOGIQUE D'HORODATAGE ABSOLU
       setTargetTime(Date.now() + restSeconds * 1000);
       
       setTimeout(() => {
@@ -375,7 +382,6 @@ function ActiveWorkoutSessionContent() {
     return platesToUse;
   };
 
-  // 🛡️ GESTIONNAIRES DE DRAG & DROP POUR LE TRACKER
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
     if (navigator.vibrate) navigator.vibrate(15);
@@ -451,6 +457,9 @@ function ActiveWorkoutSessionContent() {
     setIsSaving(true);
     setShowRpeModal(false);
 
+    // 🛡️ SAUVEGARDE DU RPE INTELLIGENT
+    localStorage.setItem("vivex_last_rpe", sessionRpe.toString());
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !data?.sessionData) { setIsSaving(false); return; }
 
@@ -459,6 +468,7 @@ function ActiveWorkoutSessionContent() {
     let maxWeight = 0;
     let maxRepsForWeight = 0;
     let bestExName = "";
+    let hitPR = false; // 🛡️ DÉTECTEUR DE PR POUR LES CONFETTIS
 
     for (const [setKey, isCompleted] of Object.entries(completedSets)) {
       if (isCompleted) {
@@ -469,6 +479,13 @@ function ActiveWorkoutSessionContent() {
         const weight = parseFloat(values.weight) || 0;
         const fallbackRep = extractMaxNumber(we?.target_reps || "0");
         const reps = parseInt(values.reps) || fallbackRep;
+
+        // Détection de PR
+        const identifier = we?.id || we?.exercise_id;
+        const ghost = data.ghostData[identifier];
+        if (ghost && weight > parseFloat(ghost.weight)) {
+          hitPR = true;
+        }
 
         calcTonnage += (weight * reps);
 
@@ -515,6 +532,19 @@ function ActiveWorkoutSessionContent() {
       offlineQueue.push(...logsToInsert);
       localStorage.setItem('vivex_offline_queue', JSON.stringify(offlineQueue));
       isOfflineSaved = true;
+    }
+
+    // 🛡️ DÉCLENCHEMENT DES CONFETTIS SI PR BATTU
+    if (hitPR && !isReplay && !isOfflineSaved) {
+      setTimeout(() => {
+        confetti({
+          particleCount: 150,
+          spread: 70,
+          origin: { y: 0.6 },
+          zIndex: 99999,
+          colors: ['#f59e0b', '#10b981', '#6366f1']
+        });
+      }, 500);
     }
 
     localStorage.removeItem(storageKey);
@@ -628,7 +658,7 @@ function ActiveWorkoutSessionContent() {
 
   const session = data.sessionData;
   const insights = getSessionInsights(localExercises, lang);
-  const dataSaverEnabled = data.profile?.data_saver_enabled || false; // 🛡️ DATA SAVER
+  const dataSaverEnabled = data.profile?.data_saver_enabled || false; 
 
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
@@ -717,7 +747,6 @@ function ActiveWorkoutSessionContent() {
                         <GripVertical className="w-5 h-5" />
                       </div>
 
-                      {/* 🛡️ MINIATURE YOUTUBE CLICQUABLE OU DATA SAVER */}
                       {dataSaverEnabled ? (
                          <div className="h-14 w-14 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex flex-col items-center justify-center border border-zinc-300 dark:border-zinc-700 relative p-0 shrink-0">
                            <WifiOff className="w-5 h-5 text-zinc-500 opacity-50" />
@@ -1025,57 +1054,49 @@ function ActiveWorkoutSessionContent() {
             <div className="flex items-center space-x-3">
               <div className="flex-1 space-y-1">
                 <Label className="text-xs font-bold text-zinc-500">KILOGRAMMES</Label>
-                <Input 
-                  type="number" 
-                  value={convertModal.kgValue} 
-                  onChange={(e) => {
-                    const kg = e.target.value;
-                    setConvertModal({ show: true, kgValue: kg, lbsValue: kg ? (parseFloat(kg) * 2.20462).toFixed(1) : "" });
-                  }} 
-                  className="font-black text-xl text-center h-14 bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800" 
-                  placeholder="0"
-                />
+                <Input type="number" value={convertModal.kgValue} onChange={(e) => { const kg = e.target.value; setConvertModal({ show: true, kgValue: kg, lbsValue: kg ? (parseFloat(kg) * 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center h-14 bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800" placeholder="0" />
               </div>
               <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700 mt-4 shrink-0" />
               <div className="flex-1 space-y-1">
                 <Label className="text-xs font-bold text-teal-600 dark:text-teal-500">POUNDS (LBS)</Label>
-                <Input 
-                  type="number" 
-                  value={convertModal.lbsValue} 
-                  onChange={(e) => {
-                    const lbs = e.target.value;
-                    setConvertModal({ show: true, lbsValue: lbs, kgValue: lbs ? (parseFloat(lbs) / 2.20462).toFixed(1) : "" });
-                  }} 
-                  className="font-black text-xl text-center text-teal-600 dark:text-teal-500 h-14 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800" 
-                  placeholder="0"
-                />
+                <Input type="number" value={convertModal.lbsValue} onChange={(e) => { const lbs = e.target.value; setConvertModal({ show: true, lbsValue: lbs, kgValue: lbs ? (parseFloat(lbs) / 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center text-teal-600 dark:text-teal-500 h-14 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800" placeholder="0" />
               </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* 🛡️ MODALE INFO FORMAT YOUTUBE SHORTS (VERTICAL) CORRIGÉE */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
-              {/* 🛡️ MINIATURE VERTICALE ET GESTION DU DATA SAVER */}
+              
+              {/* 🛡️ GESTION DU DATA SAVER ET DE L'IFRAME YOUTUBE */}
               {dataSaverEnabled ? (
                 <div className="w-full max-w-[200px] mx-auto aspect-[9/16] bg-zinc-100 dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center items-center">
                   <WifiOff className="w-10 h-10 text-zinc-400 mb-2" />
                   <span className="text-xs font-bold text-zinc-500">Mode Éco</span>
                 </div>
               ) : (
-                <div className="bg-zinc-900 rounded-xl shadow-sm border border-zinc-800 p-0 w-full max-w-[200px] aspect-[9/16] mx-auto flex justify-center items-center relative overflow-hidden">
+                <div className="w-full max-w-[250px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-xl overflow-hidden shadow-lg border border-zinc-200 dark:border-zinc-800">
                   {infoModal.exercise.youtube_id ? (
-                    <>
-                      <img src={`https://img.youtube.com/vi/${infoModal.exercise.youtube_id}/hqdefault.jpg`} className="w-full h-full object-cover opacity-50" alt="Aperçu" />
-                      <PlayCircle className="w-12 h-12 text-white absolute z-10 drop-shadow-md" />
-                    </>
-                  ) : <Dumbbell className="w-8 h-8 text-zinc-400 absolute z-0 opacity-50" />}
+                    <iframe 
+                      src={`https://www.youtube.com/embed/${infoModal.exercise.youtube_id}?autoplay=1&mute=0&rel=0&modestbranding=1&loop=1&playlist=${infoModal.exercise.youtube_id}`}
+                      className="absolute inset-0 w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-zinc-600">
+                      <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
+                      <span className="text-sm font-bold text-zinc-500">Vidéo non disponible</span>
+                    </div>
+                  )}
                 </div>
               )}
+
               <div className="flex flex-col items-center space-y-2 mt-4">
                 <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
                 <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">

@@ -6,7 +6,8 @@ import useSWR from "swr";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, Edit3, ArrowLeftRight, Check, FileText, Loader2 } from "lucide-react";import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, calculateWaterIntake, getCurrentWeekStreak, generateMealIdeas, getMicronutrients } from "@/lib/fitness";
+import { Activity, Flame, Play, Trophy, Moon, ChevronRight, Zap, Droplets, ShieldCheck, CheckCircle2, XCircle, Brain, Target, Scale, BatteryCharging, BatteryWarning, Battery, Info, Frown, Meh, Smile, Settings, Utensils, Pill, Clock, Apple, Edit3, ArrowLeftRight, Check, FileText, Loader2, WifiOff } from "lucide-react";
+import { calculateAge, calculateBMI, calculateBMR, calculateTDEE, calculateEstimatedBodyFat, calculateIdealWeight, calculateTargetCalories, calculateMacros, getContextualGreeting, calculateStreak, calculateWeeklyTonnage, calculateWaterIntake, getCurrentWeekStreak, generateMealIdeas, getMicronutrients } from "@/lib/fitness";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/lib/useLanguage";
 
@@ -145,10 +146,27 @@ export default function DashboardPage() {
   const [quizState, setQuizState] = useState<'playing' | 'success' | 'fail'>('playing');
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
 
-  // 🛡️ NOUVEAUX ÉTATS POUR L'ONBOARDING
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(1);
   const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
+
+  // 🛡️ NOUVEAU : ÉTAT HORS-LIGNE
+  const [isOffline, setIsOffline] = useState(false);
+
+  useEffect(() => {
+    // 🛡️ NOUVEAU : DÉTECTION HORS-LIGNE (QOL)
+    if (typeof navigator !== 'undefined') {
+      setIsOffline(!navigator.onLine);
+      const handleOnline = () => setIsOffline(false);
+      const handleOffline = () => setIsOffline(true);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     if (data?.profile) {
@@ -156,7 +174,6 @@ export default function DashboardPage() {
       if (data.profile.last_sleep_check !== todayStr) {
         setShowSleepPrompt(true);
       }
-      // 🛡️ VÉRIFICATION DE L'ONBOARDING
       if (data.profile.has_seen_onboarding === false) {
         setShowOnboarding(true);
       }
@@ -217,7 +234,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 🛡️ NOUVEAU : Fonction pour terminer l'onboarding
   const completeOnboarding = async () => {
     setIsSavingOnboarding(true);
     try {
@@ -333,6 +349,21 @@ export default function DashboardPage() {
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full pb-24">
       
+      {/* 🛡️ BANNIÈRE MODE HORS-LIGNE (QOL) */}
+      {isOffline && (
+        <div className="bg-amber-500/10 border border-amber-500/50 rounded-2xl p-4 mb-2 flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center space-x-3">
+            <div className="bg-amber-500/20 p-2 rounded-xl">
+              <WifiOff className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">{lang === 'FR' ? "Mode Hors-Ligne Actif" : "Offline Mode Active"}</h4>
+              <p className="text-xs text-amber-600/80 dark:text-amber-500/80 font-medium mt-0.5">{lang === 'FR' ? "Vos données de séance seront sauvegardées localement." : "Your workout data will be saved locally."}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <div className="flex items-center space-x-3 mb-1">
