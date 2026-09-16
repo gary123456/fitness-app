@@ -8,11 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Camera, Ruler, Upload, CheckCircle2, ArrowLeftRight, Image as ImageIcon, Loader2, Trash2, Maximize2, X, Trophy, Info, Edit3, Zap, TrendingUp } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Camera, Ruler, Upload, CheckCircle2, ArrowLeftRight, Image as ImageIcon, Loader2, Trash2, Maximize2, X, Trophy, Info, Edit3, Zap, LayoutTemplate, SlidersHorizontal, TrendingUp, AlertTriangle } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 
-const BeforeAfterSlider = ({ before, after }: { before: string, after: string }) => {
+const BeforeAfterSlider = ({ before, after, weightBefore, weightAfter }: { before: string, after: string, weightBefore: string, weightAfter: string }) => {
   const [sliderPos, setSliderPos] = useState(50);
   return (
     <div className="relative w-full max-w-sm mx-auto aspect-[3/4] rounded-2xl overflow-hidden shadow-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
@@ -26,11 +26,16 @@ const BeforeAfterSlider = ({ before, after }: { before: string, after: string })
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md"><ArrowLeftRight className="w-4 h-4 text-teal-500" /></div>
         </div>
       </div>
+      <div className="absolute bottom-4 left-4 z-10 pointer-events-none transition-opacity" style={{ opacity: sliderPos > 20 ? 1 : 0 }}>
+        <span className="bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{weightBefore}</span>
+      </div>
+      <div className="absolute bottom-4 right-4 z-10 pointer-events-none transition-opacity" style={{ opacity: sliderPos < 80 ? 1 : 0 }}>
+        <span className="bg-teal-500/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{weightAfter}</span>
+      </div>
     </div>
   );
 };
 
-// 🛡️ NOUVEAU COMPOSANT : GRAPHIQUE 1RM (Pur SVG, zéro librairie lourde)
 const OneRmChart = ({ data }: { data: { date: string, rm: number }[] }) => {
   if (!data || data.length === 0) return <div className="h-48 flex items-center justify-center text-zinc-500 font-bold">Pas assez de données.</div>;
   if (data.length === 1) return <div className="h-48 flex items-center justify-center text-zinc-500 font-bold">Enregistrez une deuxième séance.</div>;
@@ -49,22 +54,18 @@ const OneRmChart = ({ data }: { data: { date: string, rm: number }[] }) => {
   return (
     <div className="w-full h-64 bg-zinc-900 rounded-xl p-4 relative overflow-hidden shadow-inner border border-zinc-800">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full absolute inset-0 pt-4 pb-4">
-        {/* Grille de fond */}
         <line x1="0" y1="25" x2="100" y2="25" stroke="currentColor" className="text-zinc-800" strokeWidth="0.5" />
         <line x1="0" y1="50" x2="100" y2="50" stroke="currentColor" className="text-zinc-800" strokeWidth="0.5" />
         <line x1="0" y1="75" x2="100" y2="75" stroke="currentColor" className="text-zinc-800" strokeWidth="0.5" />
         
-        {/* Ligne de tendance */}
         <polyline fill="none" stroke="#eab308" strokeWidth="2" points={points} className="drop-shadow-[0_0_8px_rgba(234,179,8,0.8)]" />
         
-        {/* Points */}
         {data.map((d, i) => {
           const x = padding + (i / (data.length - 1)) * (100 - padding * 2);
           const y = 100 - padding - ((d.rm - minRM) / range) * (100 - padding * 2);
           return <circle key={i} cx={x} cy={y} r="1.5" fill="#ffffff" />;
         })}
       </svg>
-      {/* Légende du Max */}
       <div className="absolute top-4 left-4 text-xs font-black text-yellow-500 bg-yellow-500/10 px-2 py-1 rounded-md border border-yellow-500/20">
         MAX : {Math.round(Math.max(...data.map(d => d.rm)))} kg
       </div>
@@ -80,8 +81,7 @@ const fetchProgressData = async () => {
   const { data: measurements } = await supabase.from("measurements").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
   const { data: photos } = await supabase.from("progress_photos").select("*").eq("user_id", user.id).order("date", { ascending: true });
   
-  // 🛡️ NOUVEAU : On récupère l'historique des perfs pour le calcul du 1RM
-  const { data: workoutLogs } = await supabase.from("workout_logs").select("weight, reps, created_at, exercise_library(id, name)").eq("user_id", user.id).order("created_at", { ascending: true });
+  const { data: userPrs } = await supabase.from("user_prs").select("weight, reps, created_at, exercise_library(id, name)").eq("user_id", user.id).order("created_at", { ascending: true });
 
   const validMeasurements = measurements?.filter(m => m.weight_kg > 0 || m.arms_cm > 0 || m.chest_cm > 0 || m.waist_cm > 0 || m.thighs_cm > 0) || [];
 
@@ -108,14 +108,15 @@ const fetchProgressData = async () => {
     daysSinceLastWeighIn = 999;
   }
 
-  return { user, gender: profile?.gender || 'homme', currentWeight: profile?.weight_kg, measurements: validMeasurements, photos: photosWithSignedUrls, daysSinceLastWeighIn, workoutLogs: workoutLogs || [] };
+  return { user, gender: profile?.gender || 'homme', currentWeight: profile?.weight_kg, measurements: validMeasurements, photos: photosWithSignedUrls, daysSinceLastWeighIn, userPrs: userPrs || [] };
 };
 
 export default function ProgressPage() {
   const { lang } = useLanguage();
-  // 🛡️ AJOUT DU NOUVEL ONGLET 'performance'
   const [activeTab, setActiveTab] = useState<"measurements" | "photos" | "compare" | "performance">("measurements");
   
+  const [compareMode, setCompareMode] = useState<"side" | "slider">("side");
+
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -128,6 +129,9 @@ export default function ProgressPage() {
   
   const [editingMeasId, setEditingMeasId] = useState<string | null>(null);
 
+  // 🛡️ NOUVEAU : Gestion Propre des Suppressions
+  const [deleteModal, setDeleteModal] = useState<{ show: boolean, id: string | null, type: 'meas' | 'photo' }>({ show: false, id: null, type: 'meas' });
+
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState<number>(0);
   const [wizardFiles, setWizardFiles] = useState<{ front: File | null, side: File | null, back: File | null }>({ front: null, side: null, back: null });
@@ -138,16 +142,14 @@ export default function ProgressPage() {
   const [compareMeasA, setCompareMeasA] = useState("");
   const [compareMeasB, setCompareMeasB] = useState("");
   
-  // 🛡️ NOUVEAU STATE : SÉLECTION D'EXERCICE POUR L'ANALYTIQUE 1RM
   const [selectedExFor1RM, setSelectedExFor1RM] = useState<string>("");
-
   const [enlargeModal, setEnlargeModal] = useState({ show: false, url: "" });
   const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string>("");
 
   const t = {
-    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", performance: "Performance (1RM)", weight: "Poids (kg)", bfLabel: "Masse Grasse (%)", bfPlaceholder: "Optionnel (Ex: 15)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Supprimer cette donnée ?", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun.", perfTitle: "Calculateur de 1RM & Courbe de Force", perfSub: "Sélectionnez un exercice pour visualiser l'évolution de votre force maximale estimée.", selectEx: "Choisir un exercice...", cur1RM: "1RM Actuel Estimé", maxLift: "Plus Lourde Charge", volMax: "Volume Max (Série)" },
-    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", performance: "Performance (1RM)", weight: "Weight (kg)", bfLabel: "Body Fat (%)", bfPlaceholder: "Optional (Ex: 15)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Delete this data?", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach.", perfTitle: "1RM Calculator & Strength Curve", perfSub: "Select an exercise to visualize the evolution of your estimated maximal strength.", selectEx: "Select an exercise...", cur1RM: "Current Est. 1RM", maxLift: "Heaviest Lift", volMax: "Max Volume (Set)" }
+    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", performance: "Performance (1RM)", weight: "Poids (kg)", bfLabel: "Masse Grasse (%)", bfPlaceholder: "Optionnel (Ex: 15)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Voulez-vous vraiment supprimer cette donnée ? Cette action est irréversible.", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun.", perfTitle: "Calculateur de 1RM & Courbe de Force", perfSub: "Sélectionnez un exercice pour visualiser l'évolution de votre force maximale estimée.", selectEx: "Choisir un exercice...", cur1RM: "1RM Actuel Estimé", maxLift: "Plus Lourde Charge", volMax: "Volume Max (Série)", modeSide: "Côte à Côte", modeSlider: "Superposer (Slider)", delTitle: "Confirmation de suppression" },
+    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", performance: "Performance (1RM)", weight: "Weight (kg)", bfLabel: "Body Fat (%)", bfPlaceholder: "Optional (Ex: 15)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Do you really want to delete this data? This action is irreversible.", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach.", perfTitle: "1RM Calculator & Strength Curve", perfSub: "Select an exercise to visualize the evolution of your estimated maximal strength.", selectEx: "Select an exercise...", cur1RM: "Current Est. 1RM", maxLift: "Heaviest Lift", volMax: "Max Volume (Set)", modeSide: "Side by Side", modeSlider: "Overlay (Slider)", delTitle: "Confirm Deletion" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -164,11 +166,10 @@ export default function ProgressPage() {
     }
   });
 
-  // 🛡️ EXTRACTION DES EXERCICES UNIQUES POUR LE MENU DÉROULANT 1RM
   const uniqueExercises = useMemo(() => {
-    if (!data?.workoutLogs) return [];
+    if (!data?.userPrs) return [];
     const exMap = new Map();
-    data.workoutLogs.forEach((log: any) => {
+    data.userPrs.forEach((log: any) => {
       if (log.exercise_library?.id && log.weight > 0) {
         exMap.set(log.exercise_library.id, log.exercise_library.name);
       }
@@ -176,15 +177,13 @@ export default function ProgressPage() {
     const list = Array.from(exMap, ([id, name]) => ({ id, name }));
     if (list.length > 0 && !selectedExFor1RM) setSelectedExFor1RM(list[0].id);
     return list;
-  }, [data?.workoutLogs]);
+  }, [data?.userPrs]);
 
-  // 🛡️ CALCUL DU 1RM POUR L'EXERCICE SÉLECTIONNÉ
   const performanceData = useMemo(() => {
-    if (!data?.workoutLogs || !selectedExFor1RM) return null;
-    const logs = data.workoutLogs.filter((l: any) => l.exercise_library?.id === selectedExFor1RM && l.weight > 0);
+    if (!data?.userPrs || !selectedExFor1RM) return null;
+    const logs = data.userPrs.filter((l: any) => l.exercise_library?.id === selectedExFor1RM && l.weight > 0 && l.reps <= 15);
     if (logs.length === 0) return null;
 
-    // Regrouper par jour pour avoir la meilleure perf de chaque séance
     const dailyMaxMap = new Map();
     let absMaxWeight = 0;
     let absMaxVolume = 0;
@@ -206,7 +205,16 @@ export default function ProgressPage() {
     const currentRM = trendData.length > 0 ? trendData[trendData.length - 1].rm : 0;
 
     return { trendData, currentRM, absMaxWeight, absMaxVolume };
-  }, [data?.workoutLogs, selectedExFor1RM]);
+  }, [data?.userPrs, selectedExFor1RM]);
+
+  const getWeightForPhoto = (photoUrl: string) => {
+    if (!data?.photos || !data?.measurements) return "-";
+    const photo = data.photos.find((p: any) => p.front_signed_url === photoUrl || p.side_signed_url === photoUrl || p.back_signed_url === photoUrl);
+    if (!photo) return "-";
+    
+    const meas = data.measurements.find((m: any) => m.date === photo.date || m.created_at.startsWith(photo.date));
+    return meas && meas.weight_kg ? `${meas.weight_kg} kg` : "-";
+  };
 
 
   const handleSaveMeasurements = async () => {
@@ -264,16 +272,18 @@ export default function ProgressPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
 
-  const handleDeleteMeas = async (id: string) => {
-    if (!confirm(txt.delWarn)) return;
-    await supabase.from("measurements").delete().eq("id", id);
-    if (editingMeasId === id) setEditingMeasId(null);
-    mutate();
-  };
-
-  const handleDeletePhotoCard = async (id: string) => {
-    if (!confirm(txt.delWarn)) return;
-    await supabase.from("progress_photos").delete().eq("id", id);
+  // 🛡️ NOUVELLE FONCTION DE SUPPRESSION (Reliée à la Modale)
+  const confirmDeletion = async () => {
+    if (!deleteModal.id) return;
+    
+    if (deleteModal.type === 'meas') {
+      await supabase.from("measurements").delete().eq("id", deleteModal.id);
+      if (editingMeasId === deleteModal.id) setEditingMeasId(null);
+    } else {
+      await supabase.from("progress_photos").delete().eq("id", deleteModal.id);
+    }
+    
+    setDeleteModal({ show: false, id: null, type: 'meas' });
     mutate();
   };
 
@@ -339,7 +349,6 @@ export default function ProgressPage() {
         <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
       </div>
 
-      {/* 🛡️ BARRE D'ONGLETS MISE À JOUR AVEC 4 BOUTONS */}
       <div className="grid w-full grid-cols-4 bg-zinc-200/50 dark:bg-zinc-900 rounded-xl p-1 mb-6 shadow-inner overflow-x-auto">
         <button onClick={() => setActiveTab("measurements")} className={`flex items-center justify-center py-2 px-1 rounded-lg font-bold text-xs sm:text-sm transition-all ${activeTab === "measurements" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><Ruler className="w-4 h-4 mr-2 hidden sm:block" /> {txt.measure}</button>
         <button onClick={() => setActiveTab("photos")} className={`flex items-center justify-center py-2 px-1 rounded-lg font-bold text-xs sm:text-sm transition-all ${activeTab === "photos" ? "bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><ImageIcon className="w-4 h-4 mr-2 hidden sm:block" /> {txt.photos}</button>
@@ -347,7 +356,6 @@ export default function ProgressPage() {
         <button onClick={() => setActiveTab("performance")} className={`flex items-center justify-center py-2 px-1 rounded-lg font-bold text-xs sm:text-sm transition-all ${activeTab === "performance" ? "bg-white dark:bg-zinc-950 text-yellow-600 dark:text-yellow-400 shadow-sm" : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"}`}><Zap className="w-4 h-4 mr-2 hidden sm:block" /> 1RM</button>
       </div>
       
-      {/* 🛡️ NOUVEL ONGLET : PERFORMANCE & 1RM */}
       {activeTab === "performance" && (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm">
@@ -405,7 +413,6 @@ export default function ProgressPage() {
         </div>
       )}
 
-      {/* RESTE DES ONGLETS IDENTIQUES */}
       {activeTab === "measurements" && (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
           
@@ -474,7 +481,8 @@ export default function ProgressPage() {
                   </CardTitle>
                   <div className="flex space-x-1">
                     <button onClick={() => handleEditMeas(m)} className="p-1.5 text-zinc-400 hover:text-orange-500 hover:bg-orange-500/10 rounded-md transition-colors"><Edit3 className="w-4 h-4" /></button>
-                    <button onClick={() => handleDeleteMeas(m.id)} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
+                    {/* 🛡️ APPEL DE LA MODALE DE SUPPRESSION */}
+                    <button onClick={() => setDeleteModal({ show: true, id: m.id, type: 'meas' })} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 grid grid-cols-2 gap-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -508,7 +516,8 @@ export default function ProgressPage() {
                   <CardTitle className="text-sm font-bold text-teal-600 dark:text-teal-400">
                     {new Date(entry.created_at || entry.date).toLocaleDateString()} {entry.created_at && new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </CardTitle>
-                  <button onClick={() => handleDeletePhotoCard(entry.id)} className="p-1 text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  {/* 🛡️ APPEL DE LA MODALE DE SUPPRESSION */}
+                  <button onClick={() => setDeleteModal({ show: true, id: entry.id, type: 'photo' })} className="p-1 text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </CardHeader>
                 <CardContent className="p-0 grid grid-cols-3 gap-0.5 bg-zinc-100 dark:bg-zinc-800">
                   {['front', 'side', 'back'].map((type) => (
@@ -531,7 +540,19 @@ export default function ProgressPage() {
       {activeTab === "compare" && (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-            <CardHeader><CardTitle>{txt.photos}</CardTitle></CardHeader>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
+                <CardTitle>{txt.photos}</CardTitle>
+                <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl shadow-inner border border-zinc-200 dark:border-zinc-800 w-full sm:w-auto">
+                  <button onClick={() => setCompareMode("side")} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg font-bold text-xs transition-all ${compareMode === "side" ? "bg-white dark:bg-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
+                    <LayoutTemplate className="w-3 h-3 inline mr-1" /> {txt.modeSide}
+                  </button>
+                  <button onClick={() => setCompareMode("slider")} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg font-bold text-xs transition-all ${compareMode === "slider" ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
+                    <SlidersHorizontal className="w-3 h-3 inline mr-1" /> {txt.modeSlider}
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1 space-y-2">
@@ -549,8 +570,33 @@ export default function ProgressPage() {
                   </select>
                 </div>
               </div>
+
               {compareBefore && compareAfter ? (
-                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800"><BeforeAfterSlider before={compareBefore} after={compareAfter} /></div>
+                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                  {compareMode === "slider" ? (
+                    <BeforeAfterSlider 
+                      before={compareBefore} 
+                      after={compareAfter} 
+                      weightBefore={getWeightForPhoto(compareBefore)}
+                      weightAfter={getWeightForPhoto(compareAfter)}
+                    />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-[3/4] border border-zinc-200 dark:border-zinc-800">
+                        <img src={compareBefore} className="w-full h-full object-cover" alt="Before" />
+                        <div className="absolute bottom-4 left-4">
+                          <span className="bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{getWeightForPhoto(compareBefore)}</span>
+                        </div>
+                      </div>
+                      <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-[3/4] border border-zinc-200 dark:border-zinc-800">
+                        <img src={compareAfter} className="w-full h-full object-cover" alt="After" />
+                        <div className="absolute bottom-4 right-4">
+                          <span className="bg-teal-500/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{getWeightForPhoto(compareAfter)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (<div className="py-8 flex items-center justify-center text-zinc-400 font-medium border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">{txt.noPhoto}</div>)}
             </CardContent>
           </Card>
@@ -619,6 +665,28 @@ export default function ProgressPage() {
             <p className="text-zinc-500 dark:text-zinc-400 mb-6">{successMessage}</p>
             <Button onClick={() => setShowSuccessModal(false)} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold">{txt.ok}</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🛡️ NOUVELLE MODALE DE CONFIRMATION DE SUPPRESSION */}
+      <Dialog open={deleteModal.show} onOpenChange={(open) => !open && setDeleteModal({ show: false, id: null, type: 'meas' })}>
+        <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-red-500 flex items-center">
+              <AlertTriangle className="mr-2 h-5 w-5" /> {txt.delTitle}
+            </DialogTitle>
+            <DialogDescription className="font-medium text-zinc-500 pt-2">
+              {txt.delWarn}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setDeleteModal({ show: false, id: null, type: 'meas' })} className="w-full font-bold dark:border-zinc-700 dark:text-zinc-300">
+              {txt.cancel}
+            </Button>
+            <Button variant="destructive" onClick={confirmDeletion} className="w-full font-bold">
+              Confirmer
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
