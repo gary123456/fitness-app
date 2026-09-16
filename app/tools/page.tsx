@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dumbbell, Scale, Calculator, ArrowRightLeft, Target, Wrench, Timer, Play, Pause, RotateCcw, Volume2, VolumeX, Plus, Minus, Activity, Droplets, FlaskConical, X, Apple, Nut } from "lucide-react";
+import { Dumbbell, Scale, Calculator, ArrowRightLeft, Target, Wrench, Timer, Play, Pause, RotateCcw, Volume2, VolumeX, Plus, Minus, Activity, Droplets, FlaskConical, X, Apple, Nut, MoonStar, Info } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useLanguage } from "@/lib/useLanguage";
 
 const PLATES = [
@@ -74,7 +75,6 @@ export default function ToolsPage() {
   const [targetWeight, setTargetWeight] = useState<string>("");
   const [barWeight, setBarWeight] = useState<string>("20");
   
-  // 🛡️ CORRECTION : Restauration des variables de conversion Nutrition
   const [convKg, setConvKg] = useState<string>("");
   const [convLb, setConvLb] = useState<string>("");
   const [convOz, setConvOz] = useState<string>("");
@@ -98,12 +98,22 @@ export default function ToolsPage() {
   const [customMin, setCustomMin] = useState<string>("1");
   const [customSec, setCustomSec] = useState<string>("0");
   const [classicIsRunning, setClassicIsRunning] = useState(false);
+  
+  const [oledMode, setOledMode] = useState(false);
+
   const classicRef = useRef<NodeJS.Timeout | null>(null);
 
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [hiitConfig, setHiitConfig] = useState({ prepare: 10, work: 20, rest: 10, cycles: 8, sets: 1, restBetweenSets: 60, coolDown: 0 });
   const [hiitState, setHiitState] = useState({ isRunning: false, phase: "PREPARE" as "PREPARE" | "WORK" | "REST" | "SET_REST" | "COOL_DOWN" | "DONE", timeLeft: hiitConfig.prepare, currentCycle: 1, currentSet: 1 });
   const hiitRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [dotsGender, setDotsGender] = useState<"homme" | "femme">("homme");
+  const [dotsBw, setDotsBw] = useState<string>("");
+  const [dotsTotal, setDotsTotal] = useState<string>("");
+
+  // 🛡️ NOUVEAU : État pour la Modale d'Information Pédagogique
+  const [infoModal, setInfoModal] = useState<{show: boolean, title: string, desc: string} | null>(null);
 
   const t = {
     FR: { title: "Boîte à Outils", sub: "L'arsenal de la Silicon Valley pour votre entraînement.", plateCalc: "Disques", converter: "Convertir", predictor: "1RM", timer: "Chrono", elite: "Labo Pro", nuts: "Oléagineux", targetWeight: "Poids Cible (kg)", barWeight: "Poids de la Barre (kg)", eachSide: "Par côté :", totalSide: "Total par côté :", noPlates: "Entrez un poids cible supérieur à la barre.", kgToLb: "Kg vers Lbs", lbToKg: "Lbs vers Kg", weightLifted: "Poids soulevé (kg)", repsDone: "Reps réalisées", est1RM: "1RM Estimé", formula: "Basé sur la formule d'Epley", start: "Démarrer", pause: "Pause", reset: "Réinit", classic: "Classique", prepare: "Préparation", work: "Travail", rest: "Repos", cycles: "Cycles", sets: "Séries", restBetween: "Repos (Séries)", coolDown: "Retour au calme", done: "Terminé !", soundOn: "Son On", soundOff: "Son Off", sweatTitle: "Taux de Sudation", sweatSub: "Protocole hydrique.", wBefore: "Poids avant (kg)", wAfter: "Poids après (kg)", fluid: "Liquide bu (ml)", dur: "Durée (min)", sweatRate: "Perte de sueur", sweatRec: "Buvez cette quantité par heure d'effort.", nutTitle: "Calculateur d'Oléagineux", nutSub: "Convertit les 'poignées' en grammes et calories réelles.", handfuls: "Nombre de poignées :", nutConv: "Nutrition (Solides & Liquides)" },
@@ -131,7 +141,24 @@ export default function ToolsPage() {
   };
   const requiredPlates = calculatePlates();
 
-  // Handlers Sport & Nutrition
+  const calculateDots = () => {
+    const bw = parseFloat(dotsBw);
+    const total = parseFloat(dotsTotal);
+    if (!bw || !total || bw <= 0) return 0;
+
+    let coeff = 0;
+    if (dotsGender === "homme") {
+      const a = -307.75076; const b = 24.0900756; const c = -0.1918759221; const d = 0.0007391293; const e = -0.000001093;
+      const denom = a + b * bw + c * Math.pow(bw, 2) + d * Math.pow(bw, 3) + e * Math.pow(bw, 4);
+      coeff = 500 / denom;
+    } else {
+      const a = -57.96288; const b = 13.6175032; const c = -0.1126655495; const d = 0.0005158568; const e = -0.00000107;
+      const denom = a + b * bw + c * Math.pow(bw, 2) + d * Math.pow(bw, 3) + e * Math.pow(bw, 4);
+      coeff = 500 / denom;
+    }
+    return Math.round(total * coeff * 100) / 100;
+  };
+
   const handleKgChange = (val: string) => { setConvKg(val); setConvLb(val ? (parseFloat(val) * 2.20462).toFixed(2) : ""); };
   const handleLbChange = (val: string) => { setConvLb(val); setConvKg(val ? (parseFloat(val) / 2.20462).toFixed(2) : ""); };
   const handleOzChange = (val: string) => { setConvOz(val); setConvGramsOz(val ? (parseFloat(val) * 28.3495).toFixed(0) : ""); };
@@ -276,6 +303,7 @@ export default function ToolsPage() {
   };
 
   const getPhaseColor = () => {
+    if (oledMode) return "bg-black text-white border-zinc-900"; 
     switch (hiitState.phase) {
       case "WORK": return "bg-green-500 text-white shadow-green-500/50 border-green-400";
       case "REST": case "SET_REST": return "bg-red-500 text-white shadow-red-500/50 border-red-400";
@@ -285,7 +313,6 @@ export default function ToolsPage() {
     }
   };
 
-  // 🛡️ Calcul des Pourcentages du 1RM (Phase 4)
   const render1RMPercentages = () => {
     const rm = get1RM();
     if (rm <= 0) return null;
@@ -295,7 +322,7 @@ export default function ToolsPage() {
         <h4 className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-3">{lang === 'FR' ? 'Matrice de travail (Barre Olympique)' : 'Working Matrix (Olympic Bar)'}</h4>
         <div className="grid grid-cols-3 gap-2">
           {pcts.map(pct => {
-            const weight = Math.round((rm * (pct / 100)) / 2.5) * 2.5; // Arrondi au 2.5kg
+            const weight = Math.round((rm * (pct / 100)) / 2.5) * 2.5; 
             return (
               <div key={pct} className="bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-lg p-2 flex flex-col items-center justify-center shadow-sm">
                 <span className="text-[10px] font-bold text-zinc-400">{pct}%</span>
@@ -308,37 +335,57 @@ export default function ToolsPage() {
     );
   };
 
+  // 🛡️ NOUVEAU : Données pédagogiques pour le Labo Pro
+  const getModalContent = () => {
+    if (infoModal?.title === "Score DOTS") {
+      return lang === 'FR' 
+        ? "Le Score DOTS est la formule mathématique officielle utilisée en Powerlifting depuis 2020. Elle permet de comparer la force de deux athlètes de poids différents, hommes ou femmes.\n\nExemple : Un athlète de 70kg qui soulève 400kg au total (Squat + Bench + Deadlift) est considéré comme 'plus fort' qu'un athlète de 120kg qui soulève 450kg. Le DOTS lisse cet écart.\n\n• < 300 : Débutant\n• 300 - 400 : Intermédiaire / Bon\n• 400 - 500 : Athlète d'Élite\n• > 500 : Niveau Mondial"
+        : "The DOTS Score is the official mathematical formula used in Powerlifting since 2020. It compares the relative strength of athletes across different body weights and genders.\n\nExample: A 70kg athlete lifting a 400kg total (Squat + Bench + Deadlift) is considered 'stronger' than a 120kg athlete lifting 450kg. DOTS normalizes this gap.\n\n• < 300: Beginner\n• 300 - 400: Intermediate / Good\n• 400 - 500: Elite Athlete\n• > 500: World Class";
+    }
+    if (infoModal?.title === "Taux de Sudation") {
+      return lang === 'FR'
+        ? "Le Taux de Sudation (Sweat Rate) est une métrique clinique utilisée par les athlètes professionnels (Marathoniens, NFL, MMA) pour éviter la déshydratation mortelle pour les performances.\n\n1. Pesez-vous nu avant l'entraînement.\n2. Notez la quantité d'eau que vous buvez pendant la séance (en ml).\n3. Pesez-vous nu après l'entraînement (et après avoir uriné si besoin).\n4. Entrez la durée exacte.\n\nLe résultat vous indiquera exactement combien de millilitres d'eau votre corps perd par heure. Vous devrez boire cette quantité précise lors de vos prochaines séances d'intensité similaire pour ne jamais baisser en performance."
+        : "The Sweat Rate is a clinical metric used by pro athletes (Marathoners, NFL, MMA) to avoid performance-killing dehydration.\n\n1. Weigh yourself naked before training.\n2. Note the fluid you drink during the session (in ml).\n3. Weigh yourself naked after training (and after urinating if needed).\n4. Enter exact duration.\n\nThe result tells you exactly how many milliliters of water your body loses per hour. You should drink this precise amount during your next sessions of similar intensity to never drop in performance.";
+    }
+    return "";
+  };
+
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-5xl mx-auto w-full pb-24">
-      <div className="flex flex-col space-y-2 mb-8">
-        <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
-          <Wrench className="w-8 h-8 mr-3 text-teal-500" /> {txt.title}
-        </h2>
-        <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
-      </div>
+    <div className={`flex-1 space-y-6 pt-6 max-w-5xl mx-auto w-full pb-24 transition-colors duration-500 ${oledMode && activeTab === 'timer' ? 'bg-black p-0 h-screen w-screen fixed inset-0 z-[9999]' : 'p-4 md:p-8'}`}>
+      
+      {!oledMode && (
+        <div className="flex flex-col space-y-2 mb-8">
+          <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
+            <Wrench className="w-8 h-8 mr-3 text-teal-500" /> {txt.title}
+          </h2>
+          <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
+        </div>
+      )}
 
-      <div className="grid grid-cols-6 gap-2 mb-8 bg-zinc-200/50 dark:bg-zinc-900 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide">
-        <button onClick={() => setActiveTab("plates")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'plates' ? 'bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <Target className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.plateCalc}</span>
-        </button>
-        <button onClick={() => setActiveTab("predict")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'predict' ? 'bg-white dark:bg-zinc-950 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <Calculator className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.predictor}</span>
-        </button>
-        <button onClick={() => setActiveTab("convert")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'convert' ? 'bg-white dark:bg-zinc-950 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <ArrowRightLeft className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.converter}</span>
-        </button>
-        <button onClick={() => setActiveTab("nuts")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'nuts' ? 'bg-white dark:bg-zinc-950 text-yellow-600 dark:text-yellow-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <Nut className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.nuts}</span>
-        </button>
-        <button onClick={() => setActiveTab("timer")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'timer' ? 'bg-white dark:bg-zinc-950 text-red-600 dark:text-red-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <Timer className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.timer}</span>
-        </button>
-        <button onClick={() => setActiveTab("elite")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'elite' ? 'bg-white dark:bg-zinc-950 text-fuchsia-600 dark:text-fuchsia-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
-          <FlaskConical className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.elite}</span>
-        </button>
-      </div>
+      {!oledMode && (
+        <div className="grid grid-cols-6 gap-2 mb-8 bg-zinc-200/50 dark:bg-zinc-900 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide">
+          <button onClick={() => setActiveTab("plates")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'plates' ? 'bg-white dark:bg-zinc-950 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+            <Target className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.plateCalc}</span>
+          </button>
+          <button onClick={() => setActiveTab("predict")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'predict' ? 'bg-white dark:bg-zinc-950 text-indigo-600 dark:text-indigo-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+            <Calculator className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.predictor}</span>
+          </button>
+          <button onClick={() => setActiveTab("convert")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'convert' ? 'bg-white dark:bg-zinc-950 text-orange-600 dark:text-orange-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+            <ArrowRightLeft className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.converter}</span>
+          </button>
+          <button onClick={() => setActiveTab("nuts")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'nuts' ? 'bg-white dark:bg-zinc-950 text-yellow-600 dark:text-yellow-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+            <Nut className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.nuts}</span>
+          </button>
+          <button onClick={() => setActiveTab("timer")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'timer' ? 'bg-white dark:bg-zinc-950 text-red-600 dark:text-red-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+            <Timer className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.timer}</span>
+          </button>
+          <button onClick={() => setActiveTab("elite")} className={`flex flex-col items-center justify-center p-3 rounded-xl transition-all font-bold min-w-[60px] ${activeTab === 'elite' ? 'bg-white dark:bg-zinc-950 text-fuchsia-600 dark:text-fuchsia-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'}`}>
+            <FlaskConical className="w-4 h-4 mb-1" /><span className="text-[8px] uppercase tracking-wider">{txt.elite}</span>
+          </button>
+        </div>
+      )}
 
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 h-full">
         
         {activeTab === "plates" && (
           <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
@@ -423,7 +470,7 @@ export default function ToolsPage() {
           </Card>
         )}
 
-        {/* ONGLET CONVERTISSEUR COMPLET (SPORT + NUTRITION RESTAURÉE) */}
+        {/* ONGLET CONVERTISSEUR COMPLET */}
         {activeTab === "convert" && (
           <div className="space-y-4">
             <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
@@ -461,7 +508,7 @@ export default function ToolsPage() {
           </div>
         )}
 
-        {/* ONGLET OLÉAGINEUX (NUTS ESTIMATOR) */}
+        {/* ONGLET OLÉAGINEUX */}
         {activeTab === "nuts" && (
           <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
             <CardHeader>
@@ -518,29 +565,47 @@ export default function ToolsPage() {
           </Card>
         )}
 
+        {/* ONGLET TIMER & OLED */}
         {activeTab === "timer" && (
-          <div className="space-y-4">
-            <div className="flex justify-center mb-4">
-              <div className="bg-zinc-200/50 dark:bg-zinc-900 p-1 rounded-xl flex space-x-1">
-                <button onClick={() => setTimerMode("hiit")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${timerMode === 'hiit' ? 'bg-white dark:bg-zinc-950 text-red-500 shadow-sm' : 'text-zinc-500'}`}>HIIT / Tabata</button>
-                <button onClick={() => setTimerMode("classic")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${timerMode === 'classic' ? 'bg-white dark:bg-zinc-950 text-blue-500 shadow-sm' : 'text-zinc-500'}`}>{txt.classic}</button>
+          <div className={`space-y-4 h-full flex flex-col ${oledMode ? 'justify-center items-center' : ''}`}>
+            {!oledMode && (
+              <div className="flex justify-center mb-4">
+                <div className="bg-zinc-200/50 dark:bg-zinc-900 p-1 rounded-xl flex space-x-1">
+                  <button onClick={() => setTimerMode("hiit")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${timerMode === 'hiit' ? 'bg-white dark:bg-zinc-950 text-red-500 shadow-sm' : 'text-zinc-500'}`}>HIIT / Tabata</button>
+                  <button onClick={() => setTimerMode("classic")} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${timerMode === 'classic' ? 'bg-white dark:bg-zinc-950 text-blue-500 shadow-sm' : 'text-zinc-500'}`}>{txt.classic}</button>
+                </div>
               </div>
-            </div>
+            )}
 
             {timerMode === "classic" && (
-              <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg">
-                <CardHeader className="text-center pb-2 relative">
-                  <button onClick={() => setAudioEnabled(!audioEnabled)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-indigo-500 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
-                    {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-                  </button>
-                  <CardTitle className="text-blue-500 font-black tracking-widest uppercase">Timer Classique</CardTitle>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center justify-center py-8">
-                  <div className={`text-7xl sm:text-8xl font-black tabular-nums transition-colors duration-500 ${classicIsRunning ? 'text-blue-500' : 'text-zinc-900 dark:text-zinc-100'}`}>
+              <Card className={`transition-all duration-500 ${oledMode ? 'border-none bg-transparent shadow-none w-full' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg'}`}>
+                {!oledMode && (
+                  <CardHeader className="text-center pb-2 relative">
+                    <button onClick={() => setOledMode(true)} className="absolute top-4 left-4 p-2 text-zinc-400 hover:text-white bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors" title="Mode OLED (Éco Batterie)">
+                      <MoonStar className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => setAudioEnabled(!audioEnabled)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-indigo-500 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
+                      {audioEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                    </button>
+                    <CardTitle className="text-blue-500 font-black tracking-widest uppercase">Timer Classique</CardTitle>
+                  </CardHeader>
+                )}
+                <CardContent className={`flex flex-col items-center justify-center ${oledMode ? 'py-0 h-full' : 'py-8'}`}>
+                  
+                  {oledMode && (
+                    <div className="absolute top-10 flex justify-between w-full px-10">
+                       <button onClick={() => setOledMode(false)} className="p-3 text-zinc-600 hover:text-white transition-colors border border-zinc-800 rounded-full"><X className="w-6 h-6" /></button>
+                       <button onClick={() => setAudioEnabled(!audioEnabled)} className="p-3 text-zinc-600 hover:text-white transition-colors border border-zinc-800 rounded-full">
+                        {audioEnabled ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
+                       </button>
+                    </div>
+                  )}
+
+                  <div className={`font-black tabular-nums transition-colors duration-500 ${oledMode ? 'text-[150px] sm:text-[200px] text-red-600 tracking-tighter' : 'text-7xl sm:text-8xl'} ${classicIsRunning && !oledMode ? 'text-blue-500' : (!oledMode ? 'text-zinc-900 dark:text-zinc-100' : '')}`}>
                     {formatTime(classicTime)}
                   </div>
                   
-                  {!classicIsRunning && (
+                  {!classicIsRunning && !oledMode && (
                     <div className="flex items-center space-x-2 mt-6">
                       <Input type="number" value={customMin} onChange={(e) => setCustomMin(e.target.value)} className="w-16 h-10 text-center font-bold" placeholder="Min" />
                       <span className="font-bold">:</span>
@@ -549,12 +614,12 @@ export default function ToolsPage() {
                     </div>
                   )}
 
-                  <div className="flex items-center space-x-4 mt-8 w-full max-w-xs">
-                    <Button onClick={toggleClassicTimer} className={`flex-1 h-16 text-xl font-black text-white ${classicIsRunning ? 'bg-zinc-800 hover:bg-zinc-700' : 'bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-500/40'}`}>
-                      {classicIsRunning ? <><Pause className="w-6 h-6 mr-2"/> {txt.pause}</> : <><Play className="w-6 h-6 mr-2"/> {txt.start}</>}
+                  <div className={`flex items-center space-x-4 w-full max-w-xs ${oledMode ? 'mt-16' : 'mt-8'}`}>
+                    <Button onClick={toggleClassicTimer} className={`flex-1 h-20 text-xl font-black ${oledMode ? 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 border border-zinc-800' : (classicIsRunning ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg shadow-blue-500/40')}`}>
+                      {classicIsRunning ? <><Pause className="w-8 h-8 mr-2"/> {txt.pause}</> : <><Play className="w-8 h-8 mr-2"/> {txt.start}</>}
                     </Button>
-                    <Button onClick={() => { setClassicIsRunning(false); setClassicTime(60); }} variant="outline" className="h-16 px-6 border-zinc-300 dark:border-zinc-700 text-zinc-500">
-                      <RotateCcw className="w-6 h-6" />
+                    <Button onClick={() => { setClassicIsRunning(false); setClassicTime(60); }} variant="outline" className={`h-20 px-6 ${oledMode ? 'bg-zinc-900 text-zinc-600 border-zinc-800 hover:bg-zinc-800' : 'border-zinc-300 dark:border-zinc-700 text-zinc-500'}`}>
+                      <RotateCcw className="w-8 h-8" />
                     </Button>
                   </div>
                 </CardContent>
@@ -562,28 +627,36 @@ export default function ToolsPage() {
             )}
 
             {timerMode === "hiit" && (
-              hiitState.isRunning || hiitState.phase === "DONE" ? (
-                <Card className={`border-2 shadow-2xl transition-colors duration-500 overflow-hidden ${getPhaseColor()}`}>
+              hiitState.isRunning || hiitState.phase === "DONE" || oledMode ? (
+                <Card className={`transition-all duration-500 overflow-hidden w-full ${oledMode ? 'border-none bg-black shadow-none h-full flex flex-col justify-center' : `border-2 shadow-2xl ${getPhaseColor()}`}`}>
                   <CardContent className="flex flex-col items-center justify-center py-20 relative">
-                    <button onClick={resetHiit} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20"><X className="w-6 h-6" /></button>
-                    <button onClick={() => setAudioEnabled(!audioEnabled)} className="absolute top-4 right-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20">
+                    {!oledMode && (
+                       <button onClick={resetHiit} className="absolute top-4 left-4 p-2 bg-black/20 text-white rounded-full hover:bg-black/40 transition-colors z-20"><X className="w-6 h-6" /></button>
+                    )}
+                    
+                    <button onClick={() => setOledMode(!oledMode)} className={`absolute ${oledMode ? 'top-10 left-10 text-zinc-600 hover:text-white border border-zinc-800' : 'top-4 left-16 bg-black/20 text-white hover:bg-black/40'} p-3 rounded-full transition-colors z-20`} title="Mode OLED">
+                      {oledMode ? <X className="w-6 h-6" /> : <MoonStar className="w-6 h-6" />}
+                    </button>
+
+                    <button onClick={() => setAudioEnabled(!audioEnabled)} className={`absolute ${oledMode ? 'top-10 right-10 text-zinc-600 hover:text-white border border-zinc-800' : 'top-4 right-4 bg-black/20 text-white hover:bg-black/40'} p-3 rounded-full transition-colors z-20`}>
                       {audioEnabled ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
                     </button>
-                    <h2 className="text-2xl sm:text-4xl font-black uppercase tracking-widest mb-2 opacity-90 drop-shadow-md">
+
+                    <h2 className={`font-black uppercase tracking-widest mb-2 opacity-90 drop-shadow-md ${oledMode ? 'text-zinc-600 text-3xl' : 'text-2xl sm:text-4xl'}`}>
                       {txt[hiitState.phase.toLowerCase() as keyof typeof txt] || hiitState.phase}
                     </h2>
-                    <div className="text-[120px] sm:text-[160px] font-black tabular-nums leading-none drop-shadow-xl mb-8">
+                    <div className={`font-black tabular-nums leading-none mb-8 ${oledMode ? 'text-[150px] sm:text-[200px] tracking-tighter text-red-600' : 'text-[120px] sm:text-[160px] drop-shadow-xl'}`}>
                       {hiitState.phase === "DONE" ? "✅" : formatTime(hiitState.timeLeft)}
                     </div>
                     {hiitState.phase !== "PREPARE" && hiitState.phase !== "DONE" && hiitState.phase !== "COOL_DOWN" && (
-                      <div className="flex space-x-8 text-xl font-bold bg-black/20 px-6 py-3 rounded-2xl backdrop-blur-sm">
+                      <div className={`flex space-x-8 text-xl font-bold px-6 py-3 rounded-2xl ${oledMode ? 'bg-zinc-900 border border-zinc-800 text-zinc-500' : 'bg-black/20 backdrop-blur-sm'}`}>
                         <div className="text-center"><span className="block text-xs uppercase opacity-70 mb-1">{txt.cycles}</span>{hiitState.currentCycle} / {hiitConfig.cycles}</div>
-                        <div className="w-px bg-white/20"></div>
+                        <div className={`w-px ${oledMode ? 'bg-zinc-800' : 'bg-white/20'}`}></div>
                         <div className="text-center"><span className="block text-xs uppercase opacity-70 mb-1">{txt.sets}</span>{hiitState.currentSet} / {hiitConfig.sets}</div>
                       </div>
                     )}
-                    <Button onClick={toggleHiit} className="mt-12 bg-white text-black hover:bg-zinc-200 h-16 px-12 text-xl font-black shadow-xl">
-                      {hiitState.phase === "DONE" ? <RotateCcw className="w-6 h-6 mr-2" /> : (hiitState.isRunning ? <Pause className="w-6 h-6 mr-2" /> : <Play className="w-6 h-6 mr-2" />)}
+                    <Button onClick={toggleHiit} className={`mt-12 h-20 px-12 text-2xl font-black shadow-xl ${oledMode ? 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:bg-zinc-800' : 'bg-white text-black hover:bg-zinc-200'}`}>
+                      {hiitState.phase === "DONE" ? <RotateCcw className="w-8 h-8 mr-2" /> : (hiitState.isRunning ? <Pause className="w-8 h-8 mr-2" /> : <Play className="w-8 h-8 mr-2" />)}
                       {hiitState.phase === "DONE" ? txt.reset : (hiitState.isRunning ? txt.pause : "Reprendre")}
                     </Button>
                   </CardContent>
@@ -594,10 +667,15 @@ export default function ToolsPage() {
                     <CardTitle className="text-red-500 font-black tracking-widest uppercase flex items-center">
                       <Activity className="w-5 h-5 mr-2" /> HIIT Pro
                     </CardTitle>
-                    <button onClick={() => setAudioEnabled(!audioEnabled)} className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${audioEnabled ? 'bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-900/30 dark:border-teal-800 dark:text-teal-400' : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400'}`}>
-                      {audioEnabled ? <Volume2 className="w-3 h-3 mr-1.5" /> : <VolumeX className="w-3 h-3 mr-1.5" />}
-                      {audioEnabled ? txt.soundOn : txt.soundOff}
-                    </button>
+                    <div className="flex space-x-2">
+                      <button onClick={() => setOledMode(true)} className="p-2 text-zinc-400 hover:text-white bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors" title="Mode OLED (Éco Batterie)">
+                        <MoonStar className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setAudioEnabled(!audioEnabled)} className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-colors ${audioEnabled ? 'bg-teal-50 text-teal-600 border-teal-200 dark:bg-teal-900/30 dark:border-teal-800 dark:text-teal-400' : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400'}`}>
+                        {audioEnabled ? <Volume2 className="w-3 h-3 mr-1.5" /> : <VolumeX className="w-3 h-3 mr-1.5" />}
+                        {audioEnabled ? txt.soundOn : txt.soundOff}
+                      </button>
+                    </div>
                   </CardHeader>
                   <CardContent className="p-0">
                     <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -632,11 +710,51 @@ export default function ToolsPage() {
           </div>
         )}
 
+        {/* ONGLET LABO PRO : Ajout du calculateur DOTS */}
         {activeTab === "elite" && (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
-            <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg border-t-4 border-t-fuchsia-500">
+            
+            <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg border-t-4 border-t-indigo-500 relative">
+              {/* 🛡️ BOUTON INFO PÉDAGOGIQUE POUR LE SCORE DOTS */}
+              <button onClick={() => setInfoModal({ show: true, title: "Score DOTS", desc: "" })} className="absolute top-4 right-4 p-1.5 text-zinc-400 hover:text-indigo-500 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors z-10">
+                <Info className="w-4 h-4" />
+              </button>
+              
               <CardHeader>
-                <CardTitle className="flex items-center text-fuchsia-600 dark:text-fuchsia-400"><Droplets className="w-5 h-5 mr-2" /> {txt.sweatTitle}</CardTitle>
+                <CardTitle className="flex items-center text-indigo-600 dark:text-indigo-400 pr-8"><Target className="w-5 h-5 mr-2" /> Score DOTS (Powerlifting)</CardTitle>
+                <CardDescription>Le standard mondial pour comparer la force relative.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl">
+                  <button onClick={() => setDotsGender("homme")} className={`flex-1 py-2 font-bold text-sm rounded-lg transition-colors ${dotsGender === "homme" ? "bg-white dark:bg-zinc-900 text-indigo-600 shadow-sm" : "text-zinc-500"}`}>Homme</button>
+                  <button onClick={() => setDotsGender("femme")} className={`flex-1 py-2 font-bold text-sm rounded-lg transition-colors ${dotsGender === "femme" ? "bg-white dark:bg-zinc-900 text-indigo-600 shadow-sm" : "text-zinc-500"}`}>Femme</button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="font-bold text-zinc-600 dark:text-zinc-400">Poids de corps (kg)</Label>
+                    <Input type="number" step="0.1" placeholder="Ex: 75" value={dotsBw} onChange={(e) => setDotsBw(e.target.value)} className="font-black text-xl h-12 bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-bold text-zinc-600 dark:text-zinc-400">Total SBD (kg)</Label>
+                    <Input type="number" step="1" placeholder="Ex: 450" value={dotsTotal} onChange={(e) => setDotsTotal(e.target.value)} className="font-black text-xl h-12 bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-indigo-500" />
+                  </div>
+                </div>
+                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex flex-col items-center justify-center bg-indigo-50 dark:bg-indigo-900/10 p-6 rounded-2xl text-center">
+                  <span className="font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-widest mb-2">Score de Force Relative</span>
+                  <div className="text-6xl font-black text-indigo-500">{calculateDots() || 0}</div>
+                  <p className="text-xs font-bold text-zinc-500 mt-4">Un score {'>'} 400 est considéré comme exceptionnel.</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg border-t-4 border-t-fuchsia-500 relative">
+              {/* 🛡️ BOUTON INFO PÉDAGOGIQUE POUR LE TAUX DE SUDATION */}
+              <button onClick={() => setInfoModal({ show: true, title: "Taux de Sudation", desc: "" })} className="absolute top-4 right-4 p-1.5 text-zinc-400 hover:text-fuchsia-500 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors z-10">
+                <Info className="w-4 h-4" />
+              </button>
+              
+              <CardHeader>
+                <CardTitle className="flex items-center text-fuchsia-600 dark:text-fuchsia-400 pr-8"><Droplets className="w-5 h-5 mr-2" /> {txt.sweatTitle}</CardTitle>
                 <CardDescription>{txt.sweatSub}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -670,6 +788,27 @@ export default function ToolsPage() {
         )}
 
       </div>
+
+      {/* 🛡️ MODALE D'INFORMATION GLOBALE PÉDAGOGIQUE */}
+      <Dialog open={infoModal !== null} onOpenChange={(open) => !open && setInfoModal(null)}>
+        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black text-indigo-600 dark:text-indigo-400 flex items-center">
+              <Info className="w-5 h-5 mr-2" /> {infoModal?.title}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400 leading-relaxed whitespace-pre-wrap">
+              {getModalContent()}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setInfoModal(null)} className="w-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold">
+              {lang === 'FR' ? "Compris" : "Got it"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

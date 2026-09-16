@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { toPng } from "html-to-image";
-import confetti from "canvas-confetti"; // 🛡️ IMPORT CONFETTIS
+import confetti from "canvas-confetti"; 
 import { ArrowLeft, Check, Dumbbell, Timer, X, Trophy, CheckCircle2, Repeat, Info, Brain, Share2, Loader2, Wind, Sparkles, ShieldCheck, WifiOff, Star, Calculator, Target, ArrowLeftRight, Scale, Filter, Activity, ArrowUp, ArrowDown, Flame, Copy, PlayCircle, GripVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -15,6 +15,17 @@ import { Label } from "@/components/ui/label";
 import { useLanguage } from "@/lib/useLanguage";
 import { awardWorkoutXP } from "@/lib/gamification-engine";
 import AudioHapticTimer from "@/components/AudioHapticTimer";
+
+// 🛡️ NOUVEAU : Plaques olympiques pour la calculatrice in-workout
+const PLATES = [
+  { weight: 25, color: "bg-red-500", h: "h-20", w: "w-4" },
+  { weight: 20, color: "bg-blue-500", h: "h-20", w: "w-3" },
+  { weight: 15, color: "bg-yellow-400", h: "h-16", w: "w-3" },
+  { weight: 10, color: "bg-green-500", h: "h-12", w: "w-3" },
+  { weight: 5, color: "bg-white text-black", h: "h-10", w: "w-2" },
+  { weight: 2.5, color: "bg-zinc-800", h: "h-8", w: "w-1" },
+  { weight: 1.25, color: "bg-zinc-700", h: "h-6", w: "w-1" }
+];
 
 const getSessionInsights = (exercises: any[], lang: string) => {
   const patterns = exercises.map(we => we.exercise_library?.movement_pattern || "");
@@ -171,7 +182,9 @@ function ActiveWorkoutSessionContent() {
   const [isSharing, setIsSharing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  const [plateModal, setPlateModal] = useState({ show: false, weight: 0 });
+  // 🛡️ NOUVEAU STATE POUR LA CALCULATRICE INTERACTIVE (Phase 6)
+  const [plateModal, setPlateModal] = useState({ show: false, targetWeight: "", barWeight: "20" });
+  
   const [showRpeModal, setShowRpeModal] = useState(false);
   const [sessionRpe, setSessionRpe] = useState(7);
   
@@ -197,7 +210,27 @@ function ActiveWorkoutSessionContent() {
   
   const stravaCardRef = useRef<HTMLDivElement>(null);
 
-  // 🛡️ INITIALISATION DU RPE INTELLIGENT
+  // 🛡️ Logique de la Calculatrice de Disques In-Workout
+  const calculatePlates = () => {
+    const target = parseFloat(plateModal.targetWeight);
+    const bar = parseFloat(plateModal.barWeight);
+    if (!target || !bar || target <= bar) return [];
+
+    let weightPerSide = (target - bar) / 2;
+    const platesNeeded: {weight: number, count: number, visual: any}[] = [];
+
+    for (const plate of PLATES) {
+      if (weightPerSide >= plate.weight) {
+        const count = Math.floor(weightPerSide / plate.weight);
+        platesNeeded.push({ weight: plate.weight, count, visual: plate });
+        weightPerSide -= (plate.weight * count);
+        weightPerSide = Math.round(weightPerSide * 100) / 100;
+      }
+    }
+    return platesNeeded;
+  };
+  const requiredPlates = calculatePlates();
+
   useEffect(() => {
     const savedRpe = localStorage.getItem("vivex_last_rpe");
     if (savedRpe) {
@@ -275,8 +308,8 @@ function ActiveWorkoutSessionContent() {
   }, [showBreathingModal, breatheTime]);
 
   const t = {
-    FR: { bw: "Poids du corps", activeTracker: "Tracker Actif", target: "Objectif", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", load: "Chargement...", notFound: "En attente...", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Protéines + Hydratation.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées.", ghost: "Précédent", rpeTitle: "Difficulté (RPE)", rpeSub: "Évaluez l'effort global.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur", calcSub: "Barre de 20 kg.", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", search: "Rechercher...", warmupSetTitle: "Séries d'Échauffement", generateWarmup: "Générer la Chauffe", warmupSet: "Chauffe" },
-    EN: { bw: "Bodyweight", activeTracker: "Active Tracker", target: "Target", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", load: "Loading...", notFound: "Waiting...", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Protein + Hydration.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when restored.", ghost: "Previous", rpeTitle: "Difficulty (RPE)", rpeSub: "Rate global effort.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "20 kg bar.", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", search: "Search...", warmupSetTitle: "Warm-up Sets", generateWarmup: "Generate Warm-up", warmupSet: "Warm" }
+    FR: { bw: "Poids du corps", activeTracker: "Tracker Actif", target: "Objectif", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", load: "Chargement...", notFound: "En attente...", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Protéines + Hydratation.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées.", ghost: "Précédent", rpeTitle: "Difficulté (RPE)", rpeSub: "Évaluez l'effort global.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur", calcSub: "Configurez la charge.", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", search: "Rechercher...", warmupSetTitle: "Séries d'Échauffement", generateWarmup: "Générer la Chauffe", warmupSet: "Chauffe", eachSide: "Par côté :", noPlates: "Entrez un poids cible > barre." },
+    EN: { bw: "Bodyweight", activeTracker: "Active Tracker", target: "Target", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", load: "Loading...", notFound: "Waiting...", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Protein + Hydration.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when restored.", ghost: "Previous", rpeTitle: "Difficulty (RPE)", rpeSub: "Rate global effort.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "Configure weight.", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", search: "Search...", warmupSetTitle: "Warm-up Sets", generateWarmup: "Generate Warm-up", warmupSet: "Warm", eachSide: "Per side:", noPlates: "Enter target weight > bar." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -370,18 +403,6 @@ function ActiveWorkoutSessionContent() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const calculatePlates = (totalWeight: number) => {
-    const barWeight = 20;
-    let remaining = (totalWeight - barWeight) / 2;
-    if (remaining <= 0) return [];
-    const availablePlates = [25, 20, 15, 10, 5, 2.5, 1.25];
-    const platesToUse: number[] = [];
-    for (const plate of availablePlates) {
-      while (remaining >= plate) { platesToUse.push(plate); remaining -= plate; }
-    }
-    return platesToUse;
-  };
-
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
     if (navigator.vibrate) navigator.vibrate(15);
@@ -457,7 +478,6 @@ function ActiveWorkoutSessionContent() {
     setIsSaving(true);
     setShowRpeModal(false);
 
-    // 🛡️ SAUVEGARDE DU RPE INTELLIGENT
     localStorage.setItem("vivex_last_rpe", sessionRpe.toString());
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -468,7 +488,7 @@ function ActiveWorkoutSessionContent() {
     let maxWeight = 0;
     let maxRepsForWeight = 0;
     let bestExName = "";
-    let hitPR = false; // 🛡️ DÉTECTEUR DE PR POUR LES CONFETTIS
+    let hitPR = false; 
 
     for (const [setKey, isCompleted] of Object.entries(completedSets)) {
       if (isCompleted) {
@@ -480,7 +500,6 @@ function ActiveWorkoutSessionContent() {
         const fallbackRep = extractMaxNumber(we?.target_reps || "0");
         const reps = parseInt(values.reps) || fallbackRep;
 
-        // Détection de PR
         const identifier = we?.id || we?.exercise_id;
         const ghost = data.ghostData[identifier];
         if (ghost && weight > parseFloat(ghost.weight)) {
@@ -534,7 +553,6 @@ function ActiveWorkoutSessionContent() {
       isOfflineSaved = true;
     }
 
-    // 🛡️ DÉCLENCHEMENT DES CONFETTIS SI PR BATTU
     if (hitPR && !isReplay && !isOfflineSaved) {
       setTimeout(() => {
         confetti({
@@ -798,11 +816,13 @@ function ActiveWorkoutSessionContent() {
                         <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
                           <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
                           
-                          {we.recommended_weight > 20 && (
-                            <button onClick={(e) => { e.stopPropagation(); setPlateModal({ show: true, weight: we.recommended_weight }); }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors">
-                              <Calculator className="w-3 h-3 text-teal-700 dark:text-teal-400" />
-                            </button>
-                          )}
+                          {/* 🛡️ AJOUT DU BOUTON DE CALCULATRICE DE DISQUE : TOUJOURS VISIBLE (QOL) */}
+                          <button onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setPlateModal({ show: true, targetWeight: we.recommended_weight > 0 ? we.recommended_weight.toString() : "", barWeight: "20" }); 
+                          }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors">
+                            <Calculator className="w-3 h-3 text-teal-700 dark:text-teal-400" />
+                          </button>
                         </div>
                       )}
                       
@@ -1011,7 +1031,8 @@ function ActiveWorkoutSessionContent() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={plateModal.show} onOpenChange={(open) => !open && setPlateModal({ show: false, weight: 0 })}>
+      {/* 🛡️ MODALE DE CALCULATRICE DE DISQUE INTÉGRÉE (Toujours accessible via l'icône target) */}
+      <Dialog open={plateModal.show} onOpenChange={(open) => !open && setPlateModal({ show: false, targetWeight: "", barWeight: "20" })}>
         <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           <DialogHeader>
             <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
@@ -1020,26 +1041,33 @@ function ActiveWorkoutSessionContent() {
             <DialogDescription className="text-zinc-500">{txt.calcSub}</DialogDescription>
           </DialogHeader>
           <div className="py-6 flex flex-col items-center">
-            <div className="text-4xl font-black text-zinc-900 dark:text-zinc-100 mb-6">{plateModal.weight} kg</div>
             
+            <div className="flex w-full space-x-2 mb-6">
+              <div className="flex-1 space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-zinc-400">Objectif (kg)</Label>
+                <Input type="number" value={plateModal.targetWeight} onChange={(e) => setPlateModal(prev => ({ ...prev, targetWeight: e.target.value }))} className="font-black text-center h-10 border-teal-200" />
+              </div>
+              <div className="w-20 space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-zinc-400">Barre</Label>
+                <Input type="number" value={plateModal.barWeight} onChange={(e) => setPlateModal(prev => ({ ...prev, barWeight: e.target.value }))} className="font-black text-center h-10" />
+              </div>
+            </div>
+
             <div className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col items-center space-y-3">
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">De chaque côté :</span>
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{txt.eachSide}</span>
               <div className="flex flex-wrap justify-center gap-2">
-                {calculatePlates(plateModal.weight).length === 0 ? (
-                  <span className="font-medium text-zinc-500">Barre à vide</span>
+                {requiredPlates.length === 0 ? (
+                  <span className="font-medium text-zinc-500 text-sm">Barre à vide ou <br/>Poids invalide</span>
                 ) : (
-                  calculatePlates(plateModal.weight).map((p, i) => (
-                    <div key={i} className="bg-teal-500 text-white font-black px-3 py-2 rounded-lg shadow-sm border border-teal-600">
-                      {p}kg
+                  requiredPlates.map((p, i) => (
+                    <div key={i} className="flex items-center justify-center bg-teal-500 text-white font-black px-2 py-1.5 rounded-lg shadow-sm border border-teal-600 text-sm">
+                      {p.weight} <span className="ml-1 opacity-70 text-[10px]">×{p.count}</span>
                     </div>
                   ))
                 )}
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" className="w-full font-bold rounded-xl h-12" onClick={() => setPlateModal({ show: false, weight: 0 })}>Fermer</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1066,14 +1094,12 @@ function ActiveWorkoutSessionContent() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ MODALE INFO FORMAT YOUTUBE SHORTS (VERTICAL) CORRIGÉE */}
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
               
-              {/* 🛡️ GESTION DU DATA SAVER ET DE L'IFRAME YOUTUBE */}
               {dataSaverEnabled ? (
                 <div className="w-full max-w-[200px] mx-auto aspect-[9/16] bg-zinc-100 dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center items-center">
                   <WifiOff className="w-10 h-10 text-zinc-400 mb-2" />
