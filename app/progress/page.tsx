@@ -116,6 +116,8 @@ export default function ProgressPage() {
   const [activeTab, setActiveTab] = useState<"measurements" | "photos" | "compare" | "performance">("measurements");
   
   const [compareMode, setCompareMode] = useState<"side" | "slider">("side");
+  // 🛡️ NOUVEAU STATE : Angle de comparaison actif
+  const [compareAngle, setCompareAngle] = useState<"front" | "side" | "back">("front");
 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -128,8 +130,6 @@ export default function ProgressPage() {
   const [thighs, setThighs] = useState("");
   
   const [editingMeasId, setEditingMeasId] = useState<string | null>(null);
-
-  // 🛡️ NOUVEAU : Gestion Propre des Suppressions
   const [deleteModal, setDeleteModal] = useState<{ show: boolean, id: string | null, type: 'meas' | 'photo' }>({ show: false, id: null, type: 'meas' });
 
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -148,8 +148,8 @@ export default function ProgressPage() {
   const [successMessage, setSuccessMessage] = useState<string>("");
 
   const t = {
-    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", performance: "Performance (1RM)", weight: "Poids (kg)", bfLabel: "Masse Grasse (%)", bfPlaceholder: "Optionnel (Ex: 15)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Voulez-vous vraiment supprimer cette donnée ? Cette action est irréversible.", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun.", perfTitle: "Calculateur de 1RM & Courbe de Force", perfSub: "Sélectionnez un exercice pour visualiser l'évolution de votre force maximale estimée.", selectEx: "Choisir un exercice...", cur1RM: "1RM Actuel Estimé", maxLift: "Plus Lourde Charge", volMax: "Volume Max (Série)", modeSide: "Côte à Côte", modeSlider: "Superposer (Slider)", delTitle: "Confirmation de suppression" },
-    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", performance: "Performance (1RM)", weight: "Weight (kg)", bfLabel: "Body Fat (%)", bfPlaceholder: "Optional (Ex: 15)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Do you really want to delete this data? This action is irreversible.", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach.", perfTitle: "1RM Calculator & Strength Curve", perfSub: "Select an exercise to visualize the evolution of your estimated maximal strength.", selectEx: "Select an exercise...", cur1RM: "Current Est. 1RM", maxLift: "Heaviest Lift", volMax: "Max Volume (Set)", modeSide: "Side by Side", modeSlider: "Overlay (Slider)", delTitle: "Confirm Deletion" }
+    FR: { title: "Progression & Métriques", sub: "Suivez votre évolution corporelle en toute indépendance.", measure: "Mensurations", photos: "Galerie Photos", compare: "Comparateur", performance: "Performance (1RM)", weight: "Poids (kg)", bfLabel: "Masse Grasse (%)", bfPlaceholder: "Optionnel (Ex: 15)", arms: "Bras (cm)", chest: "Poitrine (cm)", waist: "Taille (cm)", thighs: "Cuisses (cm)", save: "Enregistrer", update: "Mettre à jour", newEvo: "Nouvelle Évolution", success: "Succès !", successMsgMeas: "Mesures sauvegardées. L'algorithme a été recalibré.", successMsgPhoto: "Photos ajoutées avec succès.", noPhoto: "Aucune photo.", delWarn: "Voulez-vous vraiment supprimer cette donnée ? Cette action est irréversible.", selectBefore: "Choisir Avant", selectAfter: "Choisir Après", face: "Photo de Face", side: "Photo de Profil", back: "Photo de Dos", next: "Suivant", finish: "Terminer & Sauvegarder", noMeas: "Aucune mensuration.", diff: "Évolution", emptyMeasErr: "Veuillez remplir au moins une mesure.", cancel: "Annuler", upload: "Uploader", ok: "OK", proto: "Protocole Scientifique", protoDesc: "Le poids fluctue de 1 à 2kg par jour (eau, glycogène). Pesez-vous idéalement 1 seule fois par semaine, le matin à jeun.", perfTitle: "Calculateur de 1RM & Courbe de Force", perfSub: "Sélectionnez un exercice pour visualiser l'évolution de votre force maximale estimée.", selectEx: "Choisir un exercice...", cur1RM: "1RM Actuel Estimé", maxLift: "Plus Lourde Charge", volMax: "Volume Max (Série)", modeSide: "Côte à Côte", modeSlider: "Superposer (Slider)", delTitle: "Confirmation de suppression", angleFront: "Face", angleSide: "Profil", angleBack: "Dos", missingAngle: "Angle de vue non disponible pour l'une des dates." },
+    EN: { title: "Progress & Metrics", sub: "Track your body evolution independently.", measure: "Measurements", photos: "Photo Gallery", compare: "Comparator", performance: "Performance (1RM)", weight: "Weight (kg)", bfLabel: "Body Fat (%)", bfPlaceholder: "Optional (Ex: 15)", arms: "Arms (cm)", chest: "Chest (cm)", waist: "Waist (cm)", thighs: "Thighs (cm)", save: "Save", update: "Update", newEvo: "New Evolution", success: "Success!", successMsgMeas: "Measurements saved. Algorithm recalibrated.", successMsgPhoto: "Photos added successfully.", noPhoto: "No photos.", delWarn: "Do you really want to delete this data? This action is irreversible.", selectBefore: "Select Before", selectAfter: "Select After", face: "Front Photo", side: "Side Photo", back: "Back Photo", next: "Next", finish: "Finish & Save", noMeas: "No measurements.", diff: "Evolution", emptyMeasErr: "Please fill in at least one measurement.", cancel: "Cancel", upload: "Upload", ok: "OK", proto: "Scientific Protocol", protoDesc: "Weight fluctuates 1-2kg daily (water, glycogen). Ideally, weigh yourself only once a week, in the morning on an empty stomach.", perfTitle: "1RM Calculator & Strength Curve", perfSub: "Select an exercise to visualize the evolution of your estimated maximal strength.", selectEx: "Select an exercise...", cur1RM: "Current Est. 1RM", maxLift: "Heaviest Lift", volMax: "Max Volume (Set)", modeSide: "Side by Side", modeSlider: "Overlay (Slider)", delTitle: "Confirm Deletion", angleFront: "Front", angleSide: "Side", angleBack: "Back", missingAngle: "View angle not available for one of the dates." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -207,15 +207,12 @@ export default function ProgressPage() {
     return { trendData, currentRM, absMaxWeight, absMaxVolume };
   }, [data?.userPrs, selectedExFor1RM]);
 
-  const getWeightForPhoto = (photoUrl: string) => {
-    if (!data?.photos || !data?.measurements) return "-";
-    const photo = data.photos.find((p: any) => p.front_signed_url === photoUrl || p.side_signed_url === photoUrl || p.back_signed_url === photoUrl);
-    if (!photo) return "-";
-    
-    const meas = data.measurements.find((m: any) => m.date === photo.date || m.created_at.startsWith(photo.date));
+  // 🛡️ NOUVELLE FONCTION : Récupérer le poids via la DATE, et non plus via l'URL d'image
+  const getWeightForDate = (photoDate: string) => {
+    if (!data?.measurements) return "-";
+    const meas = data.measurements.find((m: any) => m.date === photoDate || m.created_at.startsWith(photoDate));
     return meas && meas.weight_kg ? `${meas.weight_kg} kg` : "-";
   };
-
 
   const handleSaveMeasurements = async () => {
     if (!data?.user) return;
@@ -272,7 +269,6 @@ export default function ProgressPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' }); 
   };
 
-  // 🛡️ NOUVELLE FONCTION DE SUPPRESSION (Reliée à la Modale)
   const confirmDeletion = async () => {
     if (!deleteModal.id) return;
     
@@ -481,7 +477,6 @@ export default function ProgressPage() {
                   </CardTitle>
                   <div className="flex space-x-1">
                     <button onClick={() => handleEditMeas(m)} className="p-1.5 text-zinc-400 hover:text-orange-500 hover:bg-orange-500/10 rounded-md transition-colors"><Edit3 className="w-4 h-4" /></button>
-                    {/* 🛡️ APPEL DE LA MODALE DE SUPPRESSION */}
                     <button onClick={() => setDeleteModal({ show: true, id: m.id, type: 'meas' })} className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </CardHeader>
@@ -516,7 +511,6 @@ export default function ProgressPage() {
                   <CardTitle className="text-sm font-bold text-teal-600 dark:text-teal-400">
                     {new Date(entry.created_at || entry.date).toLocaleDateString()} {entry.created_at && new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </CardTitle>
-                  {/* 🛡️ APPEL DE LA MODALE DE SUPPRESSION */}
                   <button onClick={() => setDeleteModal({ show: true, id: entry.id, type: 'photo' })} className="p-1 text-zinc-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                 </CardHeader>
                 <CardContent className="p-0 grid grid-cols-3 gap-0.5 bg-zinc-100 dark:bg-zinc-800">
@@ -537,6 +531,7 @@ export default function ProgressPage() {
         </div>
       )}
 
+      {/* 🛡️ ÉTAPE 2 : LE COMPARATEUR MULTI-ANGLES */}
       {activeTab === "compare" && (
         <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <Card className="shadow-lg border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
@@ -554,50 +549,81 @@ export default function ProgressPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              
+              {/* 🛡️ NOUVEAU : SÉLECTEUR D'ANGLE (Face, Profil, Dos) */}
+              <div className="flex bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl shadow-inner border border-zinc-200 dark:border-zinc-800 w-full sm:max-w-md mx-auto mb-6">
+                <button onClick={() => setCompareAngle("front")} className={`flex-1 px-4 py-2 rounded-lg font-bold text-xs transition-all ${compareAngle === "front" ? "bg-white dark:bg-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
+                  {txt.angleFront}
+                </button>
+                <button onClick={() => setCompareAngle("side")} className={`flex-1 px-4 py-2 rounded-lg font-bold text-xs transition-all ${compareAngle === "side" ? "bg-white dark:bg-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
+                  {txt.angleSide}
+                </button>
+                <button onClick={() => setCompareAngle("back")} className={`flex-1 px-4 py-2 rounded-lg font-bold text-xs transition-all ${compareAngle === "back" ? "bg-white dark:bg-zinc-800 text-teal-600 dark:text-teal-400 shadow-sm" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"}`}>
+                  {txt.angleBack}
+                </button>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1 space-y-2">
                   <Label>{txt.selectBefore}</Label>
                   <select value={compareBefore} onChange={(e) => setCompareBefore(e.target.value)} className="w-full p-2 rounded-md border border-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 font-medium">
                     <option value="">-- {txt.selectBefore} --</option>
-                    {photos.map((p:any) => p.front_signed_url && <option key={`b-${p.id}`} value={p.front_signed_url}>{new Date(p.created_at || p.date).toLocaleDateString()} {p.created_at && new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</option>)}
+                    {/* 🛡️ On stocke l'ID et on vérifie que la session possède au moins une photo */}
+                    {photos.map((p:any) => (p.front_signed_url || p.side_signed_url || p.back_signed_url) && <option key={`b-${p.id}`} value={p.id}>{new Date(p.created_at || p.date).toLocaleDateString()} {p.created_at && new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</option>)}
                   </select>
                 </div>
                 <div className="flex-1 space-y-2">
                   <Label>{txt.selectAfter}</Label>
                   <select value={compareAfter} onChange={(e) => setCompareAfter(e.target.value)} className="w-full p-2 rounded-md border border-zinc-200 dark:border-zinc-800 dark:bg-zinc-950 font-medium">
                     <option value="">-- {txt.selectAfter} --</option>
-                    {photos.map((p:any) => p.front_signed_url && <option key={`a-${p.id}`} value={p.front_signed_url}>{new Date(p.created_at || p.date).toLocaleDateString()} {p.created_at && new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</option>)}
+                    {photos.map((p:any) => (p.front_signed_url || p.side_signed_url || p.back_signed_url) && <option key={`a-${p.id}`} value={p.id}>{new Date(p.created_at || p.date).toLocaleDateString()} {p.created_at && new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</option>)}
                   </select>
                 </div>
               </div>
 
-              {compareBefore && compareAfter ? (
-                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                  {compareMode === "slider" ? (
-                    <BeforeAfterSlider 
-                      before={compareBefore} 
-                      after={compareAfter} 
-                      weightBefore={getWeightForPhoto(compareBefore)}
-                      weightAfter={getWeightForPhoto(compareAfter)}
-                    />
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-[3/4] border border-zinc-200 dark:border-zinc-800">
-                        <img src={compareBefore} className="w-full h-full object-cover" alt="Before" />
-                        <div className="absolute bottom-4 left-4">
-                          <span className="bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{getWeightForPhoto(compareBefore)}</span>
-                        </div>
-                      </div>
-                      <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-[3/4] border border-zinc-200 dark:border-zinc-800">
-                        <img src={compareAfter} className="w-full h-full object-cover" alt="After" />
-                        <div className="absolute bottom-4 right-4">
-                          <span className="bg-teal-500/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{getWeightForPhoto(compareAfter)}</span>
-                        </div>
-                      </div>
+              {compareBefore && compareAfter ? (() => {
+                // 🛡️ Récupération dynamique des URLs en fonction de l'angle choisi
+                const photoA = photos.find((p:any) => p.id === compareBefore);
+                const photoB = photos.find((p:any) => p.id === compareAfter);
+                const urlA = photoA?.[`${compareAngle}_signed_url`];
+                const urlB = photoB?.[`${compareAngle}_signed_url`];
+
+                if (!urlA || !urlB) {
+                  return (
+                    <div className="py-8 mt-4 text-center border-2 border-dashed border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/10 rounded-xl text-red-500 font-medium">
+                      {txt.missingAngle}
                     </div>
-                  )}
-                </div>
-              ) : (<div className="py-8 flex items-center justify-center text-zinc-400 font-medium border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">{txt.noPhoto}</div>)}
+                  );
+                }
+
+                return (
+                  <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                    {compareMode === "slider" ? (
+                      <BeforeAfterSlider 
+                        before={urlA} 
+                        after={urlB} 
+                        weightBefore={getWeightForDate(photoA.date)}
+                        weightAfter={getWeightForDate(photoB.date)}
+                      />
+                    ) : (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-[3/4] border border-zinc-200 dark:border-zinc-800">
+                          <img src={urlA} className="w-full h-full object-cover" alt="Before" />
+                          <div className="absolute bottom-4 left-4">
+                            <span className="bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{getWeightForDate(photoA.date)}</span>
+                          </div>
+                        </div>
+                        <div className="relative rounded-2xl overflow-hidden shadow-xl aspect-[3/4] border border-zinc-200 dark:border-zinc-800">
+                          <img src={urlB} className="w-full h-full object-cover" alt="After" />
+                          <div className="absolute bottom-4 right-4">
+                            <span className="bg-teal-500/80 backdrop-blur-md text-white px-3 py-1.5 rounded-full font-black text-xs shadow-lg">{getWeightForDate(photoB.date)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : (<div className="py-8 flex items-center justify-center text-zinc-400 font-medium border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl">{txt.noPhoto}</div>)}
             </CardContent>
           </Card>
 
@@ -668,7 +694,6 @@ export default function ProgressPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 🛡️ NOUVELLE MODALE DE CONFIRMATION DE SUPPRESSION */}
       <Dialog open={deleteModal.show} onOpenChange={(open) => !open && setDeleteModal({ show: false, id: null, type: 'meas' })}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <DialogHeader>

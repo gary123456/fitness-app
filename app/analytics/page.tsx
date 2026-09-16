@@ -86,7 +86,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const exSet = new Set<string>();
   const best1RMs: Record<string, number> = { "Squat": 0, "Bench": 0, "Deadlift": 0 };
   
-  // 🛡️ NOUVELLE LOGIQUE : Comptage en SÉRIES EFFECTIVES (et non en Tonnage)
   const muscleDistribution: Record<string, number> = { Chest: 0, Back: 0, Legs: 0, Arms: 0, Shoulders: 0, Core: 0 };
 
   rawLogs?.forEach((log: any) => {
@@ -95,7 +94,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     
     let effectiveWeight = log.weight;
     
-    // Tonnage Global (Poids estimé pour le BW)
     if (log.weight === 0 || !log.weight) {
       if (exObj && (exObj.movement_pattern.includes("Push") || exObj.movement_pattern.includes("Pull") || exObj.movement_pattern.includes("Squat") || exObj.movement_pattern.includes("Hinge"))) {
           effectiveWeight = userWeightKg * 0.65; 
@@ -104,11 +102,9 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       }
     }
 
-    // Le tonnage global reste sur la formule classique
     const tonnage = effectiveWeight * log.reps;
     volByDate[d] = (volByDate[d] || 0) + tonnage;
 
-    // 🛡️ NOUVEAU FILTRE CLINIQUE 1RM (Epley bridé)
     const isStrengthExercise = exObj && !exObj.equipment_required.includes('poids_corps') && !exObj.movement_pattern.includes('Core');
     
     if (isStrengthExercise && log.weight > 0 && log.reps <= 15) {
@@ -124,7 +120,6 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       else if (nameLower.includes("terre classique") || nameLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], e1rm);
     }
 
-    // 🛡️ NOUVEAU RADAR : Comptage +1 par Série (Log)
     if (exObj && exObj.target_muscle) {
       const target = exObj.target_muscle.toLowerCase();
       
@@ -248,7 +243,7 @@ export default function AnalyticsPage() {
   const generateAIInsight = () => {
     if (!data || data.radarData.every(d => d.A === 0)) return lang === 'FR' ? "L'algorithme requiert plus de données pour générer un profil biomécanique sur cette période." : "Algorithm requires more data to generate a biomechanical profile for this period.";
     const muscles = [...data.radarData].sort((a, b) => b.A - a.A);
-    const totalVolume = muscles.reduce((acc, curr) => acc + curr.A, 0); // 🛡️ C'est maintenant le nb de séries !
+    const totalVolume = muscles.reduce((acc, curr) => acc + curr.A, 0);
     const strongest = muscles[0];
     const weakest = muscles[muscles.length - 1];
     const legData = muscles.find(m => m.subject === 'Jambes' || m.subject === 'Legs');
@@ -273,20 +268,20 @@ export default function AnalyticsPage() {
     return insight;
   };
 
-  // 🛡️ NOUVEAU GÉNÉRATEUR PDF NATIF (Adieu le bug iOS)
+  // 🛡️ NOUVEAU GÉNÉRATEUR PDF NATIF : CONTOURNEMENT DU BLOCAGE iOS
   const handlePrintPDF = async () => {
     if (!reportRef.current || !data?.profile) return;
     setIsExporting(true);
     
-    // Astuce : On force temporairement le mode clair pour le "flash" de la capture (Garantit un PDF parfait)
     const originalTheme = document.documentElement.className;
     document.documentElement.className = 'light';
     
     try {
-      // Pause de 100ms pour laisser Tailwind appliquer le fond blanc
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const canvas = await html2canvas(reportRef.current, { scale: 2, useCORS: true });
+      // 🛡️ Réduction dynamique de l'échelle pour ne pas faire crasher la RAM de l'iPhone
+      const scale = window.innerWidth < 768 ? 1.5 : 2;
+      const canvas = await html2canvas(reportRef.current, { scale: scale, useCORS: true });
       const imgData = canvas.toDataURL('image/jpeg', 0.8);
       
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -297,10 +292,28 @@ export default function AnalyticsPage() {
       
       const safeFirstName = (data.profile.first_name || 'Utilisateur').replace(/[^a-zA-Z0-9]/g, '_');
       const safeLastName = (data.profile.last_name || 'Vivex').replace(/[^a-zA-Z0-9]/g, '_');
-      pdf.save(`${safeLastName}_${safeFirstName}_Rapport.pdf`);
+      const fileName = `${safeLastName}_${safeFirstName}_Rapport.pdf`;
+
+      // 🛡️ NOUVEAU FLUX SÉCURISÉ POUR iOS (Utilise navigator.share au lieu du download forcé)
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        const pdfBlob = pdf.output('blob');
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: lang === 'FR' ? 'Rapport Analytics Vivex' : 'Vivex Analytics Report',
+            files: [file]
+          });
+        } else {
+          pdf.save(fileName); // Fallback si le partage de fichier n'est pas autorisé
+        }
+      } else {
+        pdf.save(fileName); // Fallback pour les PC de bureau
+      }
+
     } catch (e) {
       console.error(e);
-      alert("Erreur lors de la génération du PDF.");
+      alert(lang === 'FR' ? "Erreur lors de la génération du PDF." : "Error generating PDF.");
     } finally {
       document.documentElement.className = originalTheme;
       setIsExporting(false);
