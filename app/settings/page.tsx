@@ -10,10 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff } from "lucide-react";
+import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff, Clock } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
-import { getEvolvedExperienceLevel } from "@/lib/fitness"; // 🛡️ IMPORT DU NOUVEAU MOTEUR
+import { getEvolvedExperienceLevel } from "@/lib/fitness";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const EXTRA_SPORTS = [ 
@@ -43,7 +43,7 @@ const fetchProfileData = async () => {
   if (!user) throw new Error("No user");
 
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-  const { data: gamification } = await supabase.from("user_gamification").select("level").eq("user_id", user.id).maybeSingle(); // 🛡️ FETCH DU NIVEAU
+  const { data: gamification } = await supabase.from("user_gamification").select("level").eq("user_id", user.id).maybeSingle();
   
   const { data: lastMeasurement } = await supabase
     .from("measurements")
@@ -69,6 +69,8 @@ export default function SettingsPage() {
   const [editBodyFat, setEditBodyFat] = useState("");
   const [editGoal, setEditGoal] = useState("");
   const [editExperience, setEditExperience] = useState("");
+  // 🛡️ NOUVEAU : Fréquence de la semaine !
+  const [editFrequency, setEditFrequency] = useState(""); 
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [editDisableQuiz, setEditDisableQuiz] = useState(false);
@@ -95,8 +97,10 @@ export default function SettingsPage() {
       setEditHeight(data.profile.height_cm?.toString() || "");
       setEditWeight(data.currentWeight?.toString() || data.profile.weight_kg?.toString() || "");
       setEditBodyFat(data.currentBodyFat ? data.currentBodyFat.toString() : "");
-      setEditGoal(data.profile.current_goal);
+      setEditGoal(data.profile.current_goal || "maintien");
       setEditExperience(data.profile.experience_level || "debutant");
+      // 🛡️ NOUVEAU : On récupère la fréquence
+      setEditFrequency(data.profile.training_frequency || "3_jours");
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
       setEditEquipment(data.profile.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : ['poids_corps']);
       setEditDisableQuiz(data.profile.disable_quiz || false);
@@ -172,8 +176,8 @@ export default function SettingsPage() {
       
       const updatedProfileData = { 
         first_name: editFirstName, last_name: editLastName, height_cm: newHeight, weight_kg: newWeight, 
-        current_goal: editGoal, experience_level: editExperience, weekly_schedule: editSchedule,
-        equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz, data_saver_enabled: editDataSaver
+        current_goal: editGoal, experience_level: editExperience, training_frequency: editFrequency, // 🛡️ NOUVEAU
+        weekly_schedule: editSchedule, equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz, data_saver_enabled: editDataSaver
       };
 
       await supabase.from("profiles").update(updatedProfileData).eq("id", data.profile.id);
@@ -186,13 +190,11 @@ export default function SettingsPage() {
          const { data: library } = await supabase.from("exercise_library").select("*");
          const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
          
-         // 🛡️ APPLICATION DE L'ÉVOLUTION BIOMÉCANIQUE
          const userLevel = data.gamification?.level || 1;
          const evolvedExperience = getEvolvedExperienceLevel(userLevel, updatedProfileData.experience_level);
          
          const completeProfileForAI = { ...data.profile, ...updatedProfileData, experience_level: evolvedExperience };
          
-         // 🛡️ PATTERN HIGHLANDER : Suppression des anciens programmes IA avant de générer le nouveau
          const { data: oldAlgoProgs } = await supabase.from("user_programs").select("id").eq("user_id", data.profile.id).eq("program_type", "ai");
          if (oldAlgoProgs && oldAlgoProgs.length > 0) {
            for (const p of oldAlgoProgs) {
@@ -204,7 +206,6 @@ export default function SettingsPage() {
          
          await supabase.from("user_programs").update({ is_active: false }).eq("user_id", data.profile.id);
 
-         // 🛡️ CRÉATION DU NOUVEAU PROGRAMME DÉFAUT (IA)
          const { data: newProgram } = await supabase.from("user_programs").insert([{ 
             user_id: data.profile.id, name: "Programme Base (Défaut)", is_active: true, program_type: 'ai', is_default: true 
          } as any]).select().single();
@@ -336,7 +337,23 @@ export default function SettingsPage() {
         <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
           <CardHeader><CardTitle className="text-lg flex items-center"><Dumbbell className="w-5 h-5 mr-2 text-blue-500"/> Mode de vie & Entraînement</CardTitle></CardHeader>
           <CardContent className="space-y-6">
+            
+            {/* 🛡️ NOUVEAU : Sélecteur de Fréquence */}
             <div className="space-y-3">
+              <Label className="text-base font-bold dark:text-zinc-300 flex items-center"><Clock className="w-4 h-4 mr-2" /> Fréquence d'Entraînement</Label>
+              <Select value={editFrequency} onValueChange={setEditFrequency}>
+                <SelectTrigger className="font-bold dark:bg-zinc-950 dark:border-zinc-800 h-12"><SelectValue /></SelectTrigger>
+                <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800 font-bold">
+                  <SelectItem value="2_jours">2 jours par semaine</SelectItem>
+                  <SelectItem value="3_jours">3 jours par semaine (Optimal)</SelectItem>
+                  <SelectItem value="4_jours">4 jours par semaine</SelectItem>
+                  <SelectItem value="5_plus">5 jours ou plus</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-zinc-500 italic">Modifier ceci nécessitera de cocher "Recalibrer mon programme IA" en bas de page.</p>
+            </div>
+
+            <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
               <Label className="text-base font-bold dark:text-zinc-300">Équipement disponible</Label>
               <div className="flex flex-col gap-2">
                 {EQUIPMENTS.map(eq => (
@@ -348,7 +365,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
               <Label className="text-base font-bold dark:text-zinc-300 flex items-center"><Calendar className="w-4 h-4 mr-2"/> Sports Annexes (Fatigue)</Label>
               <div className="space-y-3">
                 {Object.keys(DAYS).map((dayKey) => (
