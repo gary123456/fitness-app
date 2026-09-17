@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import { toPng } from "html-to-image";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ReferenceLine } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,7 +33,7 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   let startDate = new Date();
   let endDate = new Date();
 
-  // 🛡️ CORRECTION : SÉCURISATION DU FILTRE DE DATE iOS
+  // 🛡️ SÉCURISATION DU FILTRE DE DATE
   if (timeframe === '7d') startDate.setDate(startDate.getDate() - 7);
   else if (timeframe === '30d') startDate.setDate(startDate.getDate() - 30);
   else if (timeframe === '3m') startDate.setMonth(startDate.getMonth() - 3);
@@ -243,7 +243,7 @@ export default function AnalyticsPage() {
   const generateAIInsight = () => {
     if (!data || data.radarData.every(d => d.A === 0)) return lang === 'FR' ? "L'algorithme requiert plus de données pour générer un profil biomécanique sur cette période." : "Algorithm requires more data to generate a biomechanical profile for this period.";
     const muscles = [...data.radarData].sort((a, b) => b.A - a.A);
-    const totalVolume = muscles.reduce((acc, curr) => acc + curr.A, 0);
+    const totalVolume = muscles.reduce((acc, curr) => acc + curr.A, 0); 
     const strongest = muscles[0];
     const weakest = muscles[muscles.length - 1];
     const legData = muscles.find(m => m.subject === 'Jambes' || m.subject === 'Legs');
@@ -268,7 +268,7 @@ export default function AnalyticsPage() {
     return insight;
   };
 
-  // 🛡️ NOUVEAU GÉNÉRATEUR PDF NATIF : CONTOURNEMENT DU BLOCAGE iOS
+  // 🛡️ GÉNÉRATION PDF OPTIMISÉE POUR IOS ET CENTRÉE
   const handlePrintPDF = async () => {
     if (!reportRef.current || !data?.profile) return;
     setIsExporting(true);
@@ -276,25 +276,72 @@ export default function AnalyticsPage() {
     const originalTheme = document.documentElement.className;
     document.documentElement.className = 'light';
     
+    const el = reportRef.current;
+    
+    // Sauvegarde des styles initiaux
+    const originalWidth = el.style.width;
+    const originalMinWidth = el.style.minWidth;
+    const originalMaxWidth = el.style.maxWidth;
+    const originalPadding = el.style.padding;
+    const originalMargin = el.style.margin;
+    
     try {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // 🛡️ CORRECTION DU CENTRAGE : On fixe la largeur exacte SANS le margin: auto qui cause le décalage.
+      el.style.width = '1200px';
+      el.style.minWidth = '1200px';
+      el.style.maxWidth = '1200px';
+      el.style.padding = '40px';
+      el.style.margin = '0'; // <- LE FIX EST ICI. On empêche le navigateur d'ajouter de l'espace invisible à gauche.
+
+      // Pause pour laisser React/Recharts faire le re-render complet avec les nouvelles dimensions
+      await new Promise(resolve => setTimeout(resolve, 600));
       
-      // 🛡️ Réduction dynamique de l'échelle pour ne pas faire crasher la RAM de l'iPhone
-      const scale = window.innerWidth < 768 ? 1.5 : 2;
-      const canvas = await html2canvas(reportRef.current, { scale: scale, useCORS: true });
-      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const isMobile = window.innerWidth < 768;
+      const scaleToUse = isMobile ? 1 : 2;
+
+      const dataUrl = await toPng(el, { 
+        cacheBust: true, 
+        quality: 1, 
+        pixelRatio: scaleToUse, 
+        backgroundColor: '#ffffff',
+        style: { transform: 'none' } 
+      });
       
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // A4 width (210mm)
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // A4 height (297mm)
       
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve, reject) => { 
+        img.onload = resolve; 
+        img.onerror = reject;
+      });
+      
+      const imgProps = pdf.getImageProperties(dataUrl);
+      const imgScaledHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // 🛡️ GESTION MULTI-PAGES (Slicer)
+      let heightLeft = imgScaledHeight;
+      let position = 0;
+
+      // Dessine la première page
+      pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, imgScaledHeight);
+      heightLeft -= pdfHeight;
+
+      // Boucle pour couper et ajouter les pages suivantes
+      while (heightLeft > 0) {
+        position -= pdfHeight; // Remonte l'image de l'équivalent d'une page A4
+        pdf.addPage();
+        pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, imgScaledHeight);
+        heightLeft -= pdfHeight;
+      }
       
       const safeFirstName = (data.profile.first_name || 'Utilisateur').replace(/[^a-zA-Z0-9]/g, '_');
       const safeLastName = (data.profile.last_name || 'Vivex').replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `${safeLastName}_${safeFirstName}_Rapport.pdf`;
 
-      // 🛡️ NOUVEAU FLUX SÉCURISÉ POUR iOS (Utilise navigator.share au lieu du download forcé)
+      // 🛡️ PARTAGE NATIF IOS
       if (typeof navigator !== 'undefined' && navigator.share) {
         const pdfBlob = pdf.output('blob');
         const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
@@ -305,16 +352,22 @@ export default function AnalyticsPage() {
             files: [file]
           });
         } else {
-          pdf.save(fileName); // Fallback si le partage de fichier n'est pas autorisé
+          pdf.save(fileName); 
         }
       } else {
-        pdf.save(fileName); // Fallback pour les PC de bureau
+        pdf.save(fileName); 
       }
 
     } catch (e) {
-      console.error(e);
+      console.error("Erreur PDF:", e);
       alert(lang === 'FR' ? "Erreur lors de la génération du PDF." : "Error generating PDF.");
     } finally {
+      // 🛡️ Restauration de l'état d'origine
+      el.style.width = originalWidth;
+      el.style.minWidth = originalMinWidth;
+      el.style.maxWidth = originalMaxWidth;
+      el.style.padding = originalPadding;
+      el.style.margin = originalMargin;
       document.documentElement.className = originalTheme;
       setIsExporting(false);
     }
@@ -358,10 +411,9 @@ export default function AnalyticsPage() {
 
   return (
     <>
-      {/* Container Principal Ref pour HTML2CANVAS */}
+      {/* 🛡️ Conteneur Principal pour le Slicer */}
       <div ref={reportRef} className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full relative pb-24 bg-zinc-50 dark:bg-zinc-950">
         
-        {/* Entête d'Export visible uniquement pendant l'exportation JS */}
         {isExporting && (
           <div className="mb-8 border-b-2 border-black pb-6">
             <div className="flex justify-between items-end mb-6">
