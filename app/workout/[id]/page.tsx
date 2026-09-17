@@ -16,7 +16,6 @@ import { useLanguage } from "@/lib/useLanguage";
 import { awardWorkoutXP } from "@/lib/gamification-engine";
 import AudioHapticTimer from "@/components/AudioHapticTimer";
 
-// 🛡️ NOUVEAU : Plaques olympiques pour la calculatrice in-workout
 const PLATES = [
   { weight: 25, color: "bg-red-500", h: "h-20", w: "w-4" },
   { weight: 20, color: "bg-blue-500", h: "h-20", w: "w-3" },
@@ -182,9 +181,7 @@ function ActiveWorkoutSessionContent() {
   const [isSharing, setIsSharing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   
-  // 🛡️ NOUVEAU STATE POUR LA CALCULATRICE INTERACTIVE (Phase 6)
   const [plateModal, setPlateModal] = useState({ show: false, targetWeight: "", barWeight: "20" });
-  
   const [showRpeModal, setShowRpeModal] = useState(false);
   const [sessionRpe, setSessionRpe] = useState(7);
   
@@ -210,7 +207,6 @@ function ActiveWorkoutSessionContent() {
   
   const stravaCardRef = useRef<HTMLDivElement>(null);
 
-  // 🛡️ Logique de la Calculatrice de Disques In-Workout
   const calculatePlates = () => {
     const target = parseFloat(plateModal.targetWeight);
     const bar = parseFloat(plateModal.barWeight);
@@ -403,11 +399,40 @@ function ActiveWorkoutSessionContent() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  // 🛡️ CORRECTION : Tri d'exercices dans le Tracker (Flèches & Drag)
+  const moveExercise = async (index: number, direction: 'up' | 'down') => {
+    if (data?.isReadOnly) return;
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === localExercises.length - 1) return;
+
+    const newArray = [...localExercises];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    // Échange Optimistic UI (Aide aussi hors ligne)
+    const temp = newArray[index];
+    newArray[index] = newArray[targetIndex];
+    newArray[targetIndex] = temp;
+    
+    setLocalExercises(newArray);
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+
+    try {
+      if (!data?.sessionData?.id) return; // Sécurité TypeScript
+      const updates = newArray.map((ex, i) => ({
+        id: ex.id, session_id: data.sessionData.id, exercise_id: ex.exercise_id, order_index: i
+      }));
+      await supabase.from("workout_exercises").upsert(updates);
+    } catch (err) {
+      console.error("Erreur sauvegarde réorganisation:", err);
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
-    if (navigator.vibrate) navigator.vibrate(15);
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
     e.dataTransfer.effectAllowed = "move";
   };
+  
   const handleDragEnter = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     setDragOverIdx(index);
@@ -422,11 +447,13 @@ function ActiveWorkoutSessionContent() {
     });
     setDraggedIdx(index);
   };
+  
   const handleDragEnd = async () => {
     setDraggedIdx(null);
     setDragOverIdx(null);
     if (!data?.sessionData || data?.isReadOnly) return; 
     try {
+      if (!data?.sessionData?.id) return; // Sécurité TypeScript
       const updates = localExercises.map((ex, i) => ({
         id: ex.id, session_id: data.sessionData.id, exercise_id: ex.exercise_id, order_index: i
       }));
@@ -435,6 +462,7 @@ function ActiveWorkoutSessionContent() {
       console.error("Erreur sauvegarde réorganisation:", err);
     }
   };
+  
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
   const renderWarmupSets = (we: any, index: number) => {
@@ -751,7 +779,7 @@ function ActiveWorkoutSessionContent() {
                 <div 
                   id={`exercise-block-${identifier}`} 
                   key={uniqueKey} 
-                  draggable={true}
+                  draggable={!data.isReadOnly}
                   onDragStart={(e) => handleDragStart(e, index)}
                   onDragEnter={(e) => handleDragEnter(e, index)}
                   onDragEnd={handleDragEnd}
@@ -761,9 +789,20 @@ function ActiveWorkoutSessionContent() {
                   <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                     <div className="flex items-center space-x-3 flex-1">
                       
-                      <div className="cursor-grab active:cursor-grabbing p-1 text-zinc-400 hover:text-teal-500 hidden sm:block">
-                        <GripVertical className="w-5 h-5" />
-                      </div>
+                      {/* 🛡️ BOUTONS DE TRI (Haut/Bas) POUR MOBILE + DRAG POUR DESKTOP */}
+                      {!data.isReadOnly && (
+                        <div className="flex flex-col items-center mr-2">
+                          <button onClick={() => moveExercise(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-teal-500 disabled:opacity-30">
+                            <ArrowUp className="w-4 h-4" />
+                          </button>
+                          <div className="cursor-grab active:cursor-grabbing p-1 text-zinc-300 hidden sm:block">
+                            <GripVertical className="w-4 h-4" />
+                          </div>
+                          <button onClick={() => moveExercise(index, 'down')} disabled={index === localExercises.length - 1} className="p-1 text-zinc-400 hover:text-teal-500 disabled:opacity-30">
+                            <ArrowDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
 
                       {dataSaverEnabled ? (
                          <div className="h-14 w-14 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex flex-col items-center justify-center border border-zinc-300 dark:border-zinc-700 relative p-0 shrink-0">
@@ -816,7 +855,6 @@ function ActiveWorkoutSessionContent() {
                         <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
                           <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
                           
-                          {/* 🛡️ AJOUT DU BOUTON DE CALCULATRICE DE DISQUE : TOUJOURS VISIBLE (QOL) */}
                           <button onClick={(e) => { 
                             e.stopPropagation(); 
                             setPlateModal({ show: true, targetWeight: we.recommended_weight > 0 ? we.recommended_weight.toString() : "", barWeight: "20" }); 

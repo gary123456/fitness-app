@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2, PlayCircle, GripVertical } from "lucide-react";
+import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2, PlayCircle, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -41,7 +41,6 @@ const fetchLibrary = async () => {
   return data;
 };
 
-// 🛡️ INTELLIGENCE : Récupère les PRs de l'utilisateur depuis la Vue SQL
 const fetchPRs = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return {};
@@ -70,7 +69,7 @@ function BuilderContent() {
   const { lang } = useLanguage();
 
   const { data: library, isLoading: loadingEx } = useSWR('exerciseLibrary', fetchLibrary);
-  const { data: userPRs } = useSWR('userPRs', fetchPRs); // 🛡️ Appel SWR pour les PRs
+  const { data: userPRs } = useSWR('userPRs', fetchPRs); 
 
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -88,6 +87,7 @@ function BuilderContent() {
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   const [guideModal, setGuideModal] = useState(false);
   
+  // 🛡️ ÉTATS DU DRAG & DROP
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
@@ -205,14 +205,13 @@ function BuilderContent() {
   };
 
   const addExercise = (ex: Exercise) => {
-    // 🛡️ PRÉ-REMPLISSAGE INTELLIGENT
     const pr = userPRs?.[ex.id];
     let recWeight = null;
     let target = "8-12";
     
     if (pr) {
       recWeight = pr.weight > 0 ? pr.weight : null;
-      target = `Viser > ${pr.reps}`; // Adaptation de l'objectif selon le PR
+      target = `Viser > ${pr.reps}`; 
     }
 
     setPlan(prev => ({
@@ -224,7 +223,7 @@ function BuilderContent() {
           sets: 3, 
           target_reps: target, 
           rest_seconds: ex.cns_impact >= 4 ? 120 : 90, 
-          recommended_weight: recWeight, // 🛡️ INTÉGRATION DE LA CHARGE
+          recommended_weight: recWeight, 
           uid: Date.now().toString() + Math.random().toString(36).substr(2, 5) 
         }
       ]
@@ -247,9 +246,28 @@ function BuilderContent() {
     });
   };
 
+  // 🛡️ NOUVEAU : Fonction Flèches Haut/Bas pour le Builder Mobile
+  const moveExercise = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === plan[activeDay].length - 1) return;
+
+    setPlan(prev => {
+      const newDay = [...prev[activeDay]];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      
+      const temp = newDay[index];
+      newDay[index] = newDay[targetIndex];
+      newDay[targetIndex] = temp;
+      
+      return { ...prev, [activeDay]: newDay };
+    });
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+  };
+
+  // 🛡️ GESTION DU DRAG & DROP DESKTOP
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
-    if (navigator.vibrate) navigator.vibrate(15);
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
     e.dataTransfer.effectAllowed = "move";
   };
   const handleDragEnter = (e: React.DragEvent, index: number) => {
@@ -326,7 +344,7 @@ function BuilderContent() {
               sets: plannedEx.sets,
               target_reps: plannedEx.target_reps,
               rest_seconds: plannedEx.rest_seconds,
-              recommended_weight: plannedEx.recommended_weight || null, // 🛡️ SAUVEGARDE DU PR
+              recommended_weight: plannedEx.recommended_weight || null, 
               order_index: idx
             }));
             await supabase.from("workout_exercises").insert(inserts);
@@ -595,9 +613,20 @@ function BuilderContent() {
                   
                   <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                     <div className="flex items-center space-x-2 flex-1">
-                      <div className="cursor-grab active:cursor-grabbing p-1 text-zinc-600 hover:text-indigo-400">
-                        <GripVertical className="w-5 h-5" />
+                      
+                      {/* 🛡️ BOUTONS DE TRI (Haut/Bas) POUR MOBILE + DRAG POUR DESKTOP */}
+                      <div className="flex flex-col items-center mr-2">
+                        <button onClick={() => moveExercise(idx, 'up')} disabled={idx === 0} className="p-1 text-zinc-400 hover:text-indigo-400 disabled:opacity-30">
+                          <ArrowUp className="w-4 h-4" />
+                        </button>
+                        <div className="cursor-grab active:cursor-grabbing p-1 text-zinc-500 hidden sm:block">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <button onClick={() => moveExercise(idx, 'down')} disabled={idx === plan[activeDay].length - 1} className="p-1 text-zinc-400 hover:text-indigo-400 disabled:opacity-30">
+                          <ArrowDown className="w-4 h-4" />
+                        </button>
                       </div>
+
                       <h4 className="font-bold text-zinc-100 text-sm line-clamp-1 flex-1">{item.exercise.name}</h4>
                     </div>
                     <button onClick={() => removeExercise(activeDay, idx)} className="text-zinc-600 hover:text-red-500 transition-colors p-1">
@@ -605,7 +634,6 @@ function BuilderContent() {
                     </button>
                   </div>
 
-                  {/* 🛡️ LIGNE À 4 COLONNES POUR INCLURE LA CHARGE */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase text-zinc-500 font-bold">Charge (kg)</Label>
@@ -669,7 +697,7 @@ function BuilderContent() {
                 ) : (
                   <div className="flex flex-col items-center justify-center text-zinc-600">
                     <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
-                    <span className="text-sm font-bold text-zinc-500">Vidéo non disponible</span>
+                    <span className="text-sm font-bold">Vidéo non disponible</span>
                   </div>
                 )}
               </div>

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale, Loader2, PlayCircle, AlertCircle, WifiOff } from "lucide-react";
+import { Activity, Dumbbell, Clock, Repeat, Play, Target, ArrowLeftRight, Info, CalendarCheck, BatteryCharging, Lock, PenTool, FolderGit2, CheckCircle2, Trash2, RefreshCw, Zap, Star, Filter, Scale, Loader2, PlayCircle, AlertCircle, WifiOff, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -52,7 +52,7 @@ const fetchProgramData = async () => {
       }
     }
   }
-  return { profile, userLevel: gamification?.level || 1, weeklyPlan, isDeloadWeek, existingProgram, allPrograms: allPrograms || [], completedSessionIds, lastWorkoutDateStr };
+  return { profile, userLevel: gamification?.level || 1, weeklyPlan, isDeloadWeek, existingProgram, allPrograms: allPrograms || [], completedSessionIds, lastWorkoutDateStr, isReadOnly: false };
 };
 
 const getYoutubeThumbnail = (youtubeId?: string) => {
@@ -66,6 +66,15 @@ function WorkoutPageContent() {
   const justFinished = searchParams?.get('finished') === 'true'; 
   const { lang } = useLanguage();
   const { data, error, mutate, isLoading } = useSWR('workoutData', fetchProgramData);
+
+  // 🛡️ NOUVEAU STATE : Maintien du plan local pour le Drag & Drop
+  const [localWeeklyPlan, setLocalWeeklyPlan] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (data?.weeklyPlan) {
+      setLocalWeeklyPlan(JSON.parse(JSON.stringify(data.weeklyPlan)));
+    }
+  }, [data?.weeklyPlan]);
 
   const [generating, setGenerating] = useState(false);
   const [showManagerModal, setShowManagerModal] = useState(false);
@@ -82,6 +91,10 @@ function WorkoutPageContent() {
   const [convertModal, setConvertModal] = useState({ show: false, kgValue: "", lbsValue: "" });
   
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
+
+  // 🛡️ GESTION DU DRAG & DROP DANS LE HUB
+  const [draggedItem, setDraggedItem] = useState<{sessionId: string, index: number} | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<{sessionId: string, index: number} | null>(null);
 
   const currentJsDay = new Date().getDay();
   const jsToOrdered = [6, 0, 1, 2, 3, 4, 5]; 
@@ -104,6 +117,83 @@ function WorkoutPageContent() {
 
   const customProg = data?.allPrograms?.find((p: any) => p.program_type === 'custom') || null;
   const algoProg = data?.allPrograms?.find((p: any) => p.program_type === 'ai') || null;
+
+  // 🛡️ NOUVEAU : Fonction de tri d'exercices dans le HUB (Flèches)
+  const moveExerciseInHub = async (sessionId: string, index: number, direction: 'up' | 'down') => {
+    const newPlan = [...localWeeklyPlan];
+    const sessionIndex = newPlan.findIndex(s => s.id === sessionId);
+    if (sessionIndex === -1) return;
+
+    const exercises = [...newPlan[sessionIndex].workout_exercises];
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === exercises.length - 1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    const temp = exercises[index];
+    exercises[index] = exercises[targetIndex];
+    exercises[targetIndex] = temp;
+
+    newPlan[sessionIndex].workout_exercises = exercises;
+    setLocalWeeklyPlan(newPlan);
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+
+    try {
+      const updates = exercises.map((ex, i) => ({
+        id: ex.id, session_id: sessionId, exercise_id: ex.exercise_id, order_index: i
+      }));
+      await supabase.from("workout_exercises").upsert(updates);
+    } catch (err) { console.error(err); }
+  };
+
+  // 🛡️ NOUVEAU : Fonctions de Drag & Drop dans le HUB
+  const handleDragStart = (e: React.DragEvent, sessionId: string, index: number) => {
+    setDraggedItem({ sessionId, index });
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragEnter = (e: React.DragEvent, sessionId: string, index: number) => {
+    e.preventDefault();
+    if (!draggedItem || draggedItem.sessionId !== sessionId) return; 
+    setDragOverItem({ sessionId, index });
+
+    if (draggedItem.index === index) return;
+
+    setLocalWeeklyPlan(prev => {
+      const newPlan = [...prev];
+      const sessionIndex = newPlan.findIndex(s => s.id === sessionId);
+      if (sessionIndex === -1) return newPlan;
+
+      const exercises = [...newPlan[sessionIndex].workout_exercises];
+      const item = exercises[draggedItem.index];
+      exercises.splice(draggedItem.index, 1);
+      exercises.splice(index, 0, item);
+
+      newPlan[sessionIndex].workout_exercises = exercises;
+      return newPlan;
+    });
+    setDraggedItem({ sessionId, index });
+  };
+
+  const handleDragEnd = async () => {
+    if (!draggedItem) return;
+    const sessionId = draggedItem.sessionId;
+    setDraggedItem(null);
+    setDragOverItem(null);
+
+    const session = localWeeklyPlan.find(s => s.id === sessionId);
+    if (!session) return;
+
+    try {
+      const updates = session.workout_exercises.map((ex: any, i: number) => ({
+        id: ex.id, session_id: sessionId, exercise_id: ex.exercise_id, order_index: i
+      }));
+      await supabase.from("workout_exercises").upsert(updates);
+    } catch (err) {}
+  };
+
+  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+
 
   const handleCreateCustomClick = () => {
     if (customProg) {
@@ -280,7 +370,9 @@ function WorkoutPageContent() {
   const openSwapModal = async (weId: string, currentEx: any) => {
     if (!data?.profile) return;
     setSwapLoading(true);
-    const { data: alts } = await supabase.from('exercise_library').select('*').neq('id', currentEx.id);
+    const { data: alts, error: altsError } = await supabase.from('exercise_library').select('*').neq('id', currentEx.id);
+    if (altsError) { setSwapLoading(false); alert("Erreur chargement alternatives"); return; }
+    
     setSwapModal({ show: true, weId, currentEx, alternatives: alts || [] });
     setSwapLoading(false);
   };
@@ -299,7 +391,6 @@ function WorkoutPageContent() {
     else matchMuscle = target.includes(filter);
 
     const matchStars = selectedSwapStar === null || ex.cns_impact === selectedSwapStar;
-
     const patternLow = ex.movement_pattern?.toLowerCase() || "";
     let matchPattern = true;
     if (selectedSwapPattern) {
@@ -323,18 +414,13 @@ function WorkoutPageContent() {
 
   const confirmSwap = async (newEx: any) => {
     try {
-      await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
-      await mutate(); 
+      const { error } = await supabase.from('workout_exercises').update({ exercise_id: newEx.id }).eq('id', swapModal.weId);
+      if (error) throw new Error(error.message);
+      
+      await mutate();
       setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] });
-    } catch (error: any) { alert(error.message); }
+    } catch (error: any) { alert("Erreur lors du remplacement : " + error.message); }
   };
-
-  if (isLoading && !data) return <div className="flex min-h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-teal-500" /></div>;
-
-  const weeklySchedule = data?.profile?.weekly_schedule || {};
-  const sortedPlan = data?.weeklyPlan ? [...data.weeklyPlan].sort((a: any, b: any) => {
-    return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
-  }) : [];
 
   const renderStars = (impact: number) => {
     const safeImpact = impact || 1;
@@ -347,7 +433,15 @@ function WorkoutPageContent() {
     );
   };
 
-  const liftingSessionsCount = data?.weeklyPlan?.filter(s => s.workout_exercises?.length > 0).length || 0;
+  if (isLoading && !data) return <div className="p-8 text-center text-teal-500 font-bold animate-pulse">{txt.load}</div>;
+  if (error || !data?.profile) return <div className="p-8 text-center text-red-500">{txt.notFound}</div>;
+
+  const weeklySchedule = data?.profile?.weekly_schedule || {};
+  const sortedPlan = localWeeklyPlan ? [...localWeeklyPlan].sort((a: any, b: any) => {
+    return dynamicDaysOrder.indexOf(a.day_name) - dynamicDaysOrder.indexOf(b.day_name);
+  }) : [];
+
+  const liftingSessionsCount = localWeeklyPlan?.filter(s => s.workout_exercises?.length > 0).length || 0;
   const allSessionsCompleted = liftingSessionsCount > 0 && (data?.completedSessionIds?.length || 0) >= liftingSessionsCount;
   
   const todayStr = new Date().toISOString().split('T')[0];
@@ -427,7 +521,7 @@ function WorkoutPageContent() {
         </div>
       </div>
 
-      {(!data?.weeklyPlan || data.weeklyPlan.length === 0) && (
+      {(!localWeeklyPlan || localWeeklyPlan.length === 0) && (
         <div className="flex flex-col items-center justify-center space-y-4 py-12 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
           <Dumbbell className="w-16 h-16 text-zinc-300 dark:text-zinc-700" />
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">{txt.noProg}</h2>
@@ -500,8 +594,32 @@ function WorkoutPageContent() {
                       const thumbnailUrl = getYoutubeThumbnail(ex.youtube_id);
 
                       return (
-                        <div key={uniqueKey} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors ${isToday && !isCompleted ? 'border-teal-100 dark:border-teal-900/50 bg-white/50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-900' : 'border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'}`}>
+                        <div 
+                          key={uniqueKey} 
+                          draggable={!isCompleted}
+                          onDragStart={(e) => handleDragStart(e, session.id, index)}
+                          onDragEnter={(e) => handleDragEnter(e, session.id, index)}
+                          onDragEnd={handleDragEnd}
+                          onDragOver={handleDragOver}
+                          className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors ${isToday && !isCompleted ? 'border-teal-100 dark:border-teal-900/50 bg-white/50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-900' : 'border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900/50'} ${draggedItem?.sessionId === session.id && draggedItem?.index === index ? 'opacity-50 border-teal-500 scale-95' : ''} ${dragOverItem?.sessionId === session.id && dragOverItem?.index === index ? 'border-t-2 border-t-teal-500' : ''}`}
+                        >
                           <div className="flex items-center space-x-4 mb-2 sm:mb-0">
+                            
+                            {/* 🛡️ BOUTONS DE TRI (Haut/Bas) DANS LE HUB */}
+                            {!isCompleted && !isFuture && (
+                              <div className="flex flex-col items-center">
+                                <button onClick={() => moveExerciseInHub(session.id, index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-teal-500 disabled:opacity-30">
+                                  <ArrowUp className="w-4 h-4" />
+                                </button>
+                                <div className="cursor-grab active:cursor-grabbing p-1 text-zinc-300 hidden sm:block">
+                                  <GripVertical className="w-4 h-4" />
+                                </div>
+                                <button onClick={() => moveExerciseInHub(session.id, index, 'down')} disabled={index === session.workout_exercises.length - 1} className="p-1 text-zinc-400 hover:text-teal-500 disabled:opacity-30">
+                                  <ArrowDown className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+
                             <div className="h-12 w-12 bg-black rounded-lg flex items-center justify-center overflow-hidden shrink-0 shadow-sm border border-zinc-200 dark:border-zinc-700 relative p-0">
                               {thumbnailUrl ? <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-cover absolute inset-0 z-10 opacity-70" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <Dumbbell className="h-6 w-6 text-zinc-400 absolute z-0 opacity-50" />}
                             </div>
@@ -523,15 +641,6 @@ function WorkoutPageContent() {
                             {we.recommended_weight !== null && we.recommended_weight !== undefined && (
                               <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
                                 <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
-                                {we.recommended_weight > 0 && (
-                                  <button onClick={(e) => { 
-                                    e.stopPropagation(); 
-                                    const initKg = we.recommended_weight > 0 ? we.recommended_weight.toString() : "";
-                                    setConvertModal({ show: true, kgValue: initKg, lbsValue: initKg ? (parseFloat(initKg) * 2.20462).toFixed(1) : "" }); 
-                                  }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors" title="Convertir en Lbs">
-                                    <Scale className="w-3 h-3 text-teal-700 dark:text-teal-400" />
-                                  </button>
-                                )}
                               </div>
                             )}
                             <div className="flex items-center text-zinc-700 dark:text-zinc-300 font-bold bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded"><Repeat className="w-4 h-4 mr-2 text-zinc-500" /> {we.sets} {txt.sets} × {we.target_reps}</div>
@@ -621,29 +730,21 @@ function WorkoutPageContent() {
             <div className="p-6 text-center space-y-4">
               <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
               
-              {/* 🛡️ GESTION DU DATA SAVER ET DE L'IFRAME YOUTUBE */}
-              {data?.profile?.data_saver_enabled ? (
-                <div className="w-full max-w-[200px] mx-auto aspect-[9/16] bg-zinc-100 dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center items-center">
-                  <WifiOff className="w-10 h-10 text-zinc-400 mb-2" />
-                  <span className="text-xs font-bold text-zinc-500">Mode Éco</span>
-                </div>
-              ) : (
-                <div className="w-full max-w-[250px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-xl overflow-hidden shadow-lg border border-zinc-200 dark:border-zinc-800">
-                  {infoModal.exercise.youtube_id ? (
-                    <iframe 
-                      src={`https://www.youtube.com/embed/${infoModal.exercise.youtube_id}?autoplay=1&mute=0&rel=0&modestbranding=1&loop=1&playlist=${infoModal.exercise.youtube_id}`}
-                      className="absolute inset-0 w-full h-full border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-zinc-600">
-                      <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
-                      <span className="text-sm font-bold text-zinc-500">Vidéo non disponible</span>
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="w-full max-w-[250px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-xl overflow-hidden shadow-lg border border-zinc-200 dark:border-zinc-800">
+                {infoModal.exercise.youtube_id ? (
+                  <iframe 
+                    src={`https://www.youtube.com/embed/${infoModal.exercise.youtube_id}?autoplay=1&mute=0&rel=0&modestbranding=1&loop=1&playlist=${infoModal.exercise.youtube_id}`}
+                    className="absolute inset-0 w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-zinc-600">
+                    <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
+                    <span className="text-sm font-bold text-zinc-500">Vidéo non disponible</span>
+                  </div>
+                )}
+              </div>
 
               <div className="flex flex-col items-center space-y-2 mt-4">
                 <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
@@ -654,105 +755,6 @@ function WorkoutPageContent() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
-        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
-              <Scale className="mr-2 h-5 w-5" /> Conversion
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-6 space-y-4">
-            <div className="flex items-center space-x-3">
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs font-bold text-zinc-500">KILOGRAMMES</Label>
-                <Input type="number" value={convertModal.kgValue} onChange={(e) => { const kg = e.target.value; setConvertModal({ show: true, kgValue: kg, lbsValue: kg ? (parseFloat(kg) * 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center h-14 bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800" placeholder="0" />
-              </div>
-              <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700 mt-4 shrink-0" />
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs font-bold text-teal-600 dark:text-teal-500">POUNDS (LBS)</Label>
-                <Input type="number" value={convertModal.lbsValue} onChange={(e) => { const lbs = e.target.value; setConvertModal({ show: true, lbsValue: lbs, kgValue: lbs ? (parseFloat(lbs) / 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center text-teal-600 dark:text-teal-500 h-14 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800" placeholder="0" />
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={swapModal.show} onOpenChange={(open) => !open && setSwapModal({ show: false, weId: "", currentEx: null, alternatives: [] })}>
-        <DialogContent className="sm:max-w-[600px] w-full bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b p-0 overflow-hidden h-[85dvh] sm:h-[90dvh] flex flex-col">
-          <DialogHeader className="p-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-            <DialogTitle className="flex items-center text-indigo-600 dark:text-indigo-400">
-              <ArrowLeftRight className="mr-2 h-5 w-5"/> {txt.swapTitle}
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 space-y-3 shrink-0">
-            <div className="flex items-center space-x-2">
-              <Input placeholder={txt.search} value={searchSwapQuery} onChange={(e) => setSearchSwapQuery(e.target.value)} className="bg-white dark:bg-zinc-950 font-medium flex-1" />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapStar !== null ? 'border-orange-500 text-orange-600' : ''}`}><Filter className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">SNC</span></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setSelectedSwapStar(null)}>Toutes</DropdownMenuItem>
-                  {[5, 4, 3, 2, 1].map(s => <DropdownMenuItem key={s} onClick={() => setSelectedSwapStar(s)}>{s} Étoiles</DropdownMenuItem>)}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapPattern !== null ? 'border-teal-500 text-teal-600' : ''}`}><Activity className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Mouv.</span></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setSelectedSwapPattern(null)}>Tous</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("push")}>Push</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("pull")}>Pull</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("squat")}>Squat</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("hinge")}>Hinge</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapPattern("core")}>Core</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className={`shrink-0 px-3 ${selectedSwapEquipment !== null ? 'border-purple-500 text-purple-600' : ''}`}><Dumbbell className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Matériel</span></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment(null)}>Tous</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("poids_corps")}>Poids de corps</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("salle")}>Machine/Salle</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSelectedSwapEquipment("home_gym")}>Haltères/Léger</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-hide">
-              {["Tous", "Pectoraux", "Dos", "Jambes", "Épaules", "Biceps", "Triceps", "Abdos"].map(muscle => (
-                <button key={muscle} onClick={() => setSelectedSwapMuscle(muscle)} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold border ${selectedSwapMuscle === muscle ? 'bg-indigo-500 text-white' : 'text-zinc-600 dark:text-zinc-400'}`}>
-                  {muscle}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-zinc-50 dark:bg-zinc-950">
-            {filteredSwapAlternatives.length === 0 ? (
-              <p className="text-sm font-bold text-zinc-500 text-center mt-10">{txt.noAlt}</p>
-            ) : (
-              filteredSwapAlternatives.map((alt) => (
-                <div key={alt.id} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500 transition-colors">
-                  <div className="flex-1 min-w-0 pr-4">
-                    <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate">{alt.name}</h5>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{alt.target_muscle}</p>
-                    </div>
-                  </div>
-                  <Button size="sm" onClick={() => confirmSwap(alt)} className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold shrink-0">
-                    {txt.select}
-                  </Button>
-                </div>
-              ))
-            )}
-          </div>
         </DialogContent>
       </Dialog>
 
