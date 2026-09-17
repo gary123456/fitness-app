@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff, Clock } from "lucide-react";
+import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff, Clock, Zap } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
 import { getEvolvedExperienceLevel } from "@/lib/fitness";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 
 const EXTRA_SPORTS = [ 
   { id: "jjb", label: "JJB / MMA" }, { id: "football", label: "Football / Rugby" }, 
@@ -28,6 +28,16 @@ const EQUIPMENTS = [
   { id: "salle", label: "Salle de sport (Machines, Barres)" },
   { id: "home_gym", label: "Home Gym (Haltères, Kettlebells)" }
 ];
+
+const NAV_SECTIONS = [
+  { id: 'identity', label: 'Identité', icon: User },
+  { id: 'biometrics', label: 'Biométrie', icon: Target },
+  { id: 'lifestyle', label: 'Mode de vie', icon: Dumbbell },
+  { id: 'preferences', label: 'Préférences', icon: ShieldCheck },
+  { id: 'danger', label: 'Danger', icon: AlertTriangle }
+];
+
+const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -62,6 +72,7 @@ export default function SettingsPage() {
   const { lang } = useLanguage();
   const { data, isLoading, mutate } = useSWR('settingsData', fetchProfileData);
 
+  // --- ÉTATS D'ÉDITION ---
   const [editFirstName, setEditFirstName] = useState("");
   const [editLastName, setEditLastName] = useState("");
   const [editHeight, setEditHeight] = useState("");
@@ -69,27 +80,48 @@ export default function SettingsPage() {
   const [editBodyFat, setEditBodyFat] = useState("");
   const [editGoal, setEditGoal] = useState("");
   const [editExperience, setEditExperience] = useState("");
-  // 🛡️ NOUVEAU : Fréquence de la semaine !
   const [editFrequency, setEditFrequency] = useState(""); 
   const [editSchedule, setEditSchedule] = useState<Record<string, string[]>>({});
   const [editEquipment, setEditEquipment] = useState<string[]>([]);
   const [editDisableQuiz, setEditDisableQuiz] = useState(false);
   const [editDataSaver, setEditDataSaver] = useState(false);
   
+  // --- ÉTATS UI & SMART SAVE ---
+  const [isBasicDirty, setIsBasicDirty] = useState(false);
+  const [isAiDirty, setIsAiDirty] = useState(false);
+  const [activeSection, setActiveSection] = useState('identity');
+
   const [isPushEnabled, setIsPushEnabled] = useState(false);
-  const [recalibrateAI, setRecalibrateAI] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const t = {
-    FR: { title: "Paramètres", sub: "Configuration du moteur algorithmique.", save: "Enregistrer les modifications", recalc: "Recalibrer mon programme IA", danger: "Zone de Danger", deleteAcc: "Supprimer le compte", deleteWarn: "Tapez 'SUPPRIMER'", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5", successTitle: "Profil Sauvegardé", successDesc: "Vos paramètres ont été mis à jour avec succès.", successAI: "L'IA a généré un nouveau programme complet.", continueBtn: "Continuer" },
-    EN: { title: "Settings", sub: "Algorithmic engine configuration.", save: "Save changes", recalc: "Recalibrate AI program", danger: "Danger Zone", deleteAcc: "Delete Account", deleteWarn: "Type 'DELETE'", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5", successTitle: "Profile Saved", successDesc: "Your settings have been successfully updated.", successAI: "AI has generated a new comprehensive program.", continueBtn: "Continue" }
+    FR: { title: "Paramètres", sub: "Configuration du moteur algorithmique.", save: "Enregistrer les modifications", recalc: "Sauvegarder & Recalibrer l'IA", danger: "Zone de Danger", deleteAcc: "Supprimer le compte", deleteWarn: "Tapez 'SUPPRIMER'", bfLabel: "Masse Grasse (%) - Optionnel", bfPlaceholder: "Ex: 15.5", successTitle: "Profil Sauvegardé", successDesc: "Vos paramètres ont été mis à jour avec succès.", successAI: "L'IA a généré un nouveau programme complet.", continueBtn: "Continuer" },
+    EN: { title: "Settings", sub: "Algorithmic engine configuration.", save: "Save changes", recalc: "Save & Recalibrate AI", danger: "Danger Zone", deleteAcc: "Delete Account", deleteWarn: "Type 'DELETE'", bfLabel: "Body Fat (%) - Optional", bfPlaceholder: "Ex: 15.5", successTitle: "Profile Saved", successDesc: "Your settings have been successfully updated.", successAI: "AI has generated a new comprehensive program.", continueBtn: "Continue" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
+  // --- OBSERVATEUR DE SCROLL (Active l'onglet selon la position) ---
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          setActiveSection(entry.target.id);
+        }
+      });
+    }, { rootMargin: '-30% 0px -50% 0px' });
+
+    NAV_SECTIONS.forEach(s => {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // --- INITIALISATION DES DONNÉES ---
   useEffect(() => {
     if (data?.profile) {
       setEditFirstName(data.profile.first_name || "");
@@ -99,7 +131,6 @@ export default function SettingsPage() {
       setEditBodyFat(data.currentBodyFat ? data.currentBodyFat.toString() : "");
       setEditGoal(data.profile.current_goal || "maintien");
       setEditExperience(data.profile.experience_level || "debutant");
-      // 🛡️ NOUVEAU : On récupère la fréquence
       setEditFrequency(data.profile.training_frequency || "3_jours");
       setEditSchedule(data.profile.weekly_schedule || { monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: [] });
       setEditEquipment(data.profile.equipment_access ? data.profile.equipment_access.split(',').map((e: string) => e.trim()) : ['poids_corps']);
@@ -117,6 +148,58 @@ export default function SettingsPage() {
       });
     }
   }, [data]);
+
+  // --- MOTEUR SMART SAVE (Comparaison de données) ---
+  useEffect(() => {
+    if (!data?.profile) return;
+
+    const origGoal = data.profile.current_goal || "maintien";
+    const origFreq = data.profile.training_frequency || "3_jours";
+    const origExp = data.profile.experience_level || "debutant";
+    const origEq = (data.profile.equipment_access || "poids_corps").split(',').map((e: string) => e.trim()).sort().join(',');
+    const currentEq = [...editEquipment].sort().join(',');
+
+    let scheduleChanged = false;
+    for (const day of DAYS_ORDER) {
+      const origDaySports = data.profile.weekly_schedule?.[day] || [];
+      const currDaySports = editSchedule[day] || [];
+      if ([...origDaySports].sort().join(',') !== [...currDaySports].sort().join(',')) {
+        scheduleChanged = true;
+        break;
+      }
+    }
+
+    const aiChanged = (editGoal !== origGoal) || 
+                      (editFrequency !== origFreq) || 
+                      (editExperience !== origExp) || 
+                      (currentEq !== origEq) || 
+                      scheduleChanged;
+    
+    setIsAiDirty(aiChanged);
+
+    const origFirst = data.profile.first_name || "";
+    const origLast = data.profile.last_name || "";
+    const origHeight = data.profile.height_cm?.toString() || "";
+    const origWeight = data.currentWeight?.toString() || data.profile.weight_kg?.toString() || "";
+    const origBF = data.currentBodyFat?.toString() || "";
+    const origQuiz = data.profile.disable_quiz || false;
+    const origSaver = data.profile.data_saver_enabled || false;
+
+    const basicChanged = (editFirstName !== origFirst) ||
+                         (editLastName !== origLast) ||
+                         (editHeight !== origHeight) ||
+                         (editWeight !== origWeight) ||
+                         (editBodyFat !== origBF) ||
+                         (editDisableQuiz !== origQuiz) ||
+                         (editDataSaver !== origSaver);
+
+    setIsBasicDirty(basicChanged);
+
+  }, [
+    editFirstName, editLastName, editHeight, editWeight, editBodyFat, 
+    editGoal, editExperience, editFrequency, editSchedule, editEquipment, 
+    editDisableQuiz, editDataSaver, data
+  ]);
 
   const handleSportToggle = (day: string, sportId: string, checked: boolean) => {
     setEditSchedule((prev) => {
@@ -176,7 +259,7 @@ export default function SettingsPage() {
       
       const updatedProfileData = { 
         first_name: editFirstName, last_name: editLastName, height_cm: newHeight, weight_kg: newWeight, 
-        current_goal: editGoal, experience_level: editExperience, training_frequency: editFrequency, // 🛡️ NOUVEAU
+        current_goal: editGoal, experience_level: editExperience, training_frequency: editFrequency, 
         weekly_schedule: editSchedule, equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz, data_saver_enabled: editDataSaver
       };
 
@@ -186,7 +269,7 @@ export default function SettingsPage() {
         await supabase.from("measurements").insert([{ user_id: data.profile.id, weight_kg: newWeight, body_fat_percentage: newBF }]);
       }
 
-      if (recalibrateAI) {
+      if (isAiDirty) {
          const { data: library } = await supabase.from("exercise_library").select("*");
          const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
          
@@ -267,17 +350,32 @@ export default function SettingsPage() {
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-4xl mx-auto w-full pb-32">
-      <div className="flex flex-col space-y-2 mb-8">
+      
+      <div className="flex flex-col space-y-2 mb-6">
         <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center">
           <Settings className="w-8 h-8 mr-3 text-teal-500" /> {txt.title}
         </h2>
         <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
       </div>
 
-      <div className="space-y-6">
+      {/* 🛡️ STICKY NAVIGATION (PWA PREMIUM) */}
+      <div className="sticky top-0 sm:top-4 z-40 -mx-4 px-4 py-3 sm:mx-0 sm:rounded-2xl sm:shadow-lg bg-zinc-50/90 dark:bg-zinc-950/90 sm:bg-white/90 sm:dark:bg-zinc-900/90 backdrop-blur-xl border-b sm:border border-zinc-200 dark:border-zinc-800 flex overflow-x-auto hide-scrollbar snap-x space-x-2">
+        {NAV_SECTIONS.map(section => (
+          <button
+            key={section.id}
+            onClick={() => document.getElementById(section.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className={`shrink-0 snap-start flex items-center px-4 py-2 rounded-full font-bold text-sm transition-all ${activeSection === section.id ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-md' : 'bg-white dark:bg-zinc-950 text-zinc-500 hover:text-zinc-900 dark:hover:text-white border border-zinc-200 dark:border-zinc-800'}`}
+          >
+            <section.icon className={`w-4 h-4 mr-2 ${activeSection === section.id ? 'text-teal-400 dark:text-teal-600' : ''}`} />
+            {section.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-8 mt-6 relative">
         
         {/* IDENTITÉ */}
-        <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
+        <Card id="identity" className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm scroll-mt-32">
           <CardHeader><CardTitle className="text-lg flex items-center"><User className="w-5 h-5 mr-2 text-indigo-500"/> Identité & Avatar</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -297,7 +395,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* BIOMÉTRIE & OBJECTIF */}
-        <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
+        <Card id="biometrics" className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm scroll-mt-32">
           <CardHeader><CardTitle className="text-lg flex items-center"><Target className="w-5 h-5 mr-2 text-orange-500"/> Biométrie & Objectif</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -334,11 +432,10 @@ export default function SettingsPage() {
         </Card>
 
         {/* ÉQUIPEMENT & SPORTS */}
-        <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
+        <Card id="lifestyle" className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm scroll-mt-32">
           <CardHeader><CardTitle className="text-lg flex items-center"><Dumbbell className="w-5 h-5 mr-2 text-blue-500"/> Mode de vie & Entraînement</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             
-            {/* 🛡️ NOUVEAU : Sélecteur de Fréquence */}
             <div className="space-y-3">
               <Label className="text-base font-bold dark:text-zinc-300 flex items-center"><Clock className="w-4 h-4 mr-2" /> Fréquence d'Entraînement</Label>
               <Select value={editFrequency} onValueChange={setEditFrequency}>
@@ -350,7 +447,6 @@ export default function SettingsPage() {
                   <SelectItem value="5_plus">5 jours ou plus</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-zinc-500 italic">Modifier ceci nécessitera de cocher "Recalibrer mon programme IA" en bas de page.</p>
             </div>
 
             <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
@@ -390,7 +486,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* PRÉFÉRENCES */}
-        <Card className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
+        <Card id="preferences" className="border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm scroll-mt-32">
           <CardHeader><CardTitle className="text-lg flex items-center"><ShieldCheck className="w-5 h-5 mr-2 text-green-500"/> Préférences & Notifications</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -425,21 +521,8 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* 🛡️ ZONE DE SAUVEGARDE ET RECALIBRAGE */}
-        <div className="sticky bottom-20 md:bottom-4 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl p-4 rounded-2xl border border-teal-500/30 shadow-[0_10px_40px_-10px_rgba(20,184,166,0.3)] flex flex-col space-y-4">
-          <div className="flex items-center space-x-3 p-3 bg-teal-50 dark:bg-teal-900/20 rounded-xl border border-teal-200 dark:border-teal-800">
-            <Checkbox id="recal-settings" checked={recalibrateAI} onCheckedChange={(c) => setRecalibrateAI(c as boolean)} className="border-teal-500 data-[state=checked]:bg-teal-500 w-5 h-5" />
-            <Label htmlFor="recal-settings" className="text-sm font-black text-teal-700 dark:text-teal-400 cursor-pointer">
-              {txt.recalc} <span className="font-medium text-xs ml-2 opacity-80">(Cochez si vos dispos ou équipements ont changé)</span>
-            </Label>
-          </div>
-          <Button onClick={handleUpdateProfile} disabled={actionLoading} className="w-full h-14 bg-teal-500 hover:bg-teal-600 text-white font-black text-lg shadow-lg shadow-teal-500/20">
-            {actionLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Save className="w-6 h-6 mr-2" /> {txt.save}</>}
-          </Button>
-        </div>
-
         {/* ZONE DE DANGER */}
-        <Card className="border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/10 shadow-sm mt-12">
+        <Card id="danger" className="border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/10 shadow-sm mt-12 mb-20 scroll-mt-32">
           <CardHeader><CardTitle className="text-red-600 dark:text-red-500 flex items-center"><AlertTriangle className="w-5 h-5 mr-2"/> {txt.danger}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm font-bold text-red-700/80 dark:text-red-400/80">Cette action supprimera définitivement toutes vos données, photos, historiques et programmes. Tapez "{txt.deleteWarn.split("'")[1]}" pour confirmer.</p>
@@ -454,6 +537,22 @@ export default function SettingsPage() {
 
       </div>
 
+      {/* 🛡️ LE CERVEAU UI : SMART SAVE FLOTTANT */}
+      <div className={`fixed bottom-0 left-0 right-0 p-4 md:sticky md:bottom-4 z-50 transition-all duration-500 ease-in-out transform ${isBasicDirty || isAiDirty ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-full opacity-0 pointer-events-none'}`}>
+        <div className="max-w-4xl mx-auto w-full bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl p-4 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.3)]">
+          {isAiDirty ? (
+            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="w-full h-14 bg-orange-500 hover:bg-orange-600 text-white font-black text-lg shadow-lg shadow-orange-500/30 rounded-2xl transition-transform active:scale-95">
+              {actionLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Zap className="w-6 h-6 mr-2" /> {txt.recalc}</>}
+            </Button>
+          ) : (
+            <Button onClick={handleUpdateProfile} disabled={actionLoading} className="w-full h-14 bg-teal-500 hover:bg-teal-600 text-white font-black text-lg shadow-lg shadow-teal-500/20 rounded-2xl transition-transform active:scale-95">
+              {actionLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Save className="w-6 h-6 mr-2" /> {txt.save}</>}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* MODALE SUCCÈS */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="sm:max-w-[400px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 rounded-2xl text-center p-6">
           <div className="flex flex-col items-center">
@@ -465,8 +564,8 @@ export default function SettingsPage() {
             </DialogTitle>
             <DialogDescription className="font-medium text-zinc-500 mb-6">
               {txt.successDesc}
-              {recalibrateAI && (
-                <span className="block mt-2 font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded-lg">
+              {isAiDirty && (
+                <span className="block mt-2 font-bold text-orange-500 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-2 rounded-lg">
                   🤖 {txt.successAI}
                 </span>
               )}
@@ -474,7 +573,8 @@ export default function SettingsPage() {
             <Button 
               className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold h-12 text-lg rounded-xl"
               onClick={() => {
-                setRecalibrateAI(false);
+                setIsAiDirty(false);
+                setIsBasicDirty(false);
                 setShowSuccessModal(false);
                 router.push("/dashboard");
               }}
