@@ -67,7 +67,6 @@ function WorkoutPageContent() {
   const { lang } = useLanguage();
   const { data, error, mutate, isLoading } = useSWR('workoutData', fetchProgramData);
 
-  // 🛡️ NOUVEAU STATE : Maintien du plan local pour le Drag & Drop
   const [localWeeklyPlan, setLocalWeeklyPlan] = useState<any[]>([]);
 
   useEffect(() => {
@@ -92,7 +91,6 @@ function WorkoutPageContent() {
   
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
 
-  // 🛡️ GESTION DU DRAG & DROP DANS LE HUB
   const [draggedItem, setDraggedItem] = useState<{sessionId: string, index: number} | null>(null);
   const [dragOverItem, setDragOverItem] = useState<{sessionId: string, index: number} | null>(null);
 
@@ -118,7 +116,6 @@ function WorkoutPageContent() {
   const customProg = data?.allPrograms?.find((p: any) => p.program_type === 'custom') || null;
   const algoProg = data?.allPrograms?.find((p: any) => p.program_type === 'ai') || null;
 
-  // 🛡️ NOUVEAU : Fonction de tri d'exercices dans le HUB (Flèches)
   const moveExerciseInHub = async (sessionId: string, index: number, direction: 'up' | 'down') => {
     const newPlan = [...localWeeklyPlan];
     const sessionIndex = newPlan.findIndex(s => s.id === sessionId);
@@ -145,7 +142,6 @@ function WorkoutPageContent() {
     } catch (err) { console.error(err); }
   };
 
-  // 🛡️ NOUVEAU : Fonctions de Drag & Drop dans le HUB
   const handleDragStart = (e: React.DragEvent, sessionId: string, index: number) => {
     setDraggedItem({ sessionId, index });
     if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
@@ -378,7 +374,10 @@ function WorkoutPageContent() {
   };
 
   const filteredSwapAlternatives = swapModal.alternatives.filter(ex => {
-    const matchSearch = ex.name.toLowerCase().includes(searchSwapQuery.toLowerCase());
+    // 🛡️ NOUVEAU : Prise en compte de la langue dans la barre de recherche
+    const exName = lang === 'EN' && ex.name_en ? ex.name_en : ex.name;
+    const matchSearch = exName.toLowerCase().includes(searchSwapQuery.toLowerCase());
+    
     const target = ex.target_muscle.toLowerCase();
     const filter = selectedSwapMuscle.toLowerCase();
 
@@ -625,7 +624,10 @@ function WorkoutPageContent() {
                             </div>
                             <div className="flex items-start">
                               <div>
-                                <h4 className={`font-bold text-sm ${isToday && !isCompleted ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>{ex.name}</h4>
+                                {/* 🛡️ NOUVEAU : Affichage conditionnel de name_en */}
+                                <h4 className={`font-bold text-sm ${isToday && !isCompleted ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                                  {lang === 'EN' && ex.name_en ? ex.name_en : ex.name}
+                                </h4>
                                 <div className="flex items-center space-x-2 mt-0.5">
                                   <p className="text-xs text-zinc-500 font-medium">{ex.target_muscle} • {ex.equipment_required.replace('_', ' ')}</p>
                                   <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
@@ -728,7 +730,10 @@ function WorkoutPageContent() {
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
-              <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
+              {/* 🛡️ NOUVEAU : Affichage conditionnel de name_en */}
+              <h2 className="text-xl font-black dark:text-white">
+                {lang === 'EN' && infoModal.exercise.name_en ? infoModal.exercise.name_en : infoModal.exercise.name}
+              </h2>
               
               <div className="w-full max-w-[250px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-xl overflow-hidden shadow-lg border border-zinc-200 dark:border-zinc-800">
                 {infoModal.exercise.youtube_id ? (

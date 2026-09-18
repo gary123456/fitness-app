@@ -207,6 +207,8 @@ function ActiveWorkoutSessionContent() {
   
   const stravaCardRef = useRef<HTMLDivElement>(null);
 
+  const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
   const calculatePlates = () => {
     const target = parseFloat(plateModal.targetWeight);
     const bar = parseFloat(plateModal.barWeight);
@@ -399,7 +401,6 @@ function ActiveWorkoutSessionContent() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // 🛡️ CORRECTION : Tri d'exercices dans le Tracker (Flèches & Drag)
   const moveExercise = async (index: number, direction: 'up' | 'down') => {
     if (data?.isReadOnly) return;
     if (direction === 'up' && index === 0) return;
@@ -408,7 +409,6 @@ function ActiveWorkoutSessionContent() {
     const newArray = [...localExercises];
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     
-    // Échange Optimistic UI (Aide aussi hors ligne)
     const temp = newArray[index];
     newArray[index] = newArray[targetIndex];
     newArray[targetIndex] = temp;
@@ -417,7 +417,7 @@ function ActiveWorkoutSessionContent() {
     if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
 
     try {
-      if (!data?.sessionData?.id) return; // Sécurité TypeScript
+      if (!data?.sessionData?.id) return; 
       const updates = newArray.map((ex, i) => ({
         id: ex.id, session_id: data.sessionData.id, exercise_id: ex.exercise_id, order_index: i
       }));
@@ -453,7 +453,7 @@ function ActiveWorkoutSessionContent() {
     setDragOverIdx(null);
     if (!data?.sessionData || data?.isReadOnly) return; 
     try {
-      if (!data?.sessionData?.id) return; // Sécurité TypeScript
+      if (!data?.sessionData?.id) return; 
       const updates = localExercises.map((ex, i) => ({
         id: ex.id, session_id: data.sessionData.id, exercise_id: ex.exercise_id, order_index: i
       }));
@@ -539,7 +539,7 @@ function ActiveWorkoutSessionContent() {
         if (weight > maxWeight || (weight === maxWeight && reps > maxRepsForWeight)) {
           maxWeight = weight;
           maxRepsForWeight = reps;
-          bestExName = we?.exercise_library?.name || "";
+          bestExName = (lang === 'EN' && we?.exercise_library?.name_en) ? we.exercise_library.name_en : (we?.exercise_library?.name || "");
         }
 
         if (we) {
@@ -639,7 +639,9 @@ function ActiveWorkoutSessionContent() {
   };
 
   const filteredSwapAlternatives = swapModal.alternatives.filter(ex => {
-    const matchSearch = ex.name.toLowerCase().includes(searchSwapQuery.toLowerCase());
+    const exName = lang === 'EN' && ex.name_en ? ex.name_en : ex.name;
+    const matchSearch = exName.toLowerCase().includes(searchSwapQuery.toLowerCase());
+    
     const target = ex.target_muscle.toLowerCase();
     const filter = selectedSwapMuscle.toLowerCase();
 
@@ -705,6 +707,10 @@ function ActiveWorkoutSessionContent() {
   const session = data.sessionData;
   const insights = getSessionInsights(localExercises, lang);
   const dataSaverEnabled = data.profile?.data_saver_enabled || false; 
+
+  const todayDateObj = new Date();
+  const todayDateStr = todayDateObj.toISOString().split('T')[0];
+  const isTodaySession = data.sessionData.day_name === DAYS_ORDER[todayDateObj.getDay() === 0 ? 6 : todayDateObj.getDay() - 1];
 
   return (
     <div className="flex-1 bg-zinc-50 dark:bg-zinc-950 min-h-screen pb-32 relative">
@@ -774,6 +780,8 @@ function ActiveWorkoutSessionContent() {
               const uniqueKey = we.id || `we-${session.id}-${index}`;
               const thumbnailUrl = getYoutubeThumbnail(ex.youtube_id);
               const ghost = data.ghostData[identifier];
+              
+              const isCompletedEx = we.sets > 0 && Array.from({ length: we.sets }).every((_, i) => completedSets[`${identifier}_${i}`] === true);
 
               return (
                 <div 
@@ -789,7 +797,6 @@ function ActiveWorkoutSessionContent() {
                   <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
                     <div className="flex items-center space-x-3 flex-1">
                       
-                      {/* 🛡️ BOUTONS DE TRI (Haut/Bas) POUR MOBILE + DRAG POUR DESKTOP */}
                       {!data.isReadOnly && (
                         <div className="flex flex-col items-center mr-2">
                           <button onClick={() => moveExercise(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-teal-500 disabled:opacity-30">
@@ -826,7 +833,10 @@ function ActiveWorkoutSessionContent() {
 
                       <div className="flex items-start flex-1">
                         <div className="cursor-pointer flex-1" onClick={() => router.push(`/workout/${session.id}/exercise/${ex.id}`)}>
-                          <h3 className="font-bold text-zinc-900 dark:text-zinc-50 hover:text-teal-500 transition-colors leading-tight line-clamp-2 pr-2">{ex.name}</h3>
+                          {/* 🛡️ CORRECTION : Syntaxe JSX parfaite pour l'interpolation conditionnelle */}
+                          <h4 className={`font-bold text-sm ${isTodaySession && !isCompletedEx ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                            {lang === 'EN' && ex.name_en ? ex.name_en : ex.name}
+                          </h4>
                           <div className="flex items-center space-x-2 mt-1">
                             <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{txt.target} : {we.target_reps} reps</p>
                             <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
@@ -1018,7 +1028,9 @@ function ActiveWorkoutSessionContent() {
               filteredSwapAlternatives.map((alt) => (
                 <div key={alt.id} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-500 transition-colors">
                   <div className="flex-1 min-w-0 pr-4">
-                    <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate">{alt.name}</h5>
+                    <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-sm truncate">
+                      {lang === 'EN' && alt.name_en ? alt.name_en : alt.name}
+                    </h5>
                     <div className="flex items-center space-x-2 mt-1">
                       <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">{alt.target_muscle}</p>
                       <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
@@ -1136,7 +1148,9 @@ function ActiveWorkoutSessionContent() {
         <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
           {infoModal.exercise && (
             <div className="p-6 text-center space-y-4">
-              <h2 className="text-xl font-black dark:text-white">{infoModal.exercise.name}</h2>
+              <h2 className="text-xl font-black dark:text-white">
+                {lang === 'EN' && infoModal.exercise.name_en ? infoModal.exercise.name_en : infoModal.exercise.name}
+              </h2>
               
               {dataSaverEnabled ? (
                 <div className="w-full max-w-[200px] mx-auto aspect-[9/16] bg-zinc-100 dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center items-center">
