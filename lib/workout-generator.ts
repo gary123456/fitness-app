@@ -1,12 +1,14 @@
 export interface Exercise {
   id: string;
   name: string;
+  name_en?: string | null; // NOUVEAU : Prêt pour la traduction
   movement_pattern: string;
   equipment_required: string;
   cns_impact: number;
   effectiveness_score: number;
   target_muscle: string;
-  gif_url?: string;
+  muscle_fractions?: Record<string, number> | null; // NOUVEAU : Matrice de pourcentages
+  youtube_id?: string | null;
 }
 
 export interface UserProfile {
@@ -172,7 +174,6 @@ export function generateSmartWorkoutPlan(
               recommendedWeight = bestSet.weight + increment;
               defaultReps = `${parseInt(defaultReps.split('-')[0])}-${maxTargetRep}`; 
             } else {
-              // 🛡️ CORRECTION : Utilisation de defaultReps ici
               defaultReps = `Viser > ${bestSet.reps + 2} reps`;
             }
           } 

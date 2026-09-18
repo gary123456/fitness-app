@@ -61,7 +61,8 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
     { data: rawLogs } 
   ] = await Promise.all([
     supabase.from("measurements").select("*").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: true }),
-    supabase.from("exercise_library").select("id, name, target_muscle, movement_pattern, equipment_required"),
+    // 🛡️ MODIFICATION : Ajout de name_en et muscle_fractions dans le select
+    supabase.from("exercise_library").select("id, name, name_en, target_muscle, movement_pattern, equipment_required, muscle_fractions"),
     supabase.from('daily_metrics').select('date, readiness_score').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true }),
     supabase.from('daily_nutrition_logs').select('date, total_kcal').eq('user_id', user.id).gte('date', startDateStr).lte('date', endDateStr).order('date', { ascending: true }),
     supabase.rpc('get_dashboard_metrics', { p_user_id: user.id }),
@@ -114,21 +115,38 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
       exData[log.exercise_id].push({ date: d, e1RM: Number(e1rm).toFixed(1), weight: log.weight, reps: log.reps });
       exSet.add(log.exercise_id);
 
-      const nameLower = exObj.name.toLowerCase();
-      if (nameLower.includes("squat barre")) best1RMs["Squat"] = Math.max(best1RMs["Squat"], e1rm);
-      else if (nameLower.includes("couché barre") || nameLower.includes("bench press")) best1RMs["Bench"] = Math.max(best1RMs["Bench"], e1rm);
-      else if (nameLower.includes("terre classique") || nameLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], e1rm);
+      // 🛡️ MODIFICATION : Sécurisation de la détection des PRs (Nom Fr et Anglais)
+      const nameLower = (exObj.name || "").toLowerCase();
+      const nameEnLower = (exObj.name_en || "").toLowerCase();
+      
+      if (nameLower.includes("squat barre") || nameEnLower.includes("barbell squat")) best1RMs["Squat"] = Math.max(best1RMs["Squat"], e1rm);
+      else if (nameLower.includes("couché barre") || nameLower.includes("bench press") || nameEnLower.includes("bench press")) best1RMs["Bench"] = Math.max(best1RMs["Bench"], e1rm);
+      else if (nameLower.includes("terre classique") || nameLower.includes("deadlift") || nameEnLower.includes("deadlift")) best1RMs["Deadlift"] = Math.max(best1RMs["Deadlift"], e1rm);
     }
 
-    if (exObj && exObj.target_muscle) {
-      const target = exObj.target_muscle.toLowerCase();
+    // 🛡️ NOUVEAU CERVEAU ANALYTIQUE : RÉPARTITION FRACTIONNÉE
+    if (exObj) {
+      const fractions = exObj.muscle_fractions;
       
-      if (target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe") || target.includes("glute") || target.includes("leg")) muscleDistribution.Legs += 1;
-      if (target.includes("pec") || target.includes("poitrine") || target.includes("chest")) muscleDistribution.Chest += 1;
-      if (target.includes("dos") || target.includes("dorsal") || target.includes("rhomboïde") || target.includes("trapèze") || target.includes("lombaire") || target.includes("lats") || target.includes("row") || target.includes("back")) muscleDistribution.Back += 1;
-      if (target.includes("épaule") || target.includes("epaule") || target.includes("delto") || target.includes("shoulder")) muscleDistribution.Shoulders += 1;
-      if (target.includes("biceps") || target.includes("triceps") || target.includes("bras") || target.includes("arm")) muscleDistribution.Arms += 1;
-      if (target.includes("abdo") || target.includes("core") || target.includes("gainage") || target.includes("transverse") || target.includes("oblique") || target.includes("sangle")) muscleDistribution.Core += 1;
+      // Si l'exercice possède le nouveau JSON Mathématique, on l'utilise
+      if (fractions && Object.keys(fractions).length > 0) {
+        muscleDistribution.Legs += (fractions.legs || 0);
+        muscleDistribution.Chest += (fractions.chest || 0);
+        muscleDistribution.Back += (fractions.back || 0);
+        muscleDistribution.Shoulders += (fractions.shoulders || 0);
+        muscleDistribution.Arms += (fractions.arms || 0);
+        muscleDistribution.Core += (fractions.core || 0);
+      } 
+      // Sinon, Fallback sur l'ancienne méthode textuelle (Sécurité de Non-Régression pour des exos custom)
+      else if (exObj.target_muscle) {
+        const target = exObj.target_muscle.toLowerCase();
+        if (target.includes("quadriceps") || target.includes("ischio") || target.includes("mollet") || target.includes("fessier") || target.includes("jambe") || target.includes("glute") || target.includes("leg")) muscleDistribution.Legs += 1;
+        if (target.includes("pec") || target.includes("poitrine") || target.includes("chest")) muscleDistribution.Chest += 1;
+        if (target.includes("dos") || target.includes("dorsal") || target.includes("rhomboïde") || target.includes("trapèze") || target.includes("lombaire") || target.includes("lats") || target.includes("row") || target.includes("back")) muscleDistribution.Back += 1;
+        if (target.includes("épaule") || target.includes("epaule") || target.includes("delto") || target.includes("shoulder")) muscleDistribution.Shoulders += 1;
+        if (target.includes("biceps") || target.includes("triceps") || target.includes("bras") || target.includes("arm")) muscleDistribution.Arms += 1;
+        if (target.includes("abdo") || target.includes("core") || target.includes("gainage") || target.includes("transverse") || target.includes("oblique") || target.includes("sangle")) muscleDistribution.Core += 1;
+      }
     }
   });
 
@@ -152,13 +170,14 @@ const fetchAnalyticsData = async (lang: string, timeframe: string, customStart?:
   const readinessHistory = (sleepLogs || []).map((log: any) => ({ date: safeFormatDate(log.date), score: Number(log.readiness_score) || 0 })).filter((log: any) => log.score > 0);
   const formattedNutrition = (nutritionLogs || []).map((log: any) => ({ date: safeFormatDate(log.date), kcal: Number(log.total_kcal) || 0, target: targetCals }));
 
+  // 🛡️ MODIFICATION : Arrondi à 1 décimale pour la propreté du Radar
   const radarData = [
-    { subject: lang === 'FR' ? 'Pecs' : 'Chest', A: muscleDistribution.Chest, fullMark: 100 },
-    { subject: lang === 'FR' ? 'Dos' : 'Back', A: muscleDistribution.Back, fullMark: 100 },
-    { subject: lang === 'FR' ? 'Épaules' : 'Shoulders', A: muscleDistribution.Shoulders, fullMark: 100 },
-    { subject: lang === 'FR' ? 'Bras' : 'Arms', A: muscleDistribution.Arms, fullMark: 100 },
-    { subject: lang === 'FR' ? 'Jambes' : 'Legs', A: muscleDistribution.Legs, fullMark: 100 },
-    { subject: 'Core', A: muscleDistribution.Core, fullMark: 100 },
+    { subject: lang === 'FR' ? 'Pecs' : 'Chest', A: Math.round(muscleDistribution.Chest * 10) / 10, fullMark: 100 },
+    { subject: lang === 'FR' ? 'Dos' : 'Back', A: Math.round(muscleDistribution.Back * 10) / 10, fullMark: 100 },
+    { subject: lang === 'FR' ? 'Épaules' : 'Shoulders', A: Math.round(muscleDistribution.Shoulders * 10) / 10, fullMark: 100 },
+    { subject: lang === 'FR' ? 'Bras' : 'Arms', A: Math.round(muscleDistribution.Arms * 10) / 10, fullMark: 100 },
+    { subject: lang === 'FR' ? 'Jambes' : 'Legs', A: Math.round(muscleDistribution.Legs * 10) / 10, fullMark: 100 },
+    { subject: 'Core', A: Math.round(muscleDistribution.Core * 10) / 10, fullMark: 100 },
   ];
 
   return { 
@@ -205,8 +224,8 @@ export default function AnalyticsPage() {
   }, [error, router]);
 
   const t = {
-    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Nombre de séries par groupe", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", readinessTrend: "Tendance SNC (Sommeil & Fatigue)", readinessTrendSub: "Évolution de votre capacité de récupération.", nutTrend: "Adhérence Calorique", nutTrendSub: "Calories consommées vs Cible TDEE", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses générées par cette application sont fournies à titre strictement informatif. Elles ne constituent en aucun cas un diagnostic médical. Consultez toujours un médecin avant de modifier votre régime ou programme." },
-    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Number of sets by group", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", readinessTrend: "CNS Trend (Sleep & Fatigue)", readinessTrendSub: "Evolution of your recovery capacity.", nutTrend: "Caloric Adherence", nutTrendSub: "Consumed Calories vs TDEE Target", disclaimer: "MEDICAL DISCLAIMER: The data and analysis generated by this application are provided strictly for informational purposes. They do not constitute medical diagnosis. Always consult a physician before modifying your diet or training program." }
+    FR: { title: "Performances & Évolution", sub: "Visualisez votre progression biométrique et analytique.", weightTitle: "Recomposition Corporelle", weightSub: "Poids réel vs Estimation Masse Grasse", volTitle: "Tonnage Global", volSub: "Charge totale par séance", empty: "Pas assez de données pour cette période.", selectEx: "Sélectionner un exercice", progEx: "Progression Force (1RM)", bench: "Couché", squat: "Squat", deadlift: "Soulevé", measTitle: "Mensurations", measSub: "Évolution en cm", radarTitle: "Répartition Musculaire", radarSub: "Nombre de séries effectives par groupe", weight: "Poids", img: "Masse Grasse", tf7: "7 Derniers Jours", tf30: "1 Mois", tf3m: "3 Mois", tf6m: "6 Mois", tf9m: "9 Mois", tf1y: "1 An", tfall: "Historique Complet", tfcustom: "Personnalisé", aiTitle: "Insight Métabolique", export: "Rapport PDF", startDate: "Date de début", endDate: "Date de fin", acwr: "Charge (ACWR)", acwrSub: "Ratio de fatigue (7j / 28j)", sweetSpot: "Zone Optimale", dangerZone: "Risque Blessure", underZone: "Désentraînement", readinessTrend: "Tendance SNC (Sommeil & Fatigue)", readinessTrendSub: "Évolution de votre capacité de récupération.", nutTrend: "Adhérence Calorique", nutTrendSub: "Calories consommées vs Cible TDEE", disclaimer: "CLAUSE DE NON-RESPONSABILITÉ MÉDICALE : Les données et analyses générées par cette application sont fournies à titre strictement informatif. Elles ne constituent en aucun cas un diagnostic médical. Consultez toujours un médecin avant de modifier votre régime ou programme." },
+    EN: { title: "Performance & Evolution", sub: "Visualize your biometric and analytical progress.", weightTitle: "Body Recomposition", weightSub: "Actual Weight vs Est. Body Fat", volTitle: "Global Tonnage", volSub: "Total load per session", empty: "Not enough data for this period.", selectEx: "Select an exercise", progEx: "Strength Progression (1RM)", bench: "Bench", squat: "Squat", deadlift: "Deadlift", measTitle: "Measurements", measSub: "Evolution in cm", radarTitle: "Muscle Heatmap", radarSub: "Effective sets by group", weight: "Weight", img: "Body Fat", tf7: "Last 7 Days", tf30: "1 Month", tf3m: "3 Months", tf6m: "6 Months", tf9m: "9 Months", tf1y: "1 Year", tfall: "All Time", tfcustom: "Custom Range", aiTitle: "Metabolic Insight", export: "PDF Report", startDate: "Start Date", endDate: "End Date", acwr: "Workload (ACWR)", acwrSub: "Fatigue ratio (7d / 28d)", sweetSpot: "Sweet Spot", dangerZone: "Injury Risk", underZone: "Undertraining", readinessTrend: "CNS Trend (Sleep & Fatigue)", readinessTrendSub: "Evolution of your recovery capacity.", nutTrend: "Caloric Adherence", nutTrendSub: "Consumed Calories vs TDEE Target", disclaimer: "MEDICAL DISCLAIMER: The data and analysis generated by this application are provided strictly for informational purposes. They do not constitute medical diagnosis. Always consult a physician before modifying your diet or training program." }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -215,7 +234,7 @@ export default function AnalyticsPage() {
       case 'acwr': return { show: true, title: lang === 'FR' ? "Comprendre l'ACWR" : "Understanding ACWR", desc: lang === 'FR' ? "L'ACWR compare la fatigue immédiate (7 derniers jours) à la fatigue chronique (28 derniers jours).\n\n• < 0.8 (Désentraînement)\n• 0.8 à 1.3 (Sweet Spot)\n• > 1.5 (Zone de Danger)" : "ACWR compares acute fatigue to chronic fatigue.\n\n• < 0.8 (Undertraining)\n• 0.8 to 1.3 (Sweet Spot)\n• > 1.5 (Danger Zone)" };
       case '1rm': return { show: true, title: lang === 'FR' ? "Progression Force" : "Strength Progression", desc: lang === 'FR' ? "Le 1RM affiché est une estimation via la formule d'Epley. Les séries de plus de 15 reps ne sont pas affichées pour garantir la précision." : "1RM is estimated via Epley's formula. Sets above 15 reps are excluded for accuracy." };
       case 'tonnage': return { show: true, title: lang === 'FR' ? "Tonnage Global" : "Global Tonnage", desc: lang === 'FR' ? "Le Tonnage (Poids × Séries × Reps). La ligne en pointillé est votre moyenne." : "Tonnage is Weight × Sets × Reps. Dotted line is your average." };
-      case 'radar': return { show: true, title: lang === 'FR' ? "Répartition Musculaire" : "Muscle Distribution", desc: lang === 'FR' ? "Calculé en fonction du nombre total de SÉRIES effectuées par groupe musculaire. C'est l'indicateur d'hypertrophie le plus précis." : "Calculated based on total SETS performed per muscle group. The most accurate hypertrophy indicator." };
+      case 'radar': return { show: true, title: lang === 'FR' ? "Répartition Musculaire" : "Muscle Distribution", desc: lang === 'FR' ? "Calculé grâce à notre matrice biomécanique avancée. Chaque série est fractionnée selon l'activation musculaire réelle (Ex: Un Muscle-Up créditera le Dos, les Triceps et les Pecs simultanément)." : "Calculated using advanced biomechanical matrix. Each set is fractioned based on true muscle activation." };
       case 'readiness': return { show: true, title: lang === 'FR' ? "Tendance SNC" : "CNS Trend", desc: lang === 'FR' ? "L'évolution de votre Readiness Score." : "Evolution of your Readiness Score." };
       case 'nutrition': return { show: true, title: lang === 'FR' ? "Adhérence Calorique" : "Caloric Adherence", desc: lang === 'FR' ? "Calories consommées vs Cible TDEE." : "Consumed Calories vs TDEE Target." };
       default: return { show: false, title: "", desc: "" };
@@ -268,7 +287,6 @@ export default function AnalyticsPage() {
     return insight;
   };
 
-  // 🛡️ GÉNÉRATION PDF OPTIMISÉE POUR IOS ET CENTRÉE
   const handlePrintPDF = async () => {
     if (!reportRef.current || !data?.profile) return;
     setIsExporting(true);
@@ -278,7 +296,6 @@ export default function AnalyticsPage() {
     
     const el = reportRef.current;
     
-    // Sauvegarde des styles initiaux
     const originalWidth = el.style.width;
     const originalMinWidth = el.style.minWidth;
     const originalMaxWidth = el.style.maxWidth;
@@ -286,14 +303,12 @@ export default function AnalyticsPage() {
     const originalMargin = el.style.margin;
     
     try {
-      // 🛡️ CORRECTION DU CENTRAGE : On fixe la largeur exacte SANS le margin: auto qui cause le décalage.
       el.style.width = '1200px';
       el.style.minWidth = '1200px';
       el.style.maxWidth = '1200px';
       el.style.padding = '40px';
-      el.style.margin = '0'; // <- LE FIX EST ICI. On empêche le navigateur d'ajouter de l'espace invisible à gauche.
+      el.style.margin = '0'; 
 
-      // Pause pour laisser React/Recharts faire le re-render complet avec les nouvelles dimensions
       await new Promise(resolve => setTimeout(resolve, 600));
       
       const isMobile = window.innerWidth < 768;
@@ -308,8 +323,8 @@ export default function AnalyticsPage() {
       });
       
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pdfWidth = pdf.internal.pageSize.getWidth(); // A4 width (210mm)
-      const pdfHeight = pdf.internal.pageSize.getHeight(); // A4 height (297mm)
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight(); 
       
       const img = new Image();
       img.src = dataUrl;
@@ -321,17 +336,14 @@ export default function AnalyticsPage() {
       const imgProps = pdf.getImageProperties(dataUrl);
       const imgScaledHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      // 🛡️ GESTION MULTI-PAGES (Slicer)
       let heightLeft = imgScaledHeight;
       let position = 0;
 
-      // Dessine la première page
       pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, imgScaledHeight);
       heightLeft -= pdfHeight;
 
-      // Boucle pour couper et ajouter les pages suivantes
       while (heightLeft > 0) {
-        position -= pdfHeight; // Remonte l'image de l'équivalent d'une page A4
+        position -= pdfHeight; 
         pdf.addPage();
         pdf.addImage(dataUrl, 'JPEG', 0, position, pdfWidth, imgScaledHeight);
         heightLeft -= pdfHeight;
@@ -341,7 +353,6 @@ export default function AnalyticsPage() {
       const safeLastName = (data.profile.last_name || 'Vivex').replace(/[^a-zA-Z0-9]/g, '_');
       const fileName = `${safeLastName}_${safeFirstName}_Rapport.pdf`;
 
-      // 🛡️ PARTAGE NATIF IOS
       if (typeof navigator !== 'undefined' && navigator.share) {
         const pdfBlob = pdf.output('blob');
         const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
@@ -362,7 +373,6 @@ export default function AnalyticsPage() {
       console.error("Erreur PDF:", e);
       alert(lang === 'FR' ? "Erreur lors de la génération du PDF." : "Error generating PDF.");
     } finally {
-      // 🛡️ Restauration de l'état d'origine
       el.style.width = originalWidth;
       el.style.minWidth = originalMinWidth;
       el.style.maxWidth = originalMaxWidth;
@@ -411,7 +421,6 @@ export default function AnalyticsPage() {
 
   return (
     <>
-      {/* 🛡️ Conteneur Principal pour le Slicer */}
       <div ref={reportRef} className="flex-1 space-y-8 p-4 md:p-8 pt-6 max-w-7xl mx-auto w-full relative pb-24 bg-zinc-50 dark:bg-zinc-950">
         
         {isExporting && (

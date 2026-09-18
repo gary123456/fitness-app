@@ -276,3 +276,42 @@ export function getEvolvedExperienceLevel(currentLevel: number, currentExpStr: s
   
   return currentExpStr;
 }
+
+// 🛡️ NOUVEAU : MOTEUR D'ADÉQUATION (Thermomètre Goal vs Fréquence)
+export function calculateGoalFeasibility(goal: string, frequency: string, lang: string): { score: number, color: string, message: string } {
+  let score = 50;
+  
+  if (goal === 'prise_masse') {
+    if (frequency === '2_jours') score = 30; // Difficile
+    else if (frequency === '3_jours') score = 70; // Bon
+    else score = 95; // Optimal
+  } 
+  else if (goal === 'perte_poids') {
+    if (frequency === '2_jours') score = 60; // Faisable avec la diète
+    else if (frequency === '3_jours') score = 85; // Optimal
+    else score = 90; // Très bien
+  }
+  else if (goal === 'performance') {
+    if (frequency === '2_jours') score = 40; // Trop peu pour la force max
+    else if (frequency === '3_jours') score = 75; // Bon
+    else score = 100; // Optimal (Powerlifting)
+  }
+  else { // Recomposition
+    if (frequency === '2_jours') score = 50; 
+    else if (frequency === '3_jours') score = 90; // Optimal
+    else score = 80; // Bien
+  }
+
+  let color = "bg-green-500";
+  let message = lang === 'FR' ? "Combo Optimal ! L'IA va créer un chef-d'œuvre." : "Optimal Combo! AI will build a masterpiece.";
+  
+  if (score < 50) {
+    color = "bg-red-500";
+    message = lang === 'FR' ? "Objectif difficile avec ce volume. La nutrition devra être parfaite." : "Hard goal with this volume. Nutrition must be perfect.";
+  } else if (score < 75) {
+    color = "bg-orange-500";
+    message = lang === 'FR' ? "Combo correct. Une séance supplémentaire serait idéale." : "Fair combo. One more session would be ideal.";
+  }
+
+  return { score, color, message };
+}

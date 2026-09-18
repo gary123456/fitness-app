@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff, Clock, Zap } from "lucide-react";
+import { Settings, Save, AlertTriangle, Trash2, Brain, BellRing, Dumbbell, Calendar, User, ShieldCheck, Target, Loader2, CheckCircle2, Image as ImageIcon, WifiOff, Clock, Zap, Activity } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { generateSmartWorkoutPlan } from "@/lib/workout-generator";
-import { getEvolvedExperienceLevel } from "@/lib/fitness";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { getEvolvedExperienceLevel, calculateGoalFeasibility } from "@/lib/fitness";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle, DialogHeader } from "@/components/ui/dialog";
 
 const EXTRA_SPORTS = [ 
   { id: "jjb", label: "JJB / MMA" }, { id: "football", label: "Football / Rugby" }, 
@@ -103,7 +103,7 @@ export default function SettingsPage() {
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
-  // --- OBSERVATEUR DE SCROLL (Active l'onglet selon la position) ---
+  // --- OBSERVATEUR DE SCROLL ---
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
@@ -121,7 +121,7 @@ export default function SettingsPage() {
     return () => observer.disconnect();
   }, []);
 
-  // --- INITIALISATION DES DONNÉES ---
+  // --- INITIALISATION ---
   useEffect(() => {
     if (data?.profile) {
       setEditFirstName(data.profile.first_name || "");
@@ -149,7 +149,7 @@ export default function SettingsPage() {
     }
   }, [data]);
 
-  // --- MOTEUR SMART SAVE (Comparaison de données) ---
+  // --- SMART SAVE ---
   useEffect(() => {
     if (!data?.profile) return;
 
@@ -262,13 +262,11 @@ export default function SettingsPage() {
         current_goal: editGoal, experience_level: editExperience, training_frequency: editFrequency, 
         weekly_schedule: editSchedule, equipment_access: editEquipment.join(','), disable_quiz: editDisableQuiz, data_saver_enabled: editDataSaver
       };
-
-      await supabase.from("profiles").update(updatedProfileData).eq("id", data.profile.id);
       
-      if (newWeight !== data.currentWeight || newBF !== data.currentBodyFat) {
-        await supabase.from("measurements").insert([{ user_id: data.profile.id, weight_kg: newWeight, body_fat_percentage: newBF }]);
-      }
+      // 🛡️ CORRECTION TS : Déclaration explicite du type du tableau
+      let formattedPlan: any[] = [];
 
+      // Si l'IA doit être recalibrée, on génère le plan localement pour l'envoyer au RPC
       if (isAiDirty) {
          const { data: library } = await supabase.from("exercise_library").select("*");
          const { data: historyLogs } = await supabase.from("workout_logs").select("*").eq("user_id", data.profile.id);
@@ -278,38 +276,37 @@ export default function SettingsPage() {
          
          const completeProfileForAI = { ...data.profile, ...updatedProfileData, experience_level: evolvedExperience };
          
-         const { data: oldAlgoProgs } = await supabase.from("user_programs").select("id").eq("user_id", data.profile.id).eq("program_type", "ai");
-         if (oldAlgoProgs && oldAlgoProgs.length > 0) {
-           for (const p of oldAlgoProgs) {
-             await supabase.from("user_programs").delete().eq("id", p.id);
-           }
-         }
-
-         const newPlan = generateSmartWorkoutPlan(completeProfileForAI, library || [], historyLogs || [], false, []);
+         const rawPlan = generateSmartWorkoutPlan(completeProfileForAI, library || [], historyLogs || [], false, []);
          
-         await supabase.from("user_programs").update({ is_active: false }).eq("user_id", data.profile.id);
-
-         const { data: newProgram } = await supabase.from("user_programs").insert([{ 
-            user_id: data.profile.id, name: "Programme Base (Défaut)", is_active: true, program_type: 'ai', is_default: true 
-         } as any]).select().single();
-
-         if (newProgram) {
-            let orderIndex = 0;
-            for (const day of newPlan) {
-              const { data: newSession } = await supabase.from("workout_sessions").insert([{ 
-                program_id: newProgram.id, day_name: day.day, order_index: orderIndex 
-              } as any]).select().single();
-              
-              if (newSession) {
-                const exercisesToInsert = day.exercises.map((ex: any) => ({ session_id: newSession.id, exercise_id: ex.exercise.id, sets: ex.sets, target_reps: ex.target_reps, recommended_weight: ex.recommended_weight, rest_seconds: ex.rest_seconds, order_index: ex.order_index }));
-                if (exercisesToInsert.length > 0) {
-                  await supabase.from("workout_exercises").insert(exercisesToInsert as any[]);
-                }
-              }
-              orderIndex++;
-            }
-         }
+         formattedPlan = rawPlan.map((dayPlan, index) => ({
+             day: dayPlan.day,
+             order_index: index,
+             exercises: dayPlan.exercises.map((ex: any) => ({
+                 exercise: { id: ex.exercise.id },
+                 sets: ex.sets,
+                 target_reps: ex.target_reps,
+                 recommended_weight: ex.recommended_weight,
+                 rest_seconds: ex.rest_seconds,
+                 order_index: ex.order_index
+             }))
+         }));
       }
+
+      const rpcPayload = {
+          p_user_id: data.profile.id,
+          p_profile_data: {
+              ...updatedProfileData,
+              ...(newWeight !== data.currentWeight || newBF !== data.currentBodyFat) && {
+                  body_fat_percentage: newBF
+              }
+          },
+          p_program_name: "Programme Base (Défaut)",
+          p_program_plan: isAiDirty ? formattedPlan : null
+      };
+
+      // 🚀 APPEL UNIQUE À LA BASE DE DONNÉES (TRANSACTION RPC)
+      const { error } = await supabase.rpc('generate_full_program', rpcPayload);
+      if (error) throw error;
       
       await mutate();
       mutateGlobal('navbarProfile'); 
@@ -348,6 +345,8 @@ export default function SettingsPage() {
 
   if (isLoading || !data?.profile) return <div className="flex min-h-[80vh] items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-teal-500" /></div>;
 
+  const feasibility = calculateGoalFeasibility(editGoal, editFrequency, lang);
+
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-4xl mx-auto w-full pb-32">
       
@@ -358,7 +357,6 @@ export default function SettingsPage() {
         <p className="text-zinc-500 dark:text-zinc-400 font-medium">{txt.sub}</p>
       </div>
 
-      {/* 🛡️ STICKY NAVIGATION (PWA PREMIUM) */}
       <div className="sticky top-0 sm:top-4 z-40 -mx-4 px-4 py-3 sm:mx-0 sm:rounded-2xl sm:shadow-lg bg-zinc-50/90 dark:bg-zinc-950/90 sm:bg-white/90 sm:dark:bg-zinc-900/90 backdrop-blur-xl border-b sm:border border-zinc-200 dark:border-zinc-800 flex overflow-x-auto hide-scrollbar snap-x space-x-2">
         {NAV_SECTIONS.map(section => (
           <button
@@ -403,6 +401,7 @@ export default function SettingsPage() {
               <div className="space-y-2"><Label className="text-teal-600 dark:text-teal-400">{txt.bfLabel}</Label><Input type="number" step="0.1" value={editBodyFat} onChange={(e) => setEditBodyFat(e.target.value)} placeholder={txt.bfPlaceholder} className="font-bold border-teal-500/30 focus-visible:ring-teal-500 dark:bg-zinc-950" /></div>
               <div className="space-y-2"><Label>Taille (cm)</Label><Input type="number" step="1" value={editHeight} onChange={(e) => setEditHeight(e.target.value)} className="font-bold dark:bg-zinc-950 dark:border-zinc-800" /></div>
             </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Objectif Actuel</Label>
@@ -417,16 +416,46 @@ export default function SettingsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Niveau d'Expérience</Label>
-                <Select value={editExperience} onValueChange={setEditExperience}>
+                <Label>Fréquence d'Entraînement</Label>
+                <Select value={editFrequency} onValueChange={setEditFrequency}>
                   <SelectTrigger className="font-bold dark:bg-zinc-950 dark:border-zinc-800"><SelectValue /></SelectTrigger>
                   <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800 font-bold">
-                    <SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem>
-                    <SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem>
-                    <SelectItem value="avance">Avancé (+3 ans)</SelectItem>
+                    <SelectItem value="2_jours">2 jours par semaine</SelectItem>
+                    <SelectItem value="3_jours">3 jours par semaine (Optimal)</SelectItem>
+                    <SelectItem value="4_jours">4 jours par semaine</SelectItem>
+                    <SelectItem value="5_plus">5 jours ou plus</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="mt-4 p-4 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-all duration-500">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-black uppercase tracking-widest text-zinc-500 flex items-center">
+                  <Activity className="w-3 h-3 mr-1" /> Adéquation Objectif / Volume
+                </span>
+                <span className={`text-xs font-black ${feasibility.color.replace('bg-', 'text-')}`}>
+                  Score : {feasibility.score}/100
+                </span>
+              </div>
+              <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2.5 overflow-hidden">
+                <div className={`h-2.5 rounded-full ${feasibility.color} transition-all duration-1000 ease-out`} style={{ width: `${feasibility.score}%` }}></div>
+              </div>
+              <p className={`text-xs font-bold mt-2 ${feasibility.color.replace('bg-', 'text-')}`}>
+                {feasibility.message}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Niveau d'Expérience Global</Label>
+              <Select value={editExperience} onValueChange={setEditExperience}>
+                <SelectTrigger className="font-bold dark:bg-zinc-950 dark:border-zinc-800"><SelectValue /></SelectTrigger>
+                <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800 font-bold">
+                  <SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem>
+                  <SelectItem value="intermediaire">Intermédiaire (1 - 3 ans)</SelectItem>
+                  <SelectItem value="avance">Avancé (+3 ans)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
@@ -436,19 +465,6 @@ export default function SettingsPage() {
           <CardHeader><CardTitle className="text-lg flex items-center"><Dumbbell className="w-5 h-5 mr-2 text-blue-500"/> Mode de vie & Entraînement</CardTitle></CardHeader>
           <CardContent className="space-y-6">
             
-            <div className="space-y-3">
-              <Label className="text-base font-bold dark:text-zinc-300 flex items-center"><Clock className="w-4 h-4 mr-2" /> Fréquence d'Entraînement</Label>
-              <Select value={editFrequency} onValueChange={setEditFrequency}>
-                <SelectTrigger className="font-bold dark:bg-zinc-950 dark:border-zinc-800 h-12"><SelectValue /></SelectTrigger>
-                <SelectContent className="dark:bg-zinc-950 dark:border-zinc-800 font-bold">
-                  <SelectItem value="2_jours">2 jours par semaine</SelectItem>
-                  <SelectItem value="3_jours">3 jours par semaine (Optimal)</SelectItem>
-                  <SelectItem value="4_jours">4 jours par semaine</SelectItem>
-                  <SelectItem value="5_plus">5 jours ou plus</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
               <Label className="text-base font-bold dark:text-zinc-300">Équipement disponible</Label>
               <div className="flex flex-col gap-2">
