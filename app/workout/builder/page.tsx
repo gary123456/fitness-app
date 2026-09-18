@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2, PlayCircle, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
+import { Search, ArrowLeft, Save, Plus, Trash2, Dumbbell, Activity, CalendarDays, Filter, ChevronUp, ChevronDown, BookOpen, Star, Info, Loader2, PlayCircle, GripVertical, ArrowUp, ArrowDown, Check } from "lucide-react";
 import { useLanguage } from "@/lib/useLanguage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -79,7 +79,18 @@ function BuilderContent() {
   const [selectedEquipmentFilter, setSelectedEquipmentFilter] = useState<string | null>(null);
   
   const [programName, setProgramName] = useState("");
-  const [activeDay, setActiveDay] = useState("monday");
+  
+  // 🛡️ NOUVEAU : Validation du nom
+  const [nameError, setNameError] = useState(false);
+  const programNameRef = useRef<HTMLInputElement>(null);
+
+  // 🛡️ NOUVEAU : Sélection intelligente du jour actuel
+  const [activeDay, setActiveDay] = useState(() => {
+    const currentJsDay = new Date().getDay();
+    const jsToOrdered = [6, 0, 1, 2, 3, 4, 5]; 
+    return DAYS_ORDER[jsToOrdered[currentJsDay]];
+  });
+
   const [plan, setPlan] = useState<Record<string, PlannedExercise[]>>({
     monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [], sunday: []
   });
@@ -87,7 +98,9 @@ function BuilderContent() {
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   const [guideModal, setGuideModal] = useState(false);
   
-  // 🛡️ ÉTATS DU DRAG & DROP
+  // 🛡️ NOUVEAU : Gestion des feedbacks d'ajout
+  const [recentlyAdded, setRecentlyAdded] = useState<Record<string, boolean>>({});
+
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
@@ -100,7 +113,8 @@ function BuilderContent() {
       g1: "1. Exercice Principal (4 ou 5 Étoiles)", g1d: "Placé au début quand le SNC est frais pour générer la tension mécanique maximale (ex: Squat, Tractions). Max 1 à 2 par séance.",
       g2: "2. Les Accessoires (3 ou 4 Étoiles)", g2d: "Ciblent les mêmes muscles avec plus de stabilité pour réduire le coût nerveux (ex: Presse à cuisses, Rowing).",
       g3: "3. Isolation & Métabolique (1 ou 2 Étoiles)", g3d: "Fin de séance. Épuise le muscle sans taxer le SNC (Machines, haltères légers).",
-      g4: "L'Équilibre Full-Body", g4d: "Une séance athlétique complète doit croiser ces patrons de mouvements : Poussée (Push), Tirage (Pull), Dominante Genou (Squat), Dominante Hanche (Hinge) et Gainage (Core)."
+      g4: "L'Équilibre Full-Body", g4d: "Une séance athlétique complète doit croiser ces patrons de mouvements : Poussée (Push), Tirage (Pull), Dominante Genou (Squat), Dominante Hanche (Hinge) et Gainage (Core).",
+      nameReq: "Veuillez saisir un nom de programme."
     },
     EN: { 
       title: editId ? "Edit Program" : "Program Builder", sub: "Forge your custom routine", catalog: "Library", search: "Search...", myPlan: "My Week", save: editId ? "Update Program" : "Save", empty: "No exercises for this day.", reps: "Reps", sets: "Sets", rest: "Rest (s)", progName: "Program Name", progPlaceholder: "E.g. Hybrid Routine", error: "Error during save.", noRes: "No exercises found.",
@@ -110,7 +124,8 @@ function BuilderContent() {
       g1: "1. Main Lift (4-5 Stars)", g1d: "First exercise when CNS is fresh. Maximum mechanical tension (e.g. Squats, Pull-ups). Max 1-2 per session.",
       g2: "2. Accessories (3-4 Stars)", g2d: "Target the same muscles with more stability to reduce neural cost (e.g. Leg Press, Rows).",
       g3: "3. Isolation & Metabolic (1-2 Stars)", g3d: "End of session. Exhaust the muscle without taxing the CNS (Machines, light dumbbells).",
-      g4: "Full-Body Balance", g4d: "A complete athletic session should cross these patterns: Push, Pull, Squat (Knee), Hinge (Hip), and Core."
+      g4: "Full-Body Balance", g4d: "A complete athletic session should cross these patterns: Push, Pull, Squat (Knee), Hinge (Hip), and Core.",
+      nameReq: "Please enter a program name."
     }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
@@ -205,6 +220,14 @@ function BuilderContent() {
   };
 
   const addExercise = (ex: Exercise) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
+    
+    // 🛡️ NOUVEAU : Déclenche l'animation de feedback visuel
+    setRecentlyAdded(prev => ({ ...prev, [ex.id]: true }));
+    setTimeout(() => {
+      setRecentlyAdded(prev => ({ ...prev, [ex.id]: false }));
+    }, 1000);
+
     const pr = userPRs?.[ex.id];
     let recWeight = null;
     let target = "8-12";
@@ -231,6 +254,7 @@ function BuilderContent() {
   };
 
   const removeExercise = (day: string, index: number) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
     setPlan(prev => {
       const newDay = [...prev[day]];
       newDay.splice(index, 1);
@@ -246,7 +270,6 @@ function BuilderContent() {
     });
   };
 
-  // 🛡️ NOUVEAU : Fonction Flèches Haut/Bas pour le Builder Mobile
   const moveExercise = (index: number, direction: 'up' | 'down') => {
     if (direction === 'up' && index === 0) return;
     if (direction === 'down' && index === plan[activeDay].length - 1) return;
@@ -264,7 +287,6 @@ function BuilderContent() {
     if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
   };
 
-  // 🛡️ GESTION DU DRAG & DROP DESKTOP
   const handleDragStart = (e: React.DragEvent, index: number) => {
     setDraggedIdx(index);
     if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(15);
@@ -294,13 +316,23 @@ function BuilderContent() {
 
   const saveProgram = async () => {
     if (totalExercisesPlanned === 0) return;
+
+    // 🛡️ NOUVEAU : Validation du nom de programme
+    if (programName.trim() === "") {
+      setNameError(true);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (programNameRef.current) programNameRef.current.focus();
+      return;
+    }
+
     setIsSaving(true);
+    setNameError(false);
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No user logged in");
 
-      const finalName = programName.trim() !== "" ? programName.trim() : (lang === 'FR' ? "Programme Personnalisé" : "Custom Program");
+      const finalName = programName.trim();
       let activeProgramId = editId;
 
       if (editId) {
@@ -389,27 +421,10 @@ function BuilderContent() {
             <p className="text-xs text-zinc-500 font-medium">{txt.sub}</p>
           </div>
         </div>
-        <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20">
+        <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="hidden sm:flex bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20">
           {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-          <span className="hidden sm:inline">{txt.save}</span>
+          <span>{txt.save}</span>
         </Button>
-      </div>
-
-      <div className="fixed bottom-6 right-4 sm:right-8 z-50 flex flex-col gap-3">
-        <button 
-          onClick={() => document.getElementById('library-section')?.scrollIntoView({ behavior: 'smooth' })}
-          className="w-12 h-12 bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center justify-center rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.15)] hover:scale-110 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-500 transition-all opacity-80 hover:opacity-100 focus:outline-none"
-          title={lang === 'FR' ? "Haut (Bibliothèque)" : "Top (Library)"}
-        >
-          <ChevronUp className="w-6 h-6" />
-        </button>
-        <button 
-          onClick={() => document.getElementById('plan-section')?.scrollIntoView({ behavior: 'smooth' })}
-          className="w-12 h-12 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 flex items-center justify-center rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.15)] hover:scale-110 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-500 transition-all opacity-80 hover:opacity-100 focus:outline-none"
-          title={lang === 'FR' ? "Bas (Ma Semaine)" : "Bottom (My Week)"}
-        >
-          <ChevronDown className="w-6 h-6" />
-        </button>
       </div>
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-4 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-[calc(100vh-80px)]">
@@ -519,6 +534,8 @@ function BuilderContent() {
             {filteredExercises.length > 0 ? (
               filteredExercises.map(ex => {
                 const thumbnailUrl = getYoutubeThumbnail(ex.youtube_id);
+                const isAdded = recentlyAdded[ex.id]; // 🛡️ NOUVEAU : Statut d'ajout
+
                 return (
                   <div key={ex.id} className="flex items-center justify-between p-2 lg:p-3 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors group">
                     <div className="flex items-center space-x-3">
@@ -536,8 +553,17 @@ function BuilderContent() {
                     </div>
                     <div className="flex items-center space-x-1 shrink-0">
                       <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors"><Info className="w-4 h-4" /></button>
-                      <button onClick={() => addExercise(ex)} className="p-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-600 rounded-lg transition-colors">
-                        <Plus className="w-4 h-4 stroke-[3px]" />
+                      
+                      {/* 🛡️ NOUVEAU : Bouton avec feedback visuel */}
+                      <button 
+                        onClick={() => addExercise(ex)} 
+                        className={`p-2 rounded-lg transition-all ${
+                          isAdded 
+                          ? 'bg-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)] scale-110' 
+                          : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-600'
+                        }`}
+                      >
+                        {isAdded ? <Check className="w-4 h-4 stroke-[3px]" /> : <Plus className="w-4 h-4 stroke-[3px]" />}
                       </button>
                     </div>
                   </div>
@@ -558,12 +584,19 @@ function BuilderContent() {
             </h3>
             
             <div className="space-y-1">
-              <Label className="text-[10px] uppercase tracking-widest text-zinc-400 font-bold">{txt.progName}</Label>
+              <Label className={`text-[10px] uppercase tracking-widest font-bold ${nameError ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
+                {nameError ? txt.nameReq : txt.progName}
+              </Label>
+              {/* 🛡️ NOUVEAU : Champ de nom avec état d'erreur rouge */}
               <Input 
+                ref={programNameRef}
                 value={programName}
-                onChange={(e) => setProgramName(e.target.value)}
+                onChange={(e) => {
+                  setProgramName(e.target.value);
+                  if (e.target.value.trim() !== "") setNameError(false);
+                }}
                 placeholder={txt.progPlaceholder}
-                className="bg-zinc-950/50 border-zinc-800 text-white placeholder:text-zinc-600 font-bold"
+                className={`bg-zinc-950/50 text-white placeholder:text-zinc-600 font-bold transition-all ${nameError ? 'border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border-zinc-800'}`}
               />
             </div>
           </div>
@@ -614,7 +647,6 @@ function BuilderContent() {
                   <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
                     <div className="flex items-center space-x-2 flex-1">
                       
-                      {/* 🛡️ BOUTONS DE TRI (Haut/Bas) POUR MOBILE + DRAG POUR DESKTOP */}
                       <div className="flex flex-col items-center mr-2">
                         <button onClick={() => moveExercise(idx, 'up')} disabled={idx === 0} className="p-1 text-zinc-400 hover:text-indigo-400 disabled:opacity-30">
                           <ArrowUp className="w-4 h-4" />
@@ -678,6 +710,14 @@ function BuilderContent() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* 🛡️ NOUVEAU : Barre d'action Sticky pour Mobile */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 p-4 sm:hidden z-40">
+        <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg uppercase tracking-widest shadow-lg shadow-indigo-500/20">
+          {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+          {txt.save}
+        </Button>
       </div>
 
       <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
