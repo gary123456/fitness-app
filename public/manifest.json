@@ -1,7 +1,7 @@
 {
-  "name": "Vivex",
-  "short_name": "Vivex",
-  "description": "Votre écosystème de recomposition corporelle.",
+  "name": "GSC Fitness",
+  "short_name": "GSC",
+  "description": "L'écosystème métabolique GSC Consulting.",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#09090b",

@@ -3,7 +3,7 @@ import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { ThemeProvider } from "@/components/ThemeProvider"; 
 import { SWRConfig } from "swr"; 
-import { OfflineSync } from "@/components/OfflineSync"; // 🛡️ INJECTION DU MODULE HORS-LIGNE
+import { OfflineSync } from "@/components/OfflineSync"; 
 
 export const viewport: Viewport = {
   themeColor: "#14b8a6",
@@ -14,7 +14,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Vivex | Masterclass Fitness",
+  title: "GSC | Masterclass Fitness",
   description: "Écosystème de recomposition corporelle sur-mesure.",
   manifest: "/manifest.json",
   icons: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Vivex",
+    title: "GSC Fitness",
   },
 };
 
@@ -40,7 +40,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <SWRConfig value={{ revalidateOnFocus: false }}> 
           
-          <OfflineSync /> {/* 🛡️ ACTIVATION SILENCIEUSE ICI */}
+          <OfflineSync /> 
           <Navbar />
 
           <main className="flex-1 flex flex-col">

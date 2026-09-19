@@ -26,7 +26,6 @@ export default function LoginPage() {
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
-  // Sécurité PWA : Écouteur d'état global pour garantir que la session est écrite
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
@@ -48,7 +47,6 @@ export default function LoginPage() {
       if (isLoginMode) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        // La redirection est désormais gérée de manière sécurisée par le useEffect (onAuthStateChange)
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
@@ -65,7 +63,6 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 relative overflow-hidden font-sans">
       
-      {/* BACKGROUND PREMIUM */}
       <div className="absolute inset-0 w-full h-full">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/40 via-zinc-950 to-zinc-950"></div>
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-[120px]"></div>
@@ -90,9 +87,9 @@ export default function LoginPage() {
           <div className="text-center mb-10">
             <div className="flex justify-center mb-6 relative">
               <div className="absolute inset-0 bg-teal-500/20 blur-3xl rounded-full"></div>
-              <img src="/icon.png" alt="Vivex Logo" className="h-28 w-auto object-contain drop-shadow-2xl relative z-10" />
+              <img src="/icon.png" alt="GSC Logo" className="h-28 w-auto object-contain drop-shadow-2xl relative z-10" />
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white mb-2">VIVEX</h1>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white mb-2">GSC FITNESS</h1>
             <p className="text-zinc-400 font-medium text-sm">
               {isLoginMode ? txt.subIn : txt.subUp}
             </p>
@@ -106,7 +103,7 @@ export default function LoginPage() {
                 <Input 
                   id="email" 
                   type="email" 
-                  placeholder="athlete@vivex.com" 
+                  placeholder="athlete@gsc.com" 
                   value={email} 
                   onChange={(e) => setEmail(e.target.value)} 
                   className="pl-12 py-7 text-base bg-zinc-900/50 border-zinc-800 text-white placeholder:text-zinc-600 rounded-xl focus-visible:ring-1 focus-visible:ring-teal-500 focus-visible:border-teal-500 transition-all" 

@@ -71,7 +71,6 @@ export function Navbar() {
     </button>
   );
 
-  // 🛡️ NOUVEAU : Logique d'affichage intelligente de l'Avatar dans la Navbar
   const isImage = profile?.avatar_url?.includes('/') || profile?.avatar_url?.includes('http');
   let posX = '50', posY = '50';
   if (isImage && profile?.avatar_url) {
@@ -122,7 +121,7 @@ export function Navbar() {
         <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-8">
           <div className="flex items-center space-x-8">
             <Link href="/dashboard" className="flex items-center">
-              <img src="/Logo_GSC_NoBG.png" alt="Vivex Logo" className="h-10 w-auto object-contain drop-shadow-sm hover:opacity-80 transition-opacity" />
+              <img src="/Logo_GSC_NoBG.png" alt="GSC Logo" className="h-10 w-auto object-contain drop-shadow-sm hover:opacity-80 transition-opacity" />
             </Link>
 
             <div className="flex space-x-2">
@@ -153,7 +152,7 @@ export function Navbar() {
       {/* TOP BAR MOBILE */}
       <div className="md:hidden sticky top-0 z-50 w-full border-b border-zinc-200 bg-white/90 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/90 h-20 flex items-center justify-between px-4 shadow-sm">
         <Link href="/dashboard">
-          <img src="/Logo_GSC_NoBG.png" alt="Vivex Logo" className="h-10 w-auto object-contain drop-shadow-sm" />
+          <img src="/Logo_GSC_NoBG.png" alt="GSC Logo" className="h-10 w-auto object-contain drop-shadow-sm" />
         </Link>
         <div className="flex items-center space-x-3">
           <ThemeToggle />
