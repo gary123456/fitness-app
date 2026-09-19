@@ -26,6 +26,8 @@ const PLATES = [
   { weight: 1.25, color: "bg-zinc-700", h: "h-6", w: "w-1" }
 ];
 
+const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+
 const getSessionInsights = (exercises: any[], lang: string) => {
   const patterns = exercises.map(we => we.exercise_library?.movement_pattern || "");
   const isLower = patterns.some(p => p.includes("Squat") || p.includes("Hinge") || p.includes("Lunge"));
@@ -207,7 +209,17 @@ function ActiveWorkoutSessionContent() {
   
   const stravaCardRef = useRef<HTMLDivElement>(null);
 
-  const DAYS_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  // 🛡️ NOUVEAU : États pour l'outil rapide 1RM (Micro-version intégrée)
+  const [showTools1RMModal, setShowTools1RMModal] = useState(false);
+  const [rmInputs, setRmInputs] = useState({ weight: "", reps: "" });
+
+  const calculated1RM = () => {
+    const w = parseFloat(rmInputs.weight);
+    const r = parseInt(rmInputs.reps);
+    if (!w || !r || r < 1) return 0;
+    if (r === 1) return w;
+    return Math.round(w * (1 + r / 30));
+  };
 
   const calculatePlates = () => {
     const target = parseFloat(plateModal.targetWeight);
@@ -306,8 +318,8 @@ function ActiveWorkoutSessionContent() {
   }, [showBreathingModal, breatheTime]);
 
   const t = {
-    FR: { bw: "Poids du corps", activeTracker: "Tracker Actif", target: "Objectif", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", load: "Chargement...", notFound: "En attente...", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Protéines + Hydratation.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées.", ghost: "Précédent", rpeTitle: "Difficulté (RPE)", rpeSub: "Évaluez l'effort global.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur", calcSub: "Configurez la charge.", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", search: "Rechercher...", warmupSetTitle: "Séries d'Échauffement", generateWarmup: "Générer la Chauffe", warmupSet: "Chauffe", eachSide: "Par côté :", noPlates: "Entrez un poids cible > barre." },
-    EN: { bw: "Bodyweight", activeTracker: "Active Tracker", target: "Target", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", load: "Loading...", notFound: "Waiting...", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Protein + Hydration.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when restored.", ghost: "Previous", rpeTitle: "Difficulty (RPE)", rpeSub: "Rate global effort.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "Configure weight.", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", search: "Search...", warmupSetTitle: "Warm-up Sets", generateWarmup: "Generate Warm-up", warmupSet: "Warm", eachSide: "Per side:", noPlates: "Enter target weight > bar." }
+    FR: { bw: "Poids du corps", activeTracker: "Tracker Actif", target: "Objectif", dup: "Dupliquer", set: "Série", weight: "Charge (kg)", reps: "Reps", checkAll: "Tout valider", finish: "Terminer la séance", noSetTitle: "Aucune série", noSetMsg: "Validez au moins une série.", load: "Chargement...", notFound: "En attente...", back: "Retour au programme", warmupTitle: "Checklist d'Échauffement", whyTitle: "Science & Objectif", unlockBtn: "Déverrouiller la séance", shareInsta: "Partager", tonnage: "Tonnage", bestSet: "Meilleure Série", breatheTitle: "Décompression SNC", breatheSub: "Faisons chuter votre cortisol pour la récupération.", skip: "Passer", inhale: "Inspirez", hold: "Bloquez", exhale: "Expirez", anabTarget: "🔥 Fenêtre anabolique : Protéines + Hydratation.", replayTitle: "XP Déjà Collectés", replaySub: "Pour cette séance aujourd'hui.", offlineTitle: "Sauvegardé Hors-Ligne", offlineSub: "Vos données seront synchronisées.", ghost: "Précédent", rpeTitle: "Difficulté (RPE)", rpeSub: "Évaluez l'effort global.", rpeValidate: "Valider & Terminer", calcTitle: "Calculateur", calcSub: "Configurez la charge.", swapTitle: "Remplacer l'exercice", swapSub: "Alternatives :", noAlt: "Aucune alternative.", select: "Choisir", search: "Rechercher...", warmupSetTitle: "Séries d'Échauffement", generateWarmup: "Générer la Chauffe", warmupSet: "Chauffe", eachSide: "Par côté :", noPlates: "Entrez un poids cible > barre.", quickTools: "Outils Rapides", calc1rm: "Estimer 1RM", calcPlates: "Disques" },
+    EN: { bw: "Bodyweight", activeTracker: "Active Tracker", target: "Target", dup: "Duplicate", set: "Set", weight: "Weight (kg)", reps: "Reps", checkAll: "Auto-complete", finish: "Finish Workout", noSetTitle: "No sets logged", noSetMsg: "Please validate at least one set.", load: "Loading...", notFound: "Waiting...", back: "Back to program", warmupTitle: "Warm-up Checklist", whyTitle: "Science & Goal", unlockBtn: "Unlock workout", shareInsta: "Share", tonnage: "Tonnage", bestSet: "Best Lift", breatheTitle: "CNS Decompression", breatheSub: "Let's drop your cortisol.", skip: "Skip", inhale: "Inhale", hold: "Hold", exhale: "Exhale", anabTarget: "🔥 Anabolic window: Protein + Hydration.", replayTitle: "XP Already Claimed", replaySub: "For this session today.", offlineTitle: "Saved Offline", offlineSub: "Data will sync when restored.", ghost: "Previous", rpeTitle: "Difficulty (RPE)", rpeSub: "Rate global effort.", rpeValidate: "Confirm & Finish", calcTitle: "Plate Calculator", calcSub: "Configure weight.", swapTitle: "Swap Exercise", swapSub: "Alternatives:", noAlt: "No alternatives.", select: "Select", search: "Search...", warmupSetTitle: "Warm-up Sets", generateWarmup: "Generate Warm-up", warmupSet: "Warm", eachSide: "Per side:", noPlates: "Enter target weight > bar.", quickTools: "Quick Tools", calc1rm: "Estimate 1RM", calcPlates: "Plates" }
   };
   const txt = t[lang as keyof typeof t] || t.FR;
 
@@ -724,6 +736,28 @@ function ActiveWorkoutSessionContent() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4 space-y-6 mt-6">
+
+        {/* 🛡️ OUTILS RAPIDES EN HAUT DE PAGE */}
+        {isWorkoutUnlocked && !data.isReadOnly && (
+          <div className="flex gap-3 mb-6 animate-in fade-in slide-in-from-top-4">
+            <button 
+              type="button"
+              onClick={() => setShowTools1RMModal(true)}
+              className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col items-center justify-center text-indigo-600 dark:text-indigo-400 hover:border-indigo-500 dark:hover:border-indigo-500 transition-all shadow-sm group"
+            >
+              <Target className="w-5 h-5 mb-1 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">{txt.calc1rm}</span>
+            </button>
+            <button 
+              type="button"
+              onClick={() => setPlateModal({ show: true, targetWeight: "", barWeight: "20" })}
+              className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col items-center justify-center text-teal-600 dark:text-teal-400 hover:border-teal-500 dark:hover:border-teal-500 transition-all shadow-sm group"
+            >
+              <Calculator className="w-5 h-5 mb-1 group-hover:scale-110 transition-transform" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">{txt.calcPlates}</span>
+            </button>
+          </div>
+        )}
         
         {!isWorkoutUnlocked && !data.isReadOnly ? (
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
@@ -781,7 +815,8 @@ function ActiveWorkoutSessionContent() {
               const thumbnailUrl = getYoutubeThumbnail(ex.youtube_id);
               const ghost = data.ghostData[identifier];
               
-              const isCompletedEx = we.sets > 0 && Array.from({ length: we.sets }).every((_, i) => completedSets[`${identifier}_${i}`] === true);
+              // 🛡️ NOUVEAU : Vérification si toutes les séries de CET exercice sont terminées
+              const isFullyCompletedEx = we.sets > 0 && Array.from({ length: we.sets }).every((_, i) => completedSets[`${identifier}_${i}`] === true);
 
               return (
                 <div 
@@ -792,9 +827,16 @@ function ActiveWorkoutSessionContent() {
                   onDragEnter={(e) => handleDragEnter(e, index)}
                   onDragEnd={handleDragEnd}
                   onDragOver={handleDragOver}
-                  className={`bg-white dark:bg-zinc-900 border rounded-xl overflow-hidden shadow-sm transition-all ${draggedIdx === index ? 'opacity-50 border-teal-500 scale-95' : 'border-zinc-200 dark:border-zinc-800 opacity-100'} ${dragOverIdx === index ? 'border-t-2 border-t-teal-500' : ''}`}
+                  className={`border rounded-xl overflow-hidden transition-all duration-500 ${
+                    draggedIdx === index ? 'opacity-50 border-teal-500 scale-95' 
+                    : dragOverIdx === index ? 'border-t-2 border-t-teal-500' 
+                    : isFullyCompletedEx && !data.isReadOnly ? 'bg-teal-50/30 dark:bg-teal-900/10 border-teal-200 dark:border-teal-800 shadow-[0_0_20px_rgba(20,184,166,0.05)]' 
+                    : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 shadow-sm opacity-100'
+                  }`}
                 >
-                  <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
+                  <div className={`p-4 border-b transition-colors duration-500 flex justify-between items-center ${
+                    isFullyCompletedEx && !data.isReadOnly ? 'border-teal-200/50 dark:border-teal-800/50 bg-teal-50/50 dark:bg-teal-900/20' : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50'
+                  }`}>
                     <div className="flex items-center space-x-3 flex-1">
                       
                       {!data.isReadOnly && (
@@ -812,7 +854,7 @@ function ActiveWorkoutSessionContent() {
                       )}
 
                       {dataSaverEnabled ? (
-                         <div className="h-14 w-14 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex flex-col items-center justify-center border border-zinc-300 dark:border-zinc-700 relative p-0 shrink-0">
+                         <div className={`h-14 w-14 rounded-lg flex flex-col items-center justify-center border relative p-0 shrink-0 transition-colors ${isFullyCompletedEx ? 'bg-teal-100/50 border-teal-200 dark:bg-teal-900/30 dark:border-teal-800' : 'bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700'}`}>
                            <WifiOff className="w-5 h-5 text-zinc-500 opacity-50" />
                          </div>
                       ) : (
@@ -822,8 +864,8 @@ function ActiveWorkoutSessionContent() {
                         >
                           {thumbnailUrl ? (
                             <>
-                              <img src={thumbnailUrl} alt={ex.name} className="h-full w-full object-cover absolute inset-0 z-0 opacity-60 group-hover:opacity-40 transition-opacity" />
-                              <PlayCircle className="w-6 h-6 text-white relative z-10 drop-shadow-lg group-hover:scale-110 transition-transform" />
+                              <img src={thumbnailUrl} alt={ex.name} className={`h-full w-full object-cover absolute inset-0 z-0 transition-opacity ${isFullyCompletedEx ? 'opacity-40 grayscale-[50%]' : 'opacity-60 group-hover:opacity-40'}`} />
+                              <PlayCircle className={`w-6 h-6 text-white relative z-10 drop-shadow-lg transition-transform ${isFullyCompletedEx ? '' : 'group-hover:scale-110'}`} />
                             </>
                           ) : (
                             <Dumbbell className="h-6 w-6 text-zinc-400 opacity-50" />
@@ -833,8 +875,7 @@ function ActiveWorkoutSessionContent() {
 
                       <div className="flex items-start flex-1">
                         <div className="cursor-pointer flex-1" onClick={() => router.push(`/workout/${session.id}/exercise/${ex.id}`)}>
-                          {/* 🛡️ CORRECTION : Syntaxe JSX parfaite pour l'interpolation conditionnelle */}
-                          <h4 className={`font-bold text-sm ${isTodaySession && !isCompletedEx ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                          <h4 className={`font-bold text-sm transition-colors ${isFullyCompletedEx && !data.isReadOnly ? 'text-teal-700 dark:text-teal-400' : isTodaySession ? 'text-zinc-900 dark:text-teal-50' : 'text-zinc-900 dark:text-zinc-100'}`}>
                             {lang === 'EN' && ex.name_en ? ex.name_en : ex.name}
                           </h4>
                           <div className="flex items-center space-x-2 mt-1">
@@ -842,13 +883,13 @@ function ActiveWorkoutSessionContent() {
                             <div className="w-1 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700"></div>
                             {renderStars(ex.cns_impact)}
                           </div>
-                          {ghost && (
+                          {ghost && !isFullyCompletedEx && (
                             <div className="flex items-center space-x-2 mt-1">
                               <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest opacity-80">
                                 👻 {txt.ghost} : {ghost.weight}kg × {ghost.reps}
                               </p>
                               {!data.isReadOnly && (
-                                <button onClick={(e) => { e.stopPropagation(); applyGhostWeights(identifier); }} className="text-indigo-400 hover:text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded transition-colors flex items-center" title="Copier pour toutes les séries">
+                                <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); applyGhostWeights(identifier); }} className="text-indigo-400 hover:text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded transition-colors flex items-center relative z-20" title="Copier pour toutes les séries">
                                   <Copy className="w-3 h-3" />
                                 </button>
                               )}
@@ -859,45 +900,41 @@ function ActiveWorkoutSessionContent() {
                     </div>
                   </div>
 
-                  <div className="p-3 space-y-3 bg-white dark:bg-zinc-950">
-                    <div className="flex flex-wrap items-center gap-3 text-sm px-2 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  <div className={`p-3 space-y-3 transition-colors duration-500 ${isFullyCompletedEx && !data.isReadOnly ? 'bg-teal-50/10 dark:bg-teal-900/5' : 'bg-white dark:bg-zinc-950'}`}>
+                    <div className="flex flex-wrap items-center gap-3 text-sm px-2 pb-2 border-b border-zinc-100 dark:border-zinc-800 relative z-20">
                       {we.recommended_weight !== null && we.recommended_weight !== undefined && (
-                        <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800">
+                        <div className="flex items-center text-teal-700 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-900/40 px-3 py-1 rounded border border-teal-200 dark:border-teal-800 relative z-20">
                           <Target className="w-4 h-4 mr-1.5" /> {we.recommended_weight > 0 ? `${we.recommended_weight} kg` : txt.bw}
-                          
-                          <button onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setPlateModal({ show: true, targetWeight: we.recommended_weight > 0 ? we.recommended_weight.toString() : "", barWeight: "20" }); 
-                          }} className="ml-2 bg-teal-200/50 dark:bg-teal-800/50 p-1 rounded hover:bg-teal-300 dark:hover:bg-teal-700 transition-colors">
-                            <Calculator className="w-3 h-3 text-teal-700 dark:text-teal-400" />
-                          </button>
                         </div>
                       )}
                       
-                      <button onClick={(e) => { 
+                      <button type="button" onClick={(e) => { 
+                        e.preventDefault();
                         e.stopPropagation(); 
                         const initKg = we.recommended_weight > 0 ? we.recommended_weight.toString() : "";
                         setConvertModal({ show: true, kgValue: initKg, lbsValue: initKg ? (parseFloat(initKg) * 2.20462).toFixed(1) : "" }); 
-                      }} className="p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer" title="Convertisseur">
-                        <Scale className="w-4 h-4" />
+                      }} className="p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer relative z-30" title="Convertisseur">
+                        <Scale className="w-4 h-4 pointer-events-none" />
                       </button>
 
-                      <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="p-1 text-teal-600 bg-teal-50 dark:bg-teal-900/30 dark:text-teal-400 rounded-full hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors cursor-pointer">
-                        <Info className="w-4 h-4" />
-                      </button>
+                      {/* Le bouton Info a été supprimé comme demandé */}
 
                       {(index === 0 || we.recommended_weight > 20) && !data.isReadOnly && (
-                        <button onClick={() => setShowWarmupFor(showWarmupFor === we.id ? null : we.id)} className={`flex items-center px-2 py-1 text-xs font-bold rounded-md transition-colors ${showWarmupFor === we.id ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/60'}`}>
-                          <Flame className="w-3 h-3 mr-1" /> {txt.generateWarmup}
+                        <button type="button" onClick={(e) => { 
+                          e.preventDefault(); 
+                          e.stopPropagation(); 
+                          setShowWarmupFor(showWarmupFor === we.id ? null : we.id);
+                        }} className={`flex items-center px-2 py-1 text-xs font-bold rounded-md transition-colors relative z-30 ${showWarmupFor === we.id ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/60'}`}>
+                          <Flame className="w-3 h-3 mr-1 pointer-events-none" /> {txt.generateWarmup}
                         </button>
                       )}
 
                       <div className="flex items-center space-x-1 ml-auto">
-                        <button onClick={() => openSwapModal(we.id, ex)} disabled={swapLoading || data.isReadOnly} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-30" title={txt.swapTitle}>
-                          <ArrowLeftRight className="w-4 h-4" />
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); openSwapModal(we.id, ex); }} disabled={swapLoading || data.isReadOnly} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-30 relative z-30" title={txt.swapTitle}>
+                          <ArrowLeftRight className="w-4 h-4 pointer-events-none" />
                         </button>
-                        <button onClick={() => duplicateFirstSet(identifier, we.sets)} disabled={data.isReadOnly} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-30" title={txt.dup}>
-                          <Repeat className="w-4 h-4" />
+                        <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); duplicateFirstSet(identifier, we.sets); }} disabled={data.isReadOnly} className="p-1.5 rounded-md text-zinc-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:text-teal-400 dark:hover:bg-teal-900/30 transition-colors disabled:opacity-30 relative z-30" title={txt.dup}>
+                          <Repeat className="w-4 h-4 pointer-events-none" />
                         </button>
                       </div>
                     </div>
@@ -951,6 +988,96 @@ function ActiveWorkoutSessionContent() {
       </div>
 
       <AudioHapticTimer targetTime={targetTime} setTargetTime={setTargetTime} formatTime={formatTime} />
+
+      {/* 🛡️ MODALE DE CALCULATRICE DE DISQUE INTÉGRÉE */}
+      <Dialog open={plateModal.show} onOpenChange={(open) => setPlateModal(prev => ({ ...prev, show: open }))}>
+        <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
+              <Calculator className="mr-2 h-5 w-5" /> {txt.calcTitle}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500">{txt.calcSub}</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 flex flex-col items-center">
+            <div className="flex w-full space-x-2 mb-6">
+              <div className="flex-1 space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-zinc-400">Objectif (kg)</Label>
+                <Input type="number" value={plateModal.targetWeight} onChange={(e) => setPlateModal(prev => ({ ...prev, targetWeight: e.target.value }))} className="font-black text-center h-10 border-teal-200" />
+              </div>
+              <div className="w-20 space-y-1">
+                <Label className="text-[10px] uppercase font-bold text-zinc-400">Barre</Label>
+                <Input type="number" value={plateModal.barWeight} onChange={(e) => setPlateModal(prev => ({ ...prev, barWeight: e.target.value }))} className="font-black text-center h-10" />
+              </div>
+            </div>
+
+            <div className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col items-center space-y-3">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{txt.eachSide}</span>
+              <div className="flex flex-wrap justify-center gap-2">
+                {requiredPlates.length === 0 ? (
+                  <span className="font-medium text-zinc-500 text-sm">Barre à vide ou <br/>Poids invalide</span>
+                ) : (
+                  requiredPlates.map((p, i) => (
+                    <div key={i} className="flex items-center justify-center bg-teal-500 text-white font-black px-2 py-1.5 rounded-lg shadow-sm border border-teal-600 text-sm">
+                      {p.weight} <span className="ml-1 opacity-70 text-[10px]">×{p.count}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🛡️ MODALE DE PRÉDICTION 1RM (Micro-version intégrée) */}
+      <Dialog open={showTools1RMModal} onOpenChange={(open) => { setShowTools1RMModal(open); if(!open) setRmInputs({weight:"", reps:""}); }}>
+        <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-indigo-600 dark:text-indigo-400 flex items-center">
+              <Target className="mr-2 h-5 w-5" /> {lang === 'FR' ? "Estimer 1RM" : "Estimate 1RM"}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500">{lang === 'FR' ? "Basé sur la formule d'Epley" : "Based on Epley's formula"}</DialogDescription>
+          </DialogHeader>
+          <div className="py-6 space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase font-bold text-zinc-400">{lang === 'FR' ? "Poids (kg)" : "Weight (kg)"}</Label>
+                <Input type="number" placeholder="Ex: 80" value={rmInputs.weight} onChange={(e) => setRmInputs(prev => ({...prev, weight: e.target.value}))} className="font-black text-center h-10 border-indigo-200" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[10px] uppercase font-bold text-zinc-400">Reps</Label>
+                <Input type="number" placeholder="Ex: 5" value={rmInputs.reps} onChange={(e) => setRmInputs(prev => ({...prev, reps: e.target.value}))} className="font-black text-center h-10 border-indigo-200" />
+              </div>
+            </div>
+            <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-2xl">
+              <span className="font-black text-indigo-700 dark:text-indigo-400 uppercase tracking-widest">1RM Estimé</span>
+              <span className="text-4xl font-black text-indigo-500 tracking-tighter">{calculated1RM()} <span className="text-lg text-zinc-500 tracking-normal">kg</span></span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
+        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
+              <Scale className="mr-2 h-5 w-5" /> Conversion
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-6 space-y-4">
+            <div className="flex items-center space-x-3">
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs font-bold text-zinc-500">KILOGRAMMES</Label>
+                <Input type="number" value={convertModal.kgValue} onChange={(e) => { const kg = e.target.value; setConvertModal({ show: true, kgValue: kg, lbsValue: kg ? (parseFloat(kg) * 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center h-14 bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800" placeholder="0" />
+              </div>
+              <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700 mt-4 shrink-0" />
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs font-bold text-teal-600 dark:text-teal-500">POUNDS (LBS)</Label>
+                <Input type="number" value={convertModal.lbsValue} onChange={(e) => { const lbs = e.target.value; setConvertModal({ show: true, lbsValue: lbs, kgValue: lbs ? (parseFloat(lbs) / 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center text-teal-600 dark:text-teal-500 h-14 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800" placeholder="0" />
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={videoModal.show} onOpenChange={(open) => !open && setVideoModal({show: false, youtubeId: null})}>
         <DialogContent className="sm:max-w-[380px] bg-transparent border-none p-0 overflow-hidden w-full flex items-center justify-center shadow-none">
@@ -1078,112 +1205,6 @@ function ActiveWorkoutSessionContent() {
               {isSaving ? "..." : txt.rpeValidate}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 🛡️ MODALE DE CALCULATRICE DE DISQUE INTÉGRÉE (Toujours accessible via l'icône target) */}
-      <Dialog open={plateModal.show} onOpenChange={(open) => !open && setPlateModal({ show: false, targetWeight: "", barWeight: "20" })}>
-        <DialogContent className="sm:max-w-[350px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
-              <Calculator className="mr-2 h-5 w-5" /> {txt.calcTitle}
-            </DialogTitle>
-            <DialogDescription className="text-zinc-500">{txt.calcSub}</DialogDescription>
-          </DialogHeader>
-          <div className="py-6 flex flex-col items-center">
-            
-            <div className="flex w-full space-x-2 mb-6">
-              <div className="flex-1 space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-zinc-400">Objectif (kg)</Label>
-                <Input type="number" value={plateModal.targetWeight} onChange={(e) => setPlateModal(prev => ({ ...prev, targetWeight: e.target.value }))} className="font-black text-center h-10 border-teal-200" />
-              </div>
-              <div className="w-20 space-y-1">
-                <Label className="text-[10px] uppercase font-bold text-zinc-400">Barre</Label>
-                <Input type="number" value={plateModal.barWeight} onChange={(e) => setPlateModal(prev => ({ ...prev, barWeight: e.target.value }))} className="font-black text-center h-10" />
-              </div>
-            </div>
-
-            <div className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col items-center space-y-3">
-              <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{txt.eachSide}</span>
-              <div className="flex flex-wrap justify-center gap-2">
-                {requiredPlates.length === 0 ? (
-                  <span className="font-medium text-zinc-500 text-sm">Barre à vide ou <br/>Poids invalide</span>
-                ) : (
-                  requiredPlates.map((p, i) => (
-                    <div key={i} className="flex items-center justify-center bg-teal-500 text-white font-black px-2 py-1.5 rounded-lg shadow-sm border border-teal-600 text-sm">
-                      {p.weight} <span className="ml-1 opacity-70 text-[10px]">×{p.count}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={convertModal.show} onOpenChange={(open) => !open && setConvertModal({ show: false, kgValue: "", lbsValue: "" })}>
-        <DialogContent className="sm:max-w-[320px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black text-teal-600 dark:text-teal-400 flex items-center">
-              <Scale className="mr-2 h-5 w-5" /> Conversion
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-6 space-y-4">
-            <div className="flex items-center space-x-3">
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs font-bold text-zinc-500">KILOGRAMMES</Label>
-                <Input type="number" value={convertModal.kgValue} onChange={(e) => { const kg = e.target.value; setConvertModal({ show: true, kgValue: kg, lbsValue: kg ? (parseFloat(kg) * 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center h-14 bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800" placeholder="0" />
-              </div>
-              <ArrowLeftRight className="w-6 h-6 text-zinc-300 dark:text-zinc-700 mt-4 shrink-0" />
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs font-bold text-teal-600 dark:text-teal-500">POUNDS (LBS)</Label>
-                <Input type="number" value={convertModal.lbsValue} onChange={(e) => { const lbs = e.target.value; setConvertModal({ show: true, lbsValue: lbs, kgValue: lbs ? (parseFloat(lbs) / 2.20462).toFixed(1) : "" }); }} className="font-black text-xl text-center text-teal-600 dark:text-teal-500 h-14 bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800" placeholder="0" />
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={infoModal.show} onOpenChange={(open) => !open && setInfoModal({ show: false, exercise: null })}>
-        <DialogContent className="sm:max-w-[425px] bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 p-0 overflow-hidden w-full mt-auto sm:mt-0 mb-0 sm:mb-auto rounded-t-3xl sm:rounded-2xl border-b-0 sm:border-b">
-          {infoModal.exercise && (
-            <div className="p-6 text-center space-y-4">
-              <h2 className="text-xl font-black dark:text-white">
-                {lang === 'EN' && infoModal.exercise.name_en ? infoModal.exercise.name_en : infoModal.exercise.name}
-              </h2>
-              
-              {dataSaverEnabled ? (
-                <div className="w-full max-w-[200px] mx-auto aspect-[9/16] bg-zinc-100 dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center items-center">
-                  <WifiOff className="w-10 h-10 text-zinc-400 mb-2" />
-                  <span className="text-xs font-bold text-zinc-500">Mode Éco</span>
-                </div>
-              ) : (
-                <div className="w-full max-w-[250px] mx-auto aspect-[9/16] bg-black flex items-center justify-center relative rounded-xl overflow-hidden shadow-lg border border-zinc-200 dark:border-zinc-800">
-                  {infoModal.exercise.youtube_id ? (
-                    <iframe 
-                      src={`https://www.youtube.com/embed/${infoModal.exercise.youtube_id}?autoplay=1&mute=0&rel=0&modestbranding=1&loop=1&playlist=${infoModal.exercise.youtube_id}`}
-                      className="absolute inset-0 w-full h-full border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center text-zinc-600">
-                      <PlayCircle className="w-12 h-12 mb-2 opacity-50" />
-                      <span className="text-sm font-bold text-zinc-500">Vidéo non disponible</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="flex flex-col items-center space-y-2 mt-4">
-                <p className="text-sm font-bold text-zinc-500 uppercase tracking-widest">{infoModal.exercise.target_muscle}</p>
-                <div className="flex items-center space-x-2 bg-zinc-100 dark:bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800">
-                  <span className="text-[10px] font-black uppercase text-zinc-500">Fatigue SNC</span>
-                  {renderStars(infoModal.exercise.cns_impact)}
-                </div>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 

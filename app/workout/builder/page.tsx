@@ -80,11 +80,9 @@ function BuilderContent() {
   
   const [programName, setProgramName] = useState("");
   
-  // 🛡️ NOUVEAU : Validation du nom
   const [nameError, setNameError] = useState(false);
   const programNameRef = useRef<HTMLInputElement>(null);
 
-  // 🛡️ NOUVEAU : Sélection intelligente du jour actuel
   const [activeDay, setActiveDay] = useState(() => {
     const currentJsDay = new Date().getDay();
     const jsToOrdered = [6, 0, 1, 2, 3, 4, 5]; 
@@ -98,11 +96,22 @@ function BuilderContent() {
   const [infoModal, setInfoModal] = useState({ show: false, exercise: null as any });
   const [guideModal, setGuideModal] = useState(false);
   
-  // 🛡️ NOUVEAU : Gestion des feedbacks d'ajout
   const [recentlyAdded, setRecentlyAdded] = useState<Record<string, boolean>>({});
 
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  // 🛡️ NOUVEAU : Références pour le défilement rapide sur mobile
+  const libraryRef = useRef<HTMLDivElement>(null);
+  const planRef = useRef<HTMLDivElement>(null);
+
+  const scrollToPlan = () => {
+    planRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const scrollToLibrary = () => {
+    libraryRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const t = {
     FR: { 
@@ -222,7 +231,6 @@ function BuilderContent() {
   const addExercise = (ex: Exercise) => {
     if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(20);
     
-    // 🛡️ NOUVEAU : Déclenche l'animation de feedback visuel
     setRecentlyAdded(prev => ({ ...prev, [ex.id]: true }));
     setTimeout(() => {
       setRecentlyAdded(prev => ({ ...prev, [ex.id]: false }));
@@ -317,7 +325,6 @@ function BuilderContent() {
   const saveProgram = async () => {
     if (totalExercisesPlanned === 0) return;
 
-    // 🛡️ NOUVEAU : Validation du nom de programme
     if (programName.trim() === "") {
       setNameError(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -421,15 +428,36 @@ function BuilderContent() {
             <p className="text-xs text-zinc-500 font-medium">{txt.sub}</p>
           </div>
         </div>
-        <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="hidden sm:flex bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20">
+        
+        {/* 🛡️ CORRECTION : Le bouton est maintenant visible sur mobile (on a retiré "hidden sm:flex") */}
+        <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="flex bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20">
           {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-          <span>{txt.save}</span>
+          <span className="hidden sm:inline">{txt.save}</span>
         </Button>
+      </div>
+
+      {/* 🛡️ NOUVEAU : Boutons flottants de saut rapide (affichés uniquement sur mobile) */}
+      <div className="fixed right-4 bottom-24 flex flex-col space-y-3 z-50 lg:hidden">
+        <button 
+          onClick={scrollToLibrary} 
+          className="bg-white dark:bg-zinc-900 p-3 rounded-full shadow-lg border border-zinc-200 dark:border-zinc-800 text-indigo-500 hover:scale-110 transition-transform"
+          aria-label="Aller à la bibliothèque"
+        >
+          <ChevronUp className="w-5 h-5" />
+        </button>
+        <button 
+          onClick={scrollToPlan} 
+          className="bg-indigo-600 p-3 rounded-full shadow-[0_0_15px_rgba(79,70,229,0.5)] border border-indigo-500 text-white hover:scale-110 transition-transform"
+          aria-label="Aller au planning"
+        >
+          <ChevronDown className="w-5 h-5" />
+        </button>
       </div>
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-4 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-[calc(100vh-80px)]">
         
-        <div id="library-section" className="flex flex-col space-y-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-sm lg:overflow-hidden scroll-mt-24">
+        {/* 🛡️ Cible de saut pour la bibliothèque */}
+        <div ref={libraryRef} id="library-section" className="flex flex-col space-y-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-sm lg:overflow-hidden scroll-mt-24">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 flex items-center">
               <Search className="w-5 h-5 mr-2 text-indigo-500" /> {txt.catalog}
@@ -534,7 +562,7 @@ function BuilderContent() {
             {filteredExercises.length > 0 ? (
               filteredExercises.map(ex => {
                 const thumbnailUrl = getYoutubeThumbnail(ex.youtube_id);
-                const isAdded = recentlyAdded[ex.id]; // 🛡️ NOUVEAU : Statut d'ajout
+                const isAdded = recentlyAdded[ex.id]; 
 
                 return (
                   <div key={ex.id} className="flex items-center justify-between p-2 lg:p-3 bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-100 dark:border-zinc-800 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors group">
@@ -554,7 +582,6 @@ function BuilderContent() {
                     <div className="flex items-center space-x-1 shrink-0">
                       <button onClick={() => setInfoModal({ show: true, exercise: ex })} className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors"><Info className="w-4 h-4" /></button>
                       
-                      {/* 🛡️ NOUVEAU : Bouton avec feedback visuel */}
                       <button 
                         onClick={() => addExercise(ex)} 
                         className={`p-2 rounded-lg transition-all ${
@@ -575,7 +602,8 @@ function BuilderContent() {
           </div>
         </div>
 
-        <div id="plan-section" className="flex flex-col space-y-4 bg-zinc-900 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-2xl lg:overflow-hidden relative scroll-mt-24">
+        {/* 🛡️ Cible de saut pour le plan */}
+        <div ref={planRef} id="plan-section" className="flex flex-col space-y-4 bg-zinc-900 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-2xl lg:overflow-hidden relative scroll-mt-24">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent pointer-events-none rounded-2xl"></div>
           
           <div className="relative z-10 flex flex-col space-y-3 mb-2">
@@ -587,7 +615,6 @@ function BuilderContent() {
               <Label className={`text-[10px] uppercase tracking-widest font-bold ${nameError ? 'text-red-400 animate-pulse' : 'text-zinc-400'}`}>
                 {nameError ? txt.nameReq : txt.progName}
               </Label>
-              {/* 🛡️ NOUVEAU : Champ de nom avec état d'erreur rouge */}
               <Input 
                 ref={programNameRef}
                 value={programName}
@@ -712,8 +739,8 @@ function BuilderContent() {
         </div>
       </div>
 
-      {/* 🛡️ NOUVEAU : Barre d'action Sticky pour Mobile */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-200 dark:border-zinc-800 p-4 sm:hidden z-40">
+      {/* 🛡️ CORRECTION : Barre d'action Sticky pour Mobile avec z-index élevé et positionnement au-dessus de la nav bar (bottom-16 ou bottom-20) */}
+      <div className="fixed bottom-16 sm:bottom-20 left-0 right-0 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-800 p-4 sm:hidden z-[60]">
         <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg uppercase tracking-widest shadow-lg shadow-indigo-500/20">
           {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
           {txt.save}
