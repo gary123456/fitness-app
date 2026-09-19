@@ -101,7 +101,7 @@ function BuilderContent() {
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
-  // 🛡️ NOUVEAU : Références pour le défilement rapide sur mobile
+  // 🛡️ Références pour le défilement rapide sur mobile
   const libraryRef = useRef<HTMLDivElement>(null);
   const planRef = useRef<HTMLDivElement>(null);
 
@@ -429,15 +429,14 @@ function BuilderContent() {
           </div>
         </div>
         
-        {/* 🛡️ CORRECTION : Le bouton est maintenant visible sur mobile (on a retiré "hidden sm:flex") */}
         <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="flex bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20">
           {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
           <span className="hidden sm:inline">{txt.save}</span>
         </Button>
       </div>
 
-      {/* 🛡️ NOUVEAU : Boutons flottants de saut rapide (affichés uniquement sur mobile) */}
-      <div className="fixed right-4 bottom-24 flex flex-col space-y-3 z-50 lg:hidden">
+      {/* 🛡️ CORRECTION : "bottom-40" pour remonter les boutons flottants au-dessus de la barre de sauvegarde */}
+      <div className="fixed right-4 bottom-40 flex flex-col space-y-3 z-50 lg:hidden">
         <button 
           onClick={scrollToLibrary} 
           className="bg-white dark:bg-zinc-900 p-3 rounded-full shadow-lg border border-zinc-200 dark:border-zinc-800 text-indigo-500 hover:scale-110 transition-transform"
@@ -456,7 +455,6 @@ function BuilderContent() {
 
       <div className="flex-1 max-w-7xl mx-auto w-full p-4 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-[calc(100vh-80px)]">
         
-        {/* 🛡️ Cible de saut pour la bibliothèque */}
         <div ref={libraryRef} id="library-section" className="flex flex-col space-y-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-sm lg:overflow-hidden scroll-mt-24">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-xl font-black text-zinc-900 dark:text-zinc-100 flex items-center">
@@ -602,7 +600,6 @@ function BuilderContent() {
           </div>
         </div>
 
-        {/* 🛡️ Cible de saut pour le plan */}
         <div ref={planRef} id="plan-section" className="flex flex-col space-y-4 bg-zinc-900 dark:bg-zinc-900/40 backdrop-blur-xl border border-zinc-800 rounded-2xl p-4 lg:p-6 shadow-2xl lg:overflow-hidden relative scroll-mt-24">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent pointer-events-none rounded-2xl"></div>
           
@@ -739,7 +736,6 @@ function BuilderContent() {
         </div>
       </div>
 
-      {/* 🛡️ CORRECTION : Barre d'action Sticky pour Mobile avec z-index élevé et positionnement au-dessus de la nav bar (bottom-16 ou bottom-20) */}
       <div className="fixed bottom-16 sm:bottom-20 left-0 right-0 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-800 p-4 sm:hidden z-[60]">
         <Button onClick={saveProgram} disabled={isSaving || totalExercisesPlanned === 0} className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg uppercase tracking-widest shadow-lg shadow-indigo-500/20">
           {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
