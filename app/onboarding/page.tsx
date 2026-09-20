@@ -28,7 +28,6 @@ export default function OnboardingPage() {
   const [userEmail, setUserEmail] = useState<string>("");
   const { lang } = useLanguage();
 
-  // 🚀 NOUVEAU : GESTION DES ÉTAPES
   const [step, setStep] = useState(0);
 
   const t = {
@@ -38,14 +37,24 @@ export default function OnboardingPage() {
   const txt = t[lang as keyof typeof t] || t.FR;
   const DAYS = lang === "FR" ? { monday: "Lundi", tuesday: "Mardi", wednesday: "Mercredi", thursday: "Jeudi", friday: "Vendredi", saturday: "Samedi", sunday: "Dimanche" } : { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
 
+  // 🛡️ CORRECTION : Intégration de birthDate (format YYYY-MM-DD natif)
   const [formData, setFormData] = useState({
-    firstName: "", lastName: "", birthDay: "", birthMonth: "", birthYear: "", height: "", weight: "", gender: "", activityLevel: "", goal: "", medicalConditions: "Aucune", alcohol: "jamais", smoker: "non", drugs: "non", sleep: "moyen", diet: "aucune", experience: "", frequency: "", equipment: [] as string[],
+    firstName: "", lastName: "", birthDate: "", height: "", weight: "", gender: "", activityLevel: "", goal: "", medicalConditions: "Aucune", alcohol: "jamais", smoker: "non", drugs: "non", sleep: "moyen", diet: "aucune", experience: "", frequency: "", equipment: [] as string[],
     weeklySchedule: { monday: [] as string[], tuesday: [] as string[], wednesday: [] as string[], thursday: [] as string[], friday: [] as string[], saturday: [] as string[], sunday: [] as string[] }
   });
 
   useEffect(() => {
     const savedData = localStorage.getItem("onboarding_form_backup");
-    if (savedData) try { setFormData(JSON.parse(savedData)); } catch (e) {}
+    if (savedData) {
+      try { 
+        const parsed = JSON.parse(savedData);
+        // Rétrocompatibilité avec l'ancien localStorage (si existant)
+        if (parsed.birthYear && parsed.birthMonth && parsed.birthDay && !parsed.birthDate) {
+          parsed.birthDate = `${parsed.birthYear}-${parsed.birthMonth}-${parsed.birthDay}`;
+        }
+        setFormData(parsed); 
+      } catch (e) {}
+    }
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) router.push("/login"); else { setUserId(user.id); setUserEmail(user.email || ""); }
@@ -58,11 +67,18 @@ export default function OnboardingPage() {
 
   if (!mounted) return null;
 
+  // 🛡️ QOL : Haptic Feedback sur les interactions
+  const triggerHaptic = (ms: number = 10) => {
+    if (typeof window !== 'undefined' && navigator.vibrate) navigator.vibrate(ms);
+  };
+
   const handleEquipmentChange = (id: string, checked: boolean) => {
+    triggerHaptic();
     setFormData(prev => ({ ...prev, equipment: checked ? [...prev.equipment, id] : prev.equipment.filter(e => e !== id) }));
   };
 
   const handleSportToggle = (day: string, sportId: string, checked: boolean) => {
+    triggerHaptic();
     setFormData(prev => {
       const dayKey = day as keyof typeof prev.weeklySchedule;
       const daySports = prev.weeklySchedule[dayKey] || [];
@@ -70,9 +86,10 @@ export default function OnboardingPage() {
     });
   };
 
+  // 🛡️ CORRECTION : Validation adaptée au nouvel input date
   const validateStep = () => {
     if (step === 1) {
-      if (!formData.firstName || !formData.lastName || !formData.birthDay || !formData.height || !formData.weight || !formData.gender) {
+      if (!formData.firstName || !formData.lastName || !formData.birthDate || !formData.height || !formData.weight || !formData.gender) {
         setErrorMsg("Veuillez remplir tous les champs obligatoires."); return false;
       }
     }
@@ -89,17 +106,16 @@ export default function OnboardingPage() {
     setErrorMsg(""); return true;
   };
 
-  const nextStep = () => { if (validateStep()) setStep(s => s + 1); };
-  const prevStep = () => { setStep(s => s - 1); setErrorMsg(""); };
+  const nextStep = () => { triggerHaptic(15); if (validateStep()) setStep(s => s + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const prevStep = () => { triggerHaptic(10); setStep(s => s - 1); setErrorMsg(""); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   const handleSubmit = async () => {
+    triggerHaptic(20);
     if (!validateStep()) return;
     setLoading(true); setErrorMsg("");
     try {
-      const birthDateStr = `${formData.birthYear}-${formData.birthMonth}-${formData.birthDay}`;
-      
       const { error: profileError } = await supabase.from("profiles").insert([{
-        id: userId, email: userEmail, first_name: formData.firstName, last_name: formData.lastName, birth_date: birthDateStr, height_cm: parseFloat(formData.height), weight_kg: parseFloat(formData.weight), gender: formData.gender, activity_level: formData.activityLevel, current_goal: formData.goal, medical_conditions: formData.medicalConditions, alcohol_consumption: formData.alcohol, smoker: formData.smoker, recreational_drugs: formData.drugs, sleep_quality: formData.sleep, dietary_preferences: formData.diet, training_experience: formData.experience, training_frequency: formData.frequency, equipment_access: formData.equipment.join(", "), weekly_schedule: formData.weeklySchedule
+        id: userId, email: userEmail, first_name: formData.firstName, last_name: formData.lastName, birth_date: formData.birthDate, height_cm: parseFloat(formData.height), weight_kg: parseFloat(formData.weight), gender: formData.gender, activity_level: formData.activityLevel, current_goal: formData.goal, medical_conditions: formData.medicalConditions, alcohol_consumption: formData.alcohol, smoker: formData.smoker, recreational_drugs: formData.drugs, sleep_quality: formData.sleep, dietary_preferences: formData.diet, training_experience: formData.experience, training_frequency: formData.frequency, equipment_access: formData.equipment.join(", "), weekly_schedule: formData.weeklySchedule
       }]);
       if (profileError) throw profileError;
       
@@ -111,7 +127,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-4 font-sans relative overflow-hidden">
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-4 font-sans relative overflow-hidden pb-24 sm:pb-4">
       
       {/* BACKGROUND EFFECTS */}
       <div className="absolute inset-0 w-full h-full pointer-events-none">
@@ -122,7 +138,7 @@ export default function OnboardingPage() {
       <div className="w-full max-w-2xl relative z-10">
         
         {/* PROGRESS BAR */}
-        <div className="mb-8 px-4">
+        <div className="mb-8 px-4 mt-8 sm:mt-0">
           <div className="flex justify-between mb-2">
             {[0, 1, 2, 3].map(i => (
               <div key={i} className={`h-1.5 flex-1 mx-1 rounded-full transition-colors duration-500 ${i <= step ? 'bg-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.5)]' : 'bg-zinc-800'}`}></div>
@@ -132,7 +148,7 @@ export default function OnboardingPage() {
         </div>
 
         <Card className="shadow-2xl border-zinc-800 bg-zinc-900/60 backdrop-blur-xl rounded-3xl overflow-hidden">
-          <CardContent className="p-8 sm:p-12 min-h-[400px]">
+          <CardContent className="p-6 sm:p-12 min-h-[450px]">
             
             {errorMsg && <div className="mb-6 p-4 rounded-xl text-sm font-bold text-red-400 bg-red-500/10 border border-red-500/20">{errorMsg}</div>}
 
@@ -157,19 +173,38 @@ export default function OnboardingPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2"><Label className="text-zinc-300">Prénom</Label><Input value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white" /></div>
                   <div className="space-y-2"><Label className="text-zinc-300">Nom</Label><Input value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white" /></div>
+                  
+                  {/* 🛡️ CORRECTION : Remplacement par le calendrier natif avec [color-scheme:dark] */}
                   <div className="space-y-2 sm:col-span-2">
-                    <Label className="text-zinc-300">Date de Naissance</Label>
-                    <div className="flex space-x-2">
-                      <Select value={formData.birthDay} onValueChange={(v) => setFormData({...formData, birthDay: v})}><SelectTrigger className="w-[100px] bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Jour" /></SelectTrigger><SelectContent className="bg-zinc-900 border-zinc-800">{Array.from({length: 31}, (_, i) => i + 1).map(d => (<SelectItem key={d} value={d.toString().padStart(2, '0')}>{d}</SelectItem>))}</SelectContent></Select>
-                      <Select value={formData.birthMonth} onValueChange={(v) => setFormData({...formData, birthMonth: v})}><SelectTrigger className="flex-1 bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Mois" /></SelectTrigger><SelectContent className="bg-zinc-900 border-zinc-800">{Array.from({length: 12}, (_, i) => i + 1).map(m => (<SelectItem key={m} value={m.toString().padStart(2, '0')}>{m}</SelectItem>))}</SelectContent></Select>
-                      <Select value={formData.birthYear} onValueChange={(v) => setFormData({...formData, birthYear: v})}><SelectTrigger className="w-[120px] bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Année" /></SelectTrigger><SelectContent className="bg-zinc-900 border-zinc-800">{Array.from({length: 80}, (_, i) => new Date().getFullYear() - 14 - i).map(y => (<SelectItem key={y} value={y.toString()}>{y}</SelectItem>))}</SelectContent></Select>
-                    </div>
+                    <Label className="text-zinc-300">Date de Naissance <span className="text-zinc-500 text-[10px] ml-2 font-normal">(Requis pour le Métabolisme)</span></Label>
+                    <Input 
+                      type="date" 
+                      value={formData.birthDate} 
+                      onChange={(e) => setFormData({...formData, birthDate: e.target.value})} 
+                      className="bg-zinc-950 border-zinc-800 text-white [color-scheme:dark] cursor-pointer" 
+                    />
                   </div>
-                  <div className="space-y-2"><Label className="text-zinc-300">Taille (cm)</Label><Input type="number" value={formData.height} onChange={(e) => setFormData({...formData, height: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white font-bold" /></div>
-                  <div className="space-y-2"><Label className="text-zinc-300">Poids Actuel (kg)</Label><Input type="number" step="0.1" value={formData.weight} onChange={(e) => setFormData({...formData, weight: e.target.value})} className="bg-zinc-950 border-zinc-800 text-white font-bold" /></div>
+
+                  {/* 🛡️ CORRECTION : Saisie sécurisée pour les décimales (virgules) */}
+                  <div className="space-y-2">
+                    <Label className="text-zinc-300">Taille (cm) <span className="text-zinc-500 text-[10px] block font-normal">(Calcul de l'IMC)</span></Label>
+                    <Input type="number" inputMode="decimal" step="0.1" value={formData.height} onChange={(e) => {
+                      const val = e.target.value.replace(',', '.');
+                      setFormData({...formData, height: val});
+                    }} className="bg-zinc-950 border-zinc-800 text-white font-bold" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-zinc-300">Poids Actuel (kg) <span className="text-zinc-500 text-[10px] block font-normal">(Calcul des Macros)</span></Label>
+                    <Input type="number" inputMode="decimal" step="0.1" value={formData.weight} onChange={(e) => {
+                      const val = e.target.value.replace(',', '.');
+                      setFormData({...formData, weight: val});
+                    }} className="bg-zinc-950 border-zinc-800 text-white font-bold" />
+                  </div>
+
                   <div className="space-y-2 sm:col-span-2">
-                    <Label className="text-zinc-300">Sexe Biologique (Pour calcul hormonal)</Label>
-                    <Select value={formData.gender} onValueChange={(v) => setFormData({...formData, gender: v})}>
+                    <Label className="text-zinc-300">Sexe Biologique <span className="text-zinc-500 text-[10px] ml-2 font-normal">(Profil Hormonal)</span></Label>
+                    <Select value={formData.gender} onValueChange={(v) => { triggerHaptic(); setFormData({...formData, gender: v}); }}>
                       <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
                       <SelectContent className="bg-zinc-900 border-zinc-800">
                         <SelectItem value="homme">Homme</SelectItem>
@@ -190,8 +225,8 @@ export default function OnboardingPage() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <Label className="text-zinc-300">Activité Quotidienne (Travail)</Label>
-                    <Select value={formData.activityLevel} onValueChange={(v) => setFormData({...formData, activityLevel: v})}>
+                    <Label className="text-zinc-300">Activité Quotidienne (Travail) <span className="text-zinc-500 text-[10px] block font-normal">(Multiplicateur TDEE)</span></Label>
+                    <Select value={formData.activityLevel} onValueChange={(v) => { triggerHaptic(); setFormData({...formData, activityLevel: v}); }}>
                       <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
                       <SelectContent className="bg-zinc-900 border-zinc-800">
                         <SelectItem value="sedentaire">Sédentaire (Bureau, Voiture)</SelectItem>
@@ -202,7 +237,7 @@ export default function OnboardingPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-300">Régime Alimentaire</Label>
-                    <Select value={formData.diet} onValueChange={(v) => setFormData({...formData, diet: v})}>
+                    <Select value={formData.diet} onValueChange={(v) => { triggerHaptic(); setFormData({...formData, diet: v}); }}>
                       <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
                       <SelectContent className="bg-zinc-900 border-zinc-800">
                         <SelectItem value="aucune">Omnivore (Classique)</SelectItem>
@@ -214,7 +249,7 @@ export default function OnboardingPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-300">Expérience en Musculation</Label>
-                    <Select value={formData.experience} onValueChange={(v) => setFormData({...formData, experience: v})}>
+                    <Select value={formData.experience} onValueChange={(v) => { triggerHaptic(); setFormData({...formData, experience: v}); }}>
                       <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
                       <SelectContent className="bg-zinc-900 border-zinc-800">
                         <SelectItem value="debutant">Débutant (0 - 1 an)</SelectItem>
@@ -225,7 +260,7 @@ export default function OnboardingPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-zinc-300">Disponibilité (Séances/Semaine)</Label>
-                    <Select value={formData.frequency} onValueChange={(v) => setFormData({...formData, frequency: v})}>
+                    <Select value={formData.frequency} onValueChange={(v) => { triggerHaptic(); setFormData({...formData, frequency: v}); }}>
                       <SelectTrigger className="bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
                       <SelectContent className="bg-zinc-900 border-zinc-800">
                         <SelectItem value="2_jours">2 jours</SelectItem>
@@ -239,7 +274,7 @@ export default function OnboardingPage() {
                   <div className="space-y-3 sm:col-span-2 pt-4 border-t border-zinc-800">
                     <Label className="text-zinc-300 flex items-center text-base"><Activity className="w-5 h-5 mr-2 text-indigo-400"/> Autres sports pratiqués ? (Optionnel)</Label>
                     <p className="text-xs text-zinc-500">Pour que l'algorithme gère votre fatigue nerveuse.</p>
-                    <div className="max-h-48 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                    <div className="max-h-56 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                       {Object.keys(DAYS).map((dayKey) => (
                         <div key={dayKey} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-950 gap-2">
                           <span className="font-bold w-24 text-zinc-300 text-sm">{DAYS[dayKey as keyof typeof DAYS]}</span>
@@ -247,9 +282,9 @@ export default function OnboardingPage() {
                             {EXTRA_SPORTS.map((sport) => {
                               const isChecked = (formData.weeklySchedule[dayKey as keyof typeof formData.weeklySchedule] || []).includes(sport.id);
                               return (
-                                <div key={sport.id} className="flex items-center space-x-1 bg-zinc-900 px-2 py-1 rounded">
+                                <div key={sport.id} className="flex items-center space-x-1 bg-zinc-900 px-2 py-1 rounded cursor-pointer">
                                   <Checkbox id={`${dayKey}-${sport.id}`} checked={isChecked} onCheckedChange={(c) => handleSportToggle(dayKey, sport.id, c as boolean)} className="border-zinc-700 data-[state=checked]:bg-teal-500" />
-                                  <Label htmlFor={`${dayKey}-${sport.id}`} className="text-[10px] cursor-pointer text-zinc-400">{sport.label}</Label>
+                                  <Label htmlFor={`${dayKey}-${sport.id}`} className="text-[10px] cursor-pointer text-zinc-400 p-1">{sport.label}</Label>
                                 </div>
                               );
                             })}
@@ -271,9 +306,9 @@ export default function OnboardingPage() {
                 </div>
                 <div className="grid grid-cols-1 gap-6">
                   <div className="space-y-3">
-                    <Label className="text-zinc-300 text-base">Votre Objectif Ultime</Label>
-                    <Select value={formData.goal} onValueChange={(v) => setFormData({...formData, goal: v})}>
-                      <SelectTrigger className="h-14 text-lg font-bold bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
+                    <Label className="text-zinc-300 text-base">Votre Objectif Ultime <span className="text-zinc-500 text-[10px] block font-normal">(Définit votre balance calorique)</span></Label>
+                    <Select value={formData.goal} onValueChange={(v) => { triggerHaptic(); setFormData({...formData, goal: v}); }}>
+                      <SelectTrigger className="h-14 text-sm sm:text-base font-bold bg-zinc-950 border-zinc-800 text-white"><SelectValue/></SelectTrigger>
                       <SelectContent className="bg-zinc-900 border-zinc-800">
                         <SelectItem value="perte_poids">🔥 Perte de Masse Grasse (Déficit)</SelectItem>
                         <SelectItem value="recomposition">⚖️ Recomposition Corporelle (Maintien)</SelectItem>
@@ -286,17 +321,17 @@ export default function OnboardingPage() {
                   <div className="space-y-3 pt-4 border-t border-zinc-800">
                     <Label className="text-zinc-300 text-base">Où allez-vous vous entraîner ?</Label>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("salle") ? 'border-teal-500 bg-teal-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
+                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("salle") ? 'border-teal-500 bg-teal-500/10 shadow-[0_0_15px_rgba(20,184,166,0.1)]' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
                         <Checkbox className="sr-only" checked={formData.equipment.includes("salle")} onCheckedChange={(c) => handleEquipmentChange("salle", c as boolean)} />
                         <Dumbbell className={`w-8 h-8 mb-2 ${formData.equipment.includes("salle") ? 'text-teal-400' : 'text-zinc-500'}`} />
                         <span className="font-bold text-sm text-center text-zinc-300">Salle Complète</span>
                       </label>
-                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("home_gym") ? 'border-teal-500 bg-teal-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
+                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("home_gym") ? 'border-teal-500 bg-teal-500/10 shadow-[0_0_15px_rgba(20,184,166,0.1)]' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
                         <Checkbox className="sr-only" checked={formData.equipment.includes("home_gym")} onCheckedChange={(c) => handleEquipmentChange("home_gym", c as boolean)} />
                         <Dumbbell className={`w-8 h-8 mb-2 ${formData.equipment.includes("home_gym") ? 'text-teal-400' : 'text-zinc-500'}`} />
                         <span className="font-bold text-sm text-center text-zinc-300">Home Gym (Haltères)</span>
                       </label>
-                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("poids_corps") ? 'border-teal-500 bg-teal-500/10' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
+                      <label className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${formData.equipment.includes("poids_corps") ? 'border-teal-500 bg-teal-500/10 shadow-[0_0_15px_rgba(20,184,166,0.1)]' : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'}`}>
                         <Checkbox className="sr-only" checked={formData.equipment.includes("poids_corps")} onCheckedChange={(c) => handleEquipmentChange("poids_corps", c as boolean)} />
                         <Activity className={`w-8 h-8 mb-2 ${formData.equipment.includes("poids_corps") ? 'text-teal-400' : 'text-zinc-500'}`} />
                         <span className="font-bold text-sm text-center text-zinc-300">Poids du Corps</span>
@@ -314,21 +349,21 @@ export default function OnboardingPage() {
 
           </CardContent>
 
-          {/* FOOTER : BOUTONS DE NAVIGATION */}
-          <div className="p-6 bg-zinc-950/50 border-t border-zinc-800 flex justify-between items-center rounded-b-3xl">
+          {/* 🛡️ CORRECTION QOL : Sticky Footer Bottom sur Mobile */}
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-800 flex justify-between items-center z-50 sm:relative sm:p-6 sm:bg-zinc-950/50 sm:backdrop-blur-none sm:rounded-b-3xl sm:border-t sm:shadow-none shadow-[0_-15px_40px_-15px_rgba(0,0,0,0.8)]">
             {step > 0 ? (
-              <Button type="button" variant="ghost" onClick={prevStep} className="text-zinc-400 hover:text-white hover:bg-zinc-800 font-bold">
+              <Button type="button" variant="ghost" onClick={prevStep} className="text-zinc-400 hover:text-white hover:bg-zinc-800 font-bold h-12">
                 <ChevronLeft className="w-5 h-5 mr-1" /> {txt.back}
               </Button>
             ) : <div></div>}
 
             {step < 3 ? (
-              <Button type="button" onClick={nextStep} className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-black tracking-wide px-8 py-6 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)]">
+              <Button type="button" onClick={nextStep} className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-black tracking-wide px-8 h-12 rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] transition-transform active:scale-95">
                 {txt.next} <ChevronRight className="w-5 h-5 ml-1" />
               </Button>
             ) : (
-              <Button type="button" onClick={handleSubmit} disabled={loading} className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-black tracking-wide px-8 py-6 rounded-xl shadow-[0_0_30px_rgba(20,184,166,0.5)]">
-                {loading ? "..." : <><CheckCircle2 className="w-5 h-5 mr-2" /> {txt.finish}</>}
+              <Button type="button" onClick={handleSubmit} disabled={loading} className="bg-teal-500 hover:bg-teal-400 text-zinc-950 font-black tracking-wide px-6 sm:px-8 h-12 rounded-xl shadow-[0_0_30px_rgba(20,184,166,0.5)] transition-transform active:scale-95">
+                {loading ? "..." : <><CheckCircle2 className="w-5 h-5 sm:mr-2" /> <span className="hidden sm:inline">{txt.finish}</span><span className="sm:hidden">Terminer</span></>}
               </Button>
             )}
           </div>
